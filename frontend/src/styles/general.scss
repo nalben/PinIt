@@ -1,0 +1,83 @@
+* {
+    padding: 0px;
+    margin: 0px;
+    border: none;
+    list-style: none;
+}
+:global(body.noscroll) {
+    overflow: hidden;
+}
+
+html {
+    scrollbar-gutter: stable;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+a,
+a:link,
+a:visited {
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: none;
+}
+
+
+aside,
+nav,
+footer,
+header,
+section,
+main {
+    display: block;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+    font-size: inherit;
+    font-weight: inherit;
+}
+
+
+
+img,
+svg {
+    max-width: 100%;
+    height: auto;
+}
+
+input:focus,
+input:active,
+button:focus,
+button:active {
+    outline: none;
+}
+
+a {
+    display: flex;
+    width: fit-content;
+}
+
+// background-size: contain;
+// background-repeat: no-repeat;
+// background-size: cover;
+// background-position: center;
+
+
+:global(.classname){
+    
+}
+
+
+
