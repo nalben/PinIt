@@ -6,8 +6,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use('/api', routes);
+// Подключаем роуты
+app.use('/', routes);
 
-app.listen(3001, () => {
-  console.log('Сервер запущен на http://localhost:3001');
+// Тестовый корень
+app.get('/', (req, res) => {
+  res.send('Backend работает на порту 3001');
+});
+
+// Запуск сервера
+const PORT = 3001;
+app.listen(PORT, () => {
+  console.log(`Сервер запущен на http://localhost:${PORT}`);
 });

@@ -1,18 +1,27 @@
 const Cards = require('../models/cardsModel');
 
-function getCards(req, res) {
-  Cards.getAllCards((err, results) => {
-    if (err) return res.status(500).send(err);
-    res.json(results);
-  });
+async function getCards(req, res) {
+  try {
+    const cards = await Cards.getAllCards();
+    res.json(cards);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
 }
 
-function addCard(req, res) {
-  const { title, description } = req.body;
-  Cards.createCard(title, description, (err, result) => {
-    if (err) return res.status(500).send(err);
-    res.json({ id: result.insertId, title, description });
-  });
+async function addCard(req, res) {
+  try {
+    const { title, description } = req.body;
+    const id = await Cards.createCard(title, description);
+    res.status(201).json({ id, title, description });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
 }
 
-module.exports = { getCards, addCard };
+module.exports = {
+  getCards,
+  addCard
+};

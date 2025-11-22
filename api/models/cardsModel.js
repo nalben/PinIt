@@ -1,15 +1,19 @@
-const connection = require('../db');
+const pool = require('../db');
 
-function getAllCards(callback) {
-  connection.query('SELECT * FROM cards', callback);
+async function getAllCards() {
+  const [rows] = await pool.query('SELECT * FROM cards');
+  return rows;
 }
 
-function createCard(title, description, callback) {
-  connection.query(
+async function createCard(title, description) {
+  const [result] = await pool.query(
     'INSERT INTO cards (title, description) VALUES (?, ?)',
-    [title, description],
-    callback
+    [title, description]
   );
+  return result.insertId;
 }
 
-module.exports = { getAllCards, createCard };
+module.exports = {
+  getAllCards,
+  createCard
+};
