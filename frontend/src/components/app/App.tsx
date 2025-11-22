@@ -7,7 +7,6 @@ import "@/styles/variables.scss";
 
 
 
-
 const Root = () => (
     <div className={classes.sitecon}>
         <div className={classes.sitewrapper}>
