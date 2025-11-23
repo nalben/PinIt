@@ -1,11 +1,11 @@
 import React, { FC } from 'react';
-import ReactFlow, { Node, Edge, ReactFlowProvider } from 'reactflow';
+import ReactFlow, { ReactFlowProvider } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { MiniMap, Controls, Background } from 'reactflow';
 
 interface FlowBoardContainerProps {
-  nodes: Node[];
-  edges: Edge[];
+  nodes: any[];
+  edges: any[];
   onNodesChange: any;
   onEdgesChange: any;
   onConnect: any;

@@ -10,7 +10,7 @@ const Home = () => {
 
     return (
         <div className={classes.home}>
-            <FlowBoard />
+            <h1>start page</h1>
         </div>
         
     );
