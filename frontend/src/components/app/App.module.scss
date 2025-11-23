@@ -1,0 +1,14 @@
+.sitecon{
+    display: flex;
+    justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--grey10);
+    font-weight: 500;
+    font-family: "Nata Sans", sans-serif; // 100-900
+    font-family: "Merriweather", serif; // 300-900
+}
+.sitewrapper{
+    max-width: 1920px;
+    width: 100%;
+}

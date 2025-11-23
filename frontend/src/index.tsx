@@ -4,6 +4,8 @@ import {createBrowserRouter, Navigate, RouterProvider} from "react-router-dom";
 import { Suspense } from "react";
 import { LazyHome} from "@/pages/home/Home.lazy";
 import HomeSkeleton from "./pages/home/HomeSkeleton";
+import WelcomeSkeleton from "./pages/welcome/WelcomeSkeleton";
+import { LazyWelcome } from "./pages/welcome/Welcome.lazy";
 const root = document.getElementById('root');
 
 if (!root) {
@@ -28,6 +30,10 @@ const router = createBrowserRouter([
             {
                 path: '/home',
                 element: <Suspense fallback={<HomeSkeleton />}><LazyHome/></Suspense>
+            },
+            {
+                path: '/welcome',
+                element: <Suspense fallback={<WelcomeSkeleton />}><LazyWelcome/></Suspense>
             },
         ]
     },
