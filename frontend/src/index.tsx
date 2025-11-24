@@ -21,7 +21,7 @@ const router = createBrowserRouter([
         children: [
             {
                 index: true,
-                element: <Suspense fallback={<HomeSkeleton />}><LazyHome/></Suspense>
+                element: <Suspense fallback={<WelcomeSkeleton />}><LazyWelcome/></Suspense>
             },
             {
                 path: '*',

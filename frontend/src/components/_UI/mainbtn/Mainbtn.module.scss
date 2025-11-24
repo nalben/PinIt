@@ -1,0 +1,15 @@
+.auth{
+    background-color: transparent;
+    color: var(--pink);
+    font-size: 2rem;
+    border: 1px solid var(--grey10);
+    padding-inline: fluid-prop(20,15,1920,320);
+    padding-block: fluid-prop(10,8,1920,320);
+    transition: all 0.3s;
+    cursor: pointer;
+    font-family: "Nata Sans", sans-serif; // 100-900
+    &:hover{
+        transition: all 0.3s;
+        opacity: 0.6;
+    }
+}

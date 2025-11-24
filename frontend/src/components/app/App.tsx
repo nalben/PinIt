@@ -9,15 +9,11 @@ import "@/styles/variables.scss";
 
 const Root = () => (
     <div className={classes.sitecon}>
-        <div className={classes.sitewrapper}>
-            <main className={classes.pagecontent}>
-                <Outlet />
-            </main>
-        </div>
+        <main className={classes.pagecontent}>
+            <Outlet />
+        </main>
     </div>
 );
 
 
 export default Root;
-
-
