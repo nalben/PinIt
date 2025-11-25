@@ -1,3 +1,5 @@
+require('dotenv').config(); // ← подключает .env
+
 const express = require('express');
 const cors = require('cors');
 const routes = require('./routes');
@@ -15,7 +17,7 @@ app.get('/', (req, res) => {
 });
 
 // Запуск сервера
-const PORT = 3001;
+const PORT = process.env.PORT || 3001; // можно вынести в .env
 app.listen(PORT, () => {
   console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
