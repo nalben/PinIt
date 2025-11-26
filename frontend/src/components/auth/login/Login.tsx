@@ -16,6 +16,8 @@ interface ApiResponse {
   id?: number;
 }
 
+const API_URL = "http://localhost:3001";
+
 const LoginForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
@@ -26,10 +28,10 @@ const LoginForm: React.FC = () => {
     register,
     handleSubmit,
     watch,
-    formState: { errors }
+    formState: { errors },
   } = useForm<LoginFormData>({
     resolver: yupResolver(LoginScheme) as any,
-    mode: "onChange" // валидация в реальном времени
+    mode: "onChange",
   });
 
   const username = watch("username") || "";
@@ -42,10 +44,7 @@ const LoginForm: React.FC = () => {
       setLoading(true);
       setServerMessage(null);
 
-      const res = await axios.post<ApiResponse>(
-        "http://localhost:3001/auth/login",
-        data
-      );
+      const res = await axios.post<ApiResponse>(`${API_URL}/auth/login`, data);
 
       localStorage.setItem("token", res.data.token || "");
       localStorage.setItem("username", res.data.username || "");

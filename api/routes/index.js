@@ -3,11 +3,12 @@ const router = express.Router();
 
 const cardsRoutes = require('./cards');
 const authRoutes = require('./auth');
-const authMiddleware = require("./middleware/authMiddleware");
+const authMiddleware = require('../middleware/authMiddleware');
 
+// Все роуты /cards защищены authMiddleware
+router.use('/cards', authMiddleware, cardsRoutes);
 
-router.get("/cards", authMiddleware, cardsController.getCards);
-router.use('/cards', cardsRoutes);
+// Роуты для аутентификации
 router.use('/auth', authRoutes);
 
 module.exports = router;

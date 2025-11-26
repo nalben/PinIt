@@ -16,6 +16,8 @@ interface ApiResponse {
   token?: string;
 }
 
+const API_URL = "http://localhost:3001";
+
 const RegisterForm: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
@@ -33,10 +35,10 @@ const RegisterForm: React.FC = () => {
     handleSubmit: handleSubmitStep1,
     watch: watchStep1,
     formState: { errors: errorsStep1 },
-    reset: resetStep1
+    reset: resetStep1,
   } = useForm<RegisterFormData>({
     resolver: yupResolver(RegisterScheme) as any,
-    mode: "onChange"
+    mode: "onChange",
   });
 
   const email = watchStep1("email") || "";
@@ -59,9 +61,9 @@ const RegisterForm: React.FC = () => {
       setLoading(true);
       setServerMessage(null);
 
-      await axios.post<ApiResponse>("http://localhost:3001/auth/send-code", {
+      await axios.post<ApiResponse>(`${API_URL}/auth/send-code`, {
         email: data.email,
-        username: data.username
+        username: data.username,
       });
 
       setEmailValue(data.email);
@@ -84,9 +86,9 @@ const RegisterForm: React.FC = () => {
     register: registerStep2,
     handleSubmit: handleSubmitStep2,
     watch: watchStep2,
-    formState: { errors: errorsStep2 }
+    formState: { errors: errorsStep2 },
   } = useForm<RegisterFormData>({
-    mode: "onBlur"
+    mode: "onBlur",
   });
 
   const code = watchStep2("code") || "";
@@ -100,13 +102,10 @@ const RegisterForm: React.FC = () => {
         email: emailValue,
         username: usernameValue,
         password,
-        code: data.code
+        code: data.code,
       };
 
-      const res = await axios.post<ApiResponse>(
-        "http://localhost:3001/auth/register",
-        payload
-      );
+      const res = await axios.post<ApiResponse>(`${API_URL}/auth/register`, payload);
 
       setServerMessage(res.data.message || "Успешная регистрация");
       navigate("/home");

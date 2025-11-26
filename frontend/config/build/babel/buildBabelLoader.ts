@@ -28,7 +28,7 @@ export function buildBabelLoader({mode}: BuildOptions) {
                     '@babel/preset-env',
                     '@babel/preset-typescript',
                     ['@babel/preset-react', {
-                        runtime: isDev ? 'automatic' : 'classic'
+                        runtime: isDev ? 'automatic' : 'automatic'
                     }]
                 ],
                 plugins: plugins.length ? plugins : undefined,
