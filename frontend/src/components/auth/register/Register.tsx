@@ -17,6 +17,7 @@ interface ApiResponse {
 }
 
 const API_URL = "http://localhost:3001";
+// const API_URL = "/api";
 
 const RegisterForm: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
