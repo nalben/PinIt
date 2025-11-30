@@ -16,8 +16,8 @@ interface ApiResponse {
   id?: number;
 }
 
-const API_URL = "http://localhost:3001";
-// const API_URL = "/api";
+// const API_URL = "http://localhost:3001"; // локал
+const API_URL = "/api"; //сервер
 
 const LoginForm: React.FC = () => {
   const [loading, setLoading] = useState(false);

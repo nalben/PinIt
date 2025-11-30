@@ -18,8 +18,8 @@ export function buildWebpack(options: BuildOptions): webpack.Configuration{
             path: paths.output,
             filename: '[name].[contenthash].js',
             clean: true,
-            publicPath: './',
-            // publicPath: isDev ? '/' : '/PinIt/frontend',
+            publicPath: './', //сервер
+            // publicPath: isDev ? '/' : '/PinIt/frontend', //локал
         },
         
         plugins: buildPlugins(options),
