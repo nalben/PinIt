@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { RegisterScheme } from "@/schemas/RegisterScheme";
 import { InferType } from "yup";
+import { API_URL }  from '@/../axiosInstance'
 
 type RegisterFormData = InferType<typeof RegisterScheme> & {
   code?: string;
@@ -15,9 +16,6 @@ interface ApiResponse {
   message: string;
   token?: string;
 }
-
-// const API_URL = "http://localhost:3001";
-const API_URL = "/api"; //сервер
 
 const RegisterForm: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);

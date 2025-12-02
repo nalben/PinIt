@@ -1,8 +1,10 @@
 // src/api/axiosInstance.js
 import axios from "axios";
+import isLocal  from './isLocal'
 
-const API_URL = process.env.REACT_APP_API_URL || "https://pin-it.ru/api"; //сервер
-// const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3001/"; //локал
+export const API_URL: string = isLocal
+  ? 'http://localhost:3001'
+  : 'https://pin-it.ru/api';
 
 const axiosInstance = axios.create({
   baseURL: API_URL,

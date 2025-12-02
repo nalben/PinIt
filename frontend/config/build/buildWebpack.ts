@@ -4,7 +4,7 @@ import { buildLoaders } from './buildLoaders';
 import { buildPlugins } from './buildPlugins';
 import { buildResolvers } from './buildResolvers';
 import { BuildOptions } from './types/types';
-
+import isLocal from '@/../../isLocal'
 
 
 export function buildWebpack(options: BuildOptions): webpack.Configuration{
@@ -18,8 +18,8 @@ export function buildWebpack(options: BuildOptions): webpack.Configuration{
             path: paths.output,
             filename: '[name].[contenthash].js',
             clean: true,
-            publicPath: './', //сервер
-            // publicPath: isDev ? '/' : '/PinIt/frontend', //локал
+            // publicPath: isDev ? '/' : '/PinIt/frontend', // для git pages
+            publicPath: isLocal ? '/' : './'
         },
         
         plugins: buildPlugins(options),

@@ -17,7 +17,7 @@ app.get('/', (req, res) => {
 });
 
 // Запуск сервера
-const PORT = process.env.PORT || 3001; // можно вынести в .env
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Сервер запущен на http://localhost:${PORT}`);
 });

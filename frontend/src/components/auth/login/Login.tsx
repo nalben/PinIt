@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { LoginScheme } from "@/schemas/LoginScheme";
 import { InferType } from "yup";
+import { API_URL }  from '@/../axiosInstance'
 
 type LoginFormData = InferType<typeof LoginScheme>;
 
@@ -15,10 +16,6 @@ interface ApiResponse {
   username?: string;
   id?: number;
 }
-
-// const API_URL = "http://localhost:3001"; // локал
-const API_URL = "/api"; //сервер
-
 const LoginForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);

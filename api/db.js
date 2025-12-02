@@ -1,11 +1,11 @@
+require('dotenv').config();
 const mysql = require('mysql2/promise');
+const isLocal = process.env.IS_LOCAL === 'true';
 
 const pool = mysql.createPool({
   host: 'localhost',
-  user: 'nalben', //сервер
-  // user: 'root', //локал
-  password: 'ebegin80', //сервер
-  // password: '', //локал
+  user: isLocal ? 'root' : 'nalben',
+  password: isLocal ? '' : 'ebegin80',
   database: 'PinIt',
   waitForConnections: true,
   connectionLimit: 10,
