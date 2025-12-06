@@ -18,6 +18,6 @@ app.get('/', (req, res) => {
 
 // Запуск сервера
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Сервер запущен на http://0.0.0.0:${PORT}`);
 });
