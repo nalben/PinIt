@@ -68,7 +68,33 @@ a {
     display: flex;
     width: fit-content;
 }
-
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0px 1000px transparent inset;
+    box-shadow: 0 0 0px 1000px transparent inset;
+    -webkit-text-fill-color: inherit;
+    transition: background-color 9999s ease-in-out 0s;
+}
+input {
+    appearance: none;
+    -webkit-appearance: none;
+    border-radius: 0;
+    background-color: transparent;
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+    -webkit-text-fill-color: var(--pink);
+    /* твой цвет текста */
+    transition: background-color 9999s ease-in-out 0s;
+}
 // background-size: contain;
 // background-repeat: no-repeat;
 // background-size: cover;

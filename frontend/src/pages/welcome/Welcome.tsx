@@ -33,7 +33,9 @@ const Welcome = () => {
                         variant='auth'
                         />
                     </AuthTrigger>
-                    <AuthTrigger type="register">
+                    <AuthTrigger type="register"
+                    closeOnOverlayClick={false}
+                    >
                         <Mainbtn
                         text='register'
                         type='button'

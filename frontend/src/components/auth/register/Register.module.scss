@@ -1,13 +1,96 @@
-input.error {
-    border: 1px solid red;
+.form_con_reg{
+    display: flex;
+    flex-direction: column;
+    gap: fluid-prop(12,8,1920,320);
+    
+}
+.form_item_row{
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+    gap: fluid-prop(10,6,1920,320);
+    & label{
+        font-size: fluid-prop(20,15,1920,320);
+    }
+    & input{
+        width: 100%;
+        background-color: transparent;
+        border: var(--border);
+        color: var(--pink);
+        font-size: fluid-prop(18,14,1920,320);
+        padding-block: fluid-prop(10, 8, 1920, 320);
+        padding-inline: fluid-prop(18, 12, 1920, 320);
+        transition: all 0.3s;
+        &::placeholder {
+            color: var(--grey10);
+        }
+        &:focus {
+            border-color: var(--pink);
+            transition: all 0.3s;
+        }
+    }
+    & p{
+        color: var(--error);
+        font-size: fluid-prop(18,14,1920,320);
+    }
+    &:has(p){
+        & input{
+            border-color: var(--error);
+        }
+    }
+}
+.form_item_button{
+    background-color: transparent;
+    border: var(--border);
+    color: var(--pink);
+    font-size: fluid-prop(20,16,1920,320);
+    padding-block: fluid-prop(10, 8, 1920, 320);
+    padding-inline: fluid-prop(18, 12, 1920, 320);
+    transition: all 0.3s;
+    cursor: pointer;
+    &:hover{
+        background-color: var(--grey20);
+        transition: all 0.3s;
+    }
+    &:disabled{
+        opacity: 0.2;
+        cursor: not-allowed;
+    }
+    &:focus{
+        border-color: var(--pink);
+    }
 }
 
-.error-text {
-    color: red;
-    font-size: 12px;
-}
 
-.server-message {
-    margin-top: 10px;
-    color: blue;
+.form_con_code{
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    & input {
+        width: 100%;
+        background-color: transparent;
+        border: var(--border);
+        color: var(--pink) !important;
+        font-size: fluid-prop(18, 14, 1920, 320);
+        padding-block: fluid-prop(10, 8, 1920, 320);
+        padding-inline: fluid-prop(18, 12, 1920, 320);
+        transition: all 0.3s;
+        &::placeholder {
+            color: var(--grey10);
+        }
+        &:focus {
+            border-color: var(--pink);
+            transition: all 0.3s;
+        }
+    }
+    & p {
+        color: var(--error);
+        font-size: fluid-prop(18, 14, 1920, 320);
+    }
+    &:has(p) {
+        & input {
+            border-color: var(--error) !important;
+            border: var(--border);
+        }
+    }
 }

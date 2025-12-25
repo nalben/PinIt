@@ -7,6 +7,7 @@ import axios from "axios";
 import { RegisterScheme } from "@/schemas/RegisterScheme";
 import { InferType } from "yup";
 import { API_URL }  from '@/../axiosInstance'
+import classes from './Register.module.scss'
 
 type RegisterFormData = InferType<typeof RegisterScheme> & {
   code?: string;
@@ -37,7 +38,8 @@ const RegisterForm: React.FC = () => {
     reset: resetStep1,
   } = useForm<RegisterFormData>({
     resolver: yupResolver(RegisterScheme) as any,
-    mode: "onChange",
+    mode: "onBlur",
+    reValidateMode: "onBlur",
   });
 
   const email = watchStep1("email") || "";
@@ -70,7 +72,7 @@ const RegisterForm: React.FC = () => {
       setStep(2);
 
       resetStep1();
-      setServerMessage("Код подтверждения отправлен на почту");
+      setServerMessage("");
     } catch (err: any) {
       setServerMessage(err?.response?.data?.message || "Ошибка сервера");
     } finally {
@@ -88,6 +90,7 @@ const RegisterForm: React.FC = () => {
     formState: { errors: errorsStep2 },
   } = useForm<RegisterFormData>({
     mode: "onBlur",
+    reValidateMode: "onBlur",
   });
 
   const code = watchStep2("code") || "";
@@ -118,73 +121,80 @@ const RegisterForm: React.FC = () => {
   return (
     <>
       {step === 1 && (
-        <form onSubmit={handleSubmitStep1(sendCode)}>
-          <div>
-            <label>Email</label>
+        <form onSubmit={handleSubmitStep1(sendCode)} className={classes.form_con_reg}>
+          <div className={classes.form_item_row}>
+            <label>Адрес электронной почты</label>
             <input
               type="email"
+              autoComplete="off"
               {...registerStep1("email")}
+              placeholder="Введите Email"
               className={errorsStep1.email ? "error" : ""}
             />
             {errorsStep1.email && <p>{errorsStep1.email.message}</p>}
           </div>
 
-          <div>
-            <label>Username</label>
+          <div className={classes.form_item_row}>
+            <label>Имя пользователя</label>
             <input
               type="text"
+              autoComplete="off"
               {...registerStep1("username")}
+              placeholder="Введите Username"
               className={errorsStep1.username ? "error" : ""}
             />
             {errorsStep1.username && <p>{errorsStep1.username.message}</p>}
           </div>
 
-          <div>
-            <label>Password</label>
+          <div className={classes.form_item_row}>
+            <label>Пароль</label>
             <input
               type="password"
               {...registerStep1("password")}
+              placeholder="Введите Пароль"
               className={errorsStep1.password ? "error" : ""}
             />
             {errorsStep1.password && <p>{errorsStep1.password.message}</p>}
           </div>
 
-          <div>
-            <label>Confirm Password</label>
+          <div className={classes.form_item_row}>
+            <label>Подтверждение пароля</label>
             <input
               type="password"
               {...registerStep1("confirmPassword")}
+              placeholder="Подтвердите пароль"
               className={errorsStep1.confirmPassword ? "error" : ""}
             />
             {errorsStep1.confirmPassword && <p>{errorsStep1.confirmPassword.message}</p>}
           </div>
 
-          <button type="submit" disabled={!canSendCode || loading}>
-            {loading ? "Отправка..." : "Отправить код на почту"}
+          <button type="submit" disabled={!canSendCode || loading}
+          className={classes.form_item_button}
+          >
+            {loading ? "Отправка кода..." : "Регистрация"}
           </button>
 
           {serverMessage && <p>{serverMessage}</p>}
         </form>
       )}
-
       {step === 2 && (
-        <form onSubmit={handleSubmitStep2(submitRegistration)}>
-          <div>
-            <label>Код подтверждения</label>
+        <form onSubmit={handleSubmitStep2(submitRegistration)} className={classes.form_con_code}>
+            <label>Подтвердите свою почту</label>
             <input
               type="text"
               {...registerStep2("code", { required: "Код обязателен" })}
               placeholder="Введите код"
+              autoComplete="off"
               className={errorsStep2.code ? "error" : ""}
-            />
+              />
+              // тут надо чтобы erorrstep2 появлялся и пропадал через пару секунд
             {errorsStep2.code && <p>{errorsStep2.code.message}</p>}
-          </div>
-
-          <button type="submit" disabled={loading || !code}>
+            {serverMessage && <span>{serverMessage}</span>}
+          <button type="submit" disabled={loading || !code}
+          className={classes.form_item_button}
+          >
             {loading ? "Регистрация..." : "Зарегистрироваться"}
           </button>
-
-          {serverMessage && <p>{serverMessage}</p>}
         </form>
       )}
     </>

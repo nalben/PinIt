@@ -5,15 +5,36 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  closeOnOverlayClick?: boolean;
 }
 
-const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, children }) => {
+const AuthModal: React.FC<AuthModalProps> = ({
+  isOpen,
+  onClose,
+  children,
+  closeOnOverlayClick = true,
+}) => {
   if (!isOpen) return null;
 
+  const handleOverlayClick = () => {
+    if (closeOnOverlayClick) {
+      onClose();
+    }
+  };
+
   return (
-    <div className={classes.overlay} onClick={onClose}>
-      <div className={classes.modal} onClick={(e) => e.stopPropagation()}>
-        <button className={classes.close} onClick={onClose}>+</button>
+    <div className={classes.overlay} onClick={handleOverlayClick}>
+      <div
+        className={classes.modal}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          className={classes.close}
+          onClick={onClose}
+        >
+          +
+        </button>
         {children}
       </div>
     </div>

@@ -11,10 +11,9 @@
 .modal {
     backdrop-filter: blur(10px);
     padding: 2rem;
-    border-radius: 10px;
     border: 2px solid var(--grey20);
-    min-width: 320px;
-    max-width: 500px;
+    min-width: fluid-prop(550,320,1920,320);
+    max-width: fluid-prop(550,320,1920,320);
     position: relative;
 }
 

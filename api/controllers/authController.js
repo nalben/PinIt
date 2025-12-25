@@ -6,7 +6,7 @@ const UserModel = require('../models/UserModel');
 
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
-const IS_LOCAL = process.env.IS_LOCAL === "true"; // <-- важно
+const IS_LOCAL = process.env.IS_LOCAL === "true";
 
 const authController = {
   codes: {},
@@ -22,12 +22,11 @@ const authController = {
         return res.status(400).json({ message: "Email и username обязательны" });
 
       if (await UserModel.findByEmail(email))
-        return res.status(400).json({ message: 'Email уже зарегистрирован' });
+        return res.status(400).json({ message: 'Email уже занят' });
 
       if (await UserModel.findByUsername(username))
         return res.status(400).json({ message: 'Username уже занят' });
 
-      // Генерируем код
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       authController.codes[email] = code;
 
@@ -55,10 +54,9 @@ const authController = {
       // ----------------------------------------------------------------
       const VPS_URL = "http://10.8.0.1:4000/";
 
-      // формируем отдельный объект для VPS
       const payload = {
-        to: email,   // обязательно поле "to"
-        code: code   // обязательно поле "code"
+        to: email,
+        code: code
       };
 
       const result = await axios.post(VPS_URL, payload);
@@ -91,7 +89,7 @@ const authController = {
         return res.status(400).json({ message: 'Username уже занят' });
 
       if (await UserModel.findByEmail(email))
-        return res.status(400).json({ message: 'Email уже зарегистрирован' });
+        return res.status(400).json({ message: 'Email уже занят' });
 
       const passwordHash = await bcrypt.hash(password, 10);
       await UserModel.create({ username, email, passwordHash });
