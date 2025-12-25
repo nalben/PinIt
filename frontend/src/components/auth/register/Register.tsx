@@ -30,9 +30,6 @@ const RegisterForm: React.FC = () => {
 
   const navigate = useNavigate();
 
-  // ==========================
-  // STEP 1 — регистрация
-  // ==========================
   const {
     register: registerStep1,
     handleSubmit: handleSubmitStep1,
@@ -83,9 +80,6 @@ const RegisterForm: React.FC = () => {
     }
   };
 
-  // ==========================
-  // STEP 2 — подтверждение кода
-  // ==========================
   const {
     register: registerStep2,
     handleSubmit: handleSubmitStep2,
@@ -102,7 +96,6 @@ const RegisterForm: React.FC = () => {
       setLoading(true);
       setCodeError(null);
 
-      // 1️⃣ Отправляем регистрацию
       await axios.post(`${API_URL}/auth/register`, {
         email: emailValue,
         username: usernameValue,
@@ -110,13 +103,11 @@ const RegisterForm: React.FC = () => {
         code: data.code,
       });
 
-      // 2️⃣ После успешной регистрации — логинимся автоматически
       const res = await axios.post<LoginResponse>(`${API_URL}/auth/login`, {
         username: usernameValue,
         password: passwordValue,
       });
 
-      // 3️⃣ Сохраняем токен и данные пользователя
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("username", res.data.username);
       localStorage.setItem("userId", res.data.id.toString());
