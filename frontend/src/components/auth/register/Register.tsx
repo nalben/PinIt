@@ -13,19 +13,20 @@ type RegisterFormData = InferType<typeof RegisterScheme> & {
   code?: string;
 };
 
-interface ApiResponse {
-  message: string;
-  token?: string;
+interface LoginResponse {
+  token: string;
+  username: string;
+  id: number;
 }
 
 const RegisterForm: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
-  const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
 
   const [emailValue, setEmailValue] = useState("");
   const [usernameValue, setUsernameValue] = useState("");
+  const [passwordValue, setPasswordValue] = useState("");
 
   const navigate = useNavigate();
 
@@ -62,19 +63,21 @@ const RegisterForm: React.FC = () => {
   const sendCode: SubmitHandler<RegisterFormData> = async (data) => {
     try {
       setLoading(true);
-      setServerMessage(null);
+      setCodeError(null);
 
-      await axios.post<ApiResponse>(`${API_URL}/auth/send-code`, {
+      await axios.post(`${API_URL}/auth/send-code`, {
         email: data.email,
         username: data.username,
       });
 
       setEmailValue(data.email);
       setUsernameValue(data.username);
+      setPasswordValue(data.password);
       setStep(2);
       resetStep1();
     } catch (err: any) {
-      setServerMessage(err?.response?.data?.message || "Ошибка сервера");
+      setCodeError(err?.response?.data?.message || "Ошибка сервера");
+      setTimeout(() => setCodeError(null), 2500);
     } finally {
       setLoading(false);
     }
@@ -99,14 +102,24 @@ const RegisterForm: React.FC = () => {
       setLoading(true);
       setCodeError(null);
 
-      const payload = {
+      // 1️⃣ Отправляем регистрацию
+      await axios.post(`${API_URL}/auth/register`, {
         email: emailValue,
         username: usernameValue,
-        password,
+        password: passwordValue,
         code: data.code,
-      };
+      });
 
-      await axios.post<ApiResponse>(`${API_URL}/auth/register`, payload);
+      // 2️⃣ После успешной регистрации — логинимся автоматически
+      const res = await axios.post<LoginResponse>(`${API_URL}/auth/login`, {
+        username: usernameValue,
+        password: passwordValue,
+      });
+
+      // 3️⃣ Сохраняем токен и данные пользователя
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("username", res.data.username);
+      localStorage.setItem("userId", res.data.id.toString());
 
       navigate("/home");
     } catch (err: any) {
@@ -114,10 +127,7 @@ const RegisterForm: React.FC = () => {
         err?.response?.data?.message || "Неверный код подтверждения";
 
       setCodeError(msg);
-
-      setTimeout(() => {
-        setCodeError(null);
-      }, 2500);
+      setTimeout(() => setCodeError(null), 2500);
     } finally {
       setLoading(false);
     }
@@ -188,7 +198,7 @@ const RegisterForm: React.FC = () => {
             {loading ? "Отправка кода..." : "Регистрация"}
           </button>
 
-          {serverMessage && <p>{serverMessage}</p>}
+          {codeError && <p>{codeError}</p>}
         </form>
       )}
 
