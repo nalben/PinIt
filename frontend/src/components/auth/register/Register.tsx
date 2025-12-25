@@ -74,7 +74,7 @@ const RegisterForm: React.FC = () => {
       resetStep1();
     } catch (err: any) {
       setCodeError(err?.response?.data?.message || "Ошибка сервера");
-      setTimeout(() => setCodeError(null), 2500);
+      setTimeout(() => setCodeError(null), 5000);
     } finally {
       setLoading(false);
     }

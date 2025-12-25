@@ -2,7 +2,11 @@
     display: flex;
     flex-direction: column;
     gap: fluid-prop(12,8,1920,320);
-    
+    & p {
+        color: var(--error);
+        font-size: fluid-prop(18, 14, 1920, 320);
+    }
+
 }
 .form_item_row{
     display: flex;

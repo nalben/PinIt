@@ -7,7 +7,7 @@ import axios from "axios";
 import { LoginScheme } from "@/schemas/LoginScheme";
 import { InferType } from "yup";
 import { API_URL }  from '@/../axiosInstance'
-
+import classes from './Login.module.scss'
 type LoginFormData = InferType<typeof LoginScheme>;
 
 interface ApiResponse {
@@ -29,7 +29,8 @@ const LoginForm: React.FC = () => {
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: yupResolver(LoginScheme) as any,
-    mode: "onChange",
+    mode: "onBlur",
+    reValidateMode: "onBlur",
   });
 
   const username = watch("username") || "";
@@ -57,28 +58,32 @@ const LoginForm: React.FC = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <div>
+    <form onSubmit={handleSubmit(onSubmit)} className={classes.form_con_log}>
+      <div className={classes.form_item_row}>
         <label>Username</label>
         <input
           type="text"
           {...register("username")}
+          autoComplete="off"
+          placeholder="Введите имя пользователя"
           className={errors.username ? "error" : ""}
         />
         {errors.username && <p>{errors.username.message}</p>}
       </div>
 
-      <div>
+      <div className={classes.form_item_row}>
         <label>Password</label>
         <input
           type="password"
           {...register("password")}
+          autoComplete="off"
+          placeholder="Введите пароль"
           className={errors.password ? "error" : ""}
         />
         {errors.password && <p>{errors.password.message}</p>}
       </div>
 
-      <button type="submit" disabled={!canSubmit || loading}>
+      <button type="submit" disabled={!canSubmit || loading} className={classes.form_item_button}>
         {loading ? "Вход..." : "Войти"}
       </button>
 
