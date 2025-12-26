@@ -8,17 +8,14 @@
     }
 
 }
-
 .form_item_row {
     display: flex;
     flex-direction: column;
     align-items: start;
     gap: fluid-prop(10, 6, 1920, 320);
-
     & label {
         font-size: fluid-prop(20, 15, 1920, 320);
     }
-
     & input {
         width: 100%;
         background-color: transparent;
@@ -28,7 +25,8 @@
         padding-block: fluid-prop(10, 8, 1920, 320);
         padding-inline: fluid-prop(18, 12, 1920, 320);
         transition: all 0.3s;
-
+        anchor-name: --input;
+        position: relative;
         &::placeholder {
             color: var(--grey10);
         }
@@ -36,6 +34,21 @@
         &:focus {
             border-color: var(--pink);
             transition: all 0.3s;
+        }
+    }
+    & span{
+        position: absolute;
+        right: calc(anchor(--input end) + 10px);
+        top: calc(anchor(--input 50%) - 13px);
+        cursor: pointer;
+        transition: all 0.3s;
+        &:hover{
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
+        & svg{
+            width: 25px;
+            fill: white;
         }
     }
 

@@ -1,4 +1,3 @@
-// src/components/auth/login/Login.tsx
 import React, { useState } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -6,8 +5,11 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { LoginScheme } from "@/schemas/LoginScheme";
 import { InferType } from "yup";
-import { API_URL }  from '@/../axiosInstance'
-import classes from './Login.module.scss'
+import { API_URL } from '@/../axiosInstance';
+import classes from './Login.module.scss';
+import Close from '@/assets/icons/colored/close.svg'
+import Open from '@/assets/icons/colored/open.svg'
+
 type LoginFormData = InferType<typeof LoginScheme>;
 
 interface ApiResponse {
@@ -16,9 +18,11 @@ interface ApiResponse {
   username?: string;
   id?: number;
 }
+
 const LoginForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const navigate = useNavigate();
 
@@ -71,15 +75,19 @@ const LoginForm: React.FC = () => {
         {errors.username && <p>{errors.username.message}</p>}
       </div>
 
-      <div className={classes.form_item_row}>
+      <div className={classes.form_item_row} style={{ position: "relative" }}>
         <label>Password</label>
         <input
-          type="password"
+          type={showPassword ? "text" : "password"}
           {...register("password")}
           autoComplete="off"
           placeholder="Введите пароль"
           className={errors.password ? "error" : ""}
         />
+        <span
+          onClick={() => setShowPassword(prev => !prev)}>
+          {showPassword ? <Open /> : <Close />}
+        </span>
         {errors.password && <p>{errors.password.message}</p>}
       </div>
 
