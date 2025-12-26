@@ -118,7 +118,7 @@ const RegisterForm: React.FC = () => {
         err?.response?.data?.message || "Неверный код подтверждения";
 
       setCodeError(msg);
-      setTimeout(() => setCodeError(null), 2500);
+      setTimeout(() => setCodeError(null), 5000);
     } finally {
       setLoading(false);
     }

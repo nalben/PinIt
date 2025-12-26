@@ -51,6 +51,18 @@
             fill: white;
         }
     }
+    & button{
+        background-color: transparent;
+        border: none;
+        color: var(--pink);
+        text-decoration: underline;
+        cursor: pointer;
+        transition: all 0.3s;
+        &:hover{
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
+    }
 
     
 }

@@ -1,3 +1,4 @@
+// src/components/auth/login/Login.tsx
 import React, { useState } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
@@ -7,8 +8,8 @@ import { LoginScheme } from "@/schemas/LoginScheme";
 import { InferType } from "yup";
 import { API_URL } from '@/../axiosInstance';
 import classes from './Login.module.scss';
-import Close from '@/assets/icons/colored/close.svg'
-import Open from '@/assets/icons/colored/open.svg'
+import Close from '@/assets/icons/colored/close.svg';
+import Open from '@/assets/icons/colored/open.svg';
 
 type LoginFormData = InferType<typeof LoginScheme>;
 
@@ -19,19 +20,19 @@ interface ApiResponse {
   id?: number;
 }
 
-const LoginForm: React.FC = () => {
+// Callback родителя для открытия reset-модалки
+interface LoginFormProps {
+  onOpenReset?: () => void;
+}
+
+const LoginForm: React.FC<LoginFormProps> = ({ onOpenReset }) => {
   const [loading, setLoading] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
   const navigate = useNavigate();
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    formState: { errors },
-  } = useForm<LoginFormData>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<LoginFormData>({
     resolver: yupResolver(LoginScheme) as any,
     mode: "onBlur",
     reValidateMode: "onBlur",
@@ -39,7 +40,6 @@ const LoginForm: React.FC = () => {
 
   const username = watch("username") || "";
   const password = watch("password") || "";
-
   const canSubmit = username && password && !errors.username && !errors.password;
 
   const onSubmit: SubmitHandler<LoginFormData> = async (data) => {
@@ -61,10 +61,15 @@ const LoginForm: React.FC = () => {
     }
   };
 
+  const handleForgotPassword = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onOpenReset) onOpenReset();
+  };
+
   return (
     <form onSubmit={handleSubmit(onSubmit)} className={classes.form_con_log}>
       <div className={classes.form_item_row}>
-        <label>Username</label>
+        <label>Имя пользователя</label>
         <input
           type="text"
           {...register("username")}
@@ -76,7 +81,7 @@ const LoginForm: React.FC = () => {
       </div>
 
       <div className={classes.form_item_row} style={{ position: "relative" }}>
-        <label>Password</label>
+        <label>Пароль</label>
         <input
           type={showPassword ? "text" : "password"}
           {...register("password")}
@@ -84,11 +89,19 @@ const LoginForm: React.FC = () => {
           placeholder="Введите пароль"
           className={errors.password ? "error" : ""}
         />
-        <span
-          onClick={() => setShowPassword(prev => !prev)}>
+        <span onClick={() => setShowPassword(prev => !prev)} style={{ cursor: "pointer" }}>
           {showPassword ? <Open /> : <Close />}
         </span>
+
         {errors.password && <p>{errors.password.message}</p>}
+
+        <button
+          type="button"
+          className={classes.forgotPassword}
+          onClick={handleForgotPassword}
+        >
+          Забыли пароль?
+        </button>
       </div>
 
       <button type="submit" disabled={!canSubmit || loading} className={classes.form_item_button}>

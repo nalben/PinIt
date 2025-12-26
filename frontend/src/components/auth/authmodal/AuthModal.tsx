@@ -1,9 +1,11 @@
 import React from 'react';
 import classes from './AuthModal.module.scss';
+import Back from '@/assets/icons/colored/back.svg'
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onBack?: () => void;           // новый пропс для стрелочки "назад"
   children: React.ReactNode;
   closeOnOverlayClick?: boolean;
 }
@@ -11,6 +13,7 @@ interface AuthModalProps {
 const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
+  onBack,
   children,
   closeOnOverlayClick = true,
 }) => {
@@ -28,6 +31,7 @@ const AuthModal: React.FC<AuthModalProps> = ({
         className={classes.modal}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Закрыть */}
         <button
           type="button"
           className={classes.close}
@@ -35,6 +39,16 @@ const AuthModal: React.FC<AuthModalProps> = ({
         >
           +
         </button>
+        {onBack && (
+          <button
+            type="button"
+            className={classes.back}
+            onClick={onBack}
+          >
+            <Back />
+          </button>
+        )}
+
         {children}
       </div>
     </div>
