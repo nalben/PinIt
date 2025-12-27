@@ -8,25 +8,15 @@ const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 const IS_LOCAL = process.env.IS_LOCAL === "true";
 
-// -------------------------------------
-// transporter (один на файл)
-// -------------------------------------
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
-  },
-});
-
 const authController = {
+  codes: {},
+
   // =====================================================
   // REGISTRATION — SEND CODE
   // =====================================================
   sendCode: async (req, res) => {
     try {
       const { email, username } = req.body;
-
       if (!email || !username)
         return res.status(400).json({ message: "Email и username обязательны" });
 
@@ -37,47 +27,61 @@ const authController = {
         return res.status(400).json({ message: "Username уже занят" });
 
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expires = new Date(Date.now() + 10 * 60 * 1000);
+      authController.codes[email] = code;
 
-      await UserModel.saveEmailCode(email, code, expires);
+      if (IS_LOCAL) {
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: { user: EMAIL_USER, pass: EMAIL_PASS }
+        });
 
-      await transporter.sendMail({
-        from: `"PinIt" <${EMAIL_USER}>`,
-        to: email,
-        subject: "Код подтверждения регистрации",
-        html: `<p>Ваш код подтверждения:</p><h2>${code}</h2>`,
-      });
+        await transporter.sendMail({
+          from: `"PinIt" <${EMAIL_USER}>`,
+          to: email,
+          subject: "Код подтверждения регистрации",
+          html: `<p>Ваш код подтверждения: <strong>${code}</strong></p>`
+        });
 
-      res.json({ message: "Код отправлен" });
+        return res.json({ message: "Код отправлен (локальный режим)" });
+      }
+
+      const VPS_URL = "http://10.8.0.1:4000/";
+
+      const payload = { to: email, code, type: "registration" };
+      const result = await axios.post(VPS_URL, payload);
+
+      if (result.data?.success) {
+        return res.json({ message: "Код отправлен через VPS" });
+      } else {
+        return res.status(500).json({ message: "Ошибка VPS при отправке письма" });
+      }
     } catch (err) {
       console.error(err);
-      res.status(500).json({ message: "Ошибка отправки кода" });
+      res.status(500).json({ message: "Ошибка при отправке письма" });
     }
   },
 
   // =====================================================
-  // REGISTER
+  // REGISTRATION — REGISTER
   // =====================================================
   register: async (req, res) => {
     try {
       const { username, email, password, code } = req.body;
 
-      const record = await UserModel.findEmailCode(email);
-
-      if (
-        !record ||
-        record.code !== code ||
-        new Date(record.expires_at) < new Date()
-      ) {
-        return res.status(400).json({ message: "Неверный или истёкший код" });
+      if (!authController.codes[email] || authController.codes[email] !== code) {
+        return res.status(400).json({ message: "Неверный код подтверждения" });
       }
 
       if (await UserModel.findByUsername(username))
         return res.status(400).json({ message: "Username уже занят" });
 
+      if (await UserModel.findByEmail(email))
+        return res.status(400).json({ message: "Email уже зарегистрирован" });
+
       const passwordHash = await bcrypt.hash(password, 10);
       await UserModel.create({ username, email, passwordHash });
-      await UserModel.deleteEmailCode(email);
+
+      delete authController.codes[email];
 
       res.status(201).json({ message: "Пользователь создан" });
     } catch (err) {
@@ -126,43 +130,53 @@ const authController = {
       if (email) user = await UserModel.findByEmail(email);
 
       if (!user)
-        return res
-          .status(404)
-          .json({ message: "Пользователь не найден" });
+        return res.status(404).json({ message: "Пользователь не найден" });
 
       res.json({
         email: user.email,
         maskedEmail: user.email.replace(/^(.).*(.)@/, "$1********$2@"),
       });
     } catch (err) {
+      console.error(err);
       res.status(500).json({ message: "Ошибка сервера" });
     }
   },
 
   // =====================================================
-  // RESET PASSWORD — SEND CODE
+  // RESET PASSWORD — SEND RESET CODE
   // =====================================================
   sendResetCode: async (req, res) => {
     try {
       const { email } = req.body;
-
       const code = Math.floor(100000 + Math.random() * 900000).toString();
-      const expires = new Date(Date.now() + 10 * 60 * 1000);
+      authController.codes[email] = code;
 
-      await UserModel.saveEmailCode(email, code, expires);
+      if (IS_LOCAL) {
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: { user: EMAIL_USER, pass: EMAIL_PASS }
+        });
 
-      await transporter.sendMail({
-        to: email,
-        subject: "Восстановление пароля",
-        html: `
-          <p>Код для восстановления пароля:</p>
-          <h2>${code}</h2>
-          <p>Если вы не запрашивали смену пароля — просто проигнорируйте письмо.</p>
-        `,
-      });
+        await transporter.sendMail({
+          to: email,
+          subject: "Восстановление пароля",
+          html: `<p>Код для восстановления пароля: <strong>${code}</strong></p>`
+        });
 
-      res.json({ message: "Код отправлен" });
+        return res.json({ message: "Код отправлен (локальный режим)" });
+      }
+
+      const VPS_URL = "http://10.8.0.1:4000/";
+      const payload = { to: email, code, type: "reset" };
+      const result = await axios.post(VPS_URL, payload);
+
+      if (result.data?.success) {
+        return res.json({ message: "Код отправлен через VPS" });
+      } else {
+        return res.status(500).json({ message: "Ошибка VPS при отправке письма" });
+      }
     } catch (err) {
+      console.error(err);
       res.status(500).json({ message: "Ошибка отправки кода" });
     }
   },
@@ -173,14 +187,8 @@ const authController = {
   verifyResetCode: async (req, res) => {
     const { email, code } = req.body;
 
-    const record = await UserModel.findEmailCode(email);
-
-    if (
-      !record ||
-      record.code !== code ||
-      new Date(record.expires_at) < new Date()
-    ) {
-      return res.status(400).json({ message: "Неверный или истёкший код" });
+    if (!authController.codes[email] || authController.codes[email] !== code) {
+      return res.status(400).json({ message: "Неверный код или истёкший" });
     }
 
     res.json({ message: "Код подтверждён" });
@@ -198,7 +206,8 @@ const authController = {
 
     const hash = await bcrypt.hash(password, 10);
     await UserModel.updatePassword(user.id, hash);
-    await UserModel.deleteEmailCode(email);
+
+    delete authController.codes[email];
 
     const token = jwt.sign(
       { id: user.id, username: user.username },
@@ -210,9 +219,9 @@ const authController = {
       message: "Пароль успешно изменён",
       token,
       username: user.username,
-      id: user.id,
+      id: user.id
     });
-  },
+  }
 };
 
 module.exports = authController;

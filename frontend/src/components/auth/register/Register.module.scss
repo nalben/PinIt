@@ -6,7 +6,12 @@
         color: var(--error);
         font-size: fluid-prop(18, 14, 1920, 320);
     }
-
+}
+.anchor_input {
+    & input{
+        anchor-name: --input;
+        position: relative;
+    }
 }
 .form_item_row{
     display: flex;
@@ -42,7 +47,25 @@
             border-color: var(--error);
         }
     }
+    & span {
+        position: absolute;
+        right: calc(anchor(--input end) + 10px);
+        top: calc(anchor(--input 50%) - 13px);
+        cursor: pointer;
+        transition: all 0.3s;
+
+        &:hover {
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
+
+        & svg {
+            width: 25px;
+            color: var(--pink);
+        }
+    }
 }
+
 .form_item_button{
     background-color: transparent;
     border: var(--border);

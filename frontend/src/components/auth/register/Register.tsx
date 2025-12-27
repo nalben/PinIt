@@ -8,6 +8,9 @@ import { RegisterScheme } from "@/schemas/RegisterScheme";
 import { InferType } from "yup";
 import { API_URL } from "@/../axiosInstance";
 import classes from "./Register.module.scss";
+import Close from '@/assets/icons/monochrome/close.svg';
+import Open from '@/assets/icons/monochrome/open.svg';
+
 
 type RegisterFormData = InferType<typeof RegisterScheme> & {
   code?: string;
@@ -46,7 +49,7 @@ const RegisterForm: React.FC = () => {
   const username = watchStep1("username") || "";
   const password = watchStep1("password") || "";
   const confirmPassword = watchStep1("confirmPassword") || "";
-
+  const [showPassword, setShowPassword] = useState(false);
   const canSendCode =
     !errorsStep1.email &&
     !errorsStep1.username &&
@@ -136,7 +139,7 @@ const RegisterForm: React.FC = () => {
             <input
               type="email"
               {...registerStep1("email")}
-              placeholder="Введите Email"
+              placeholder="Введите адрес электронной почты "
               autoComplete="off"
               className={errorsStep1.email ? "error" : ""}
             />
@@ -148,24 +151,29 @@ const RegisterForm: React.FC = () => {
             <input
               type="text"
               {...registerStep1("username")}
-              placeholder="Введите Username"
+              placeholder="Введите имя пользователя"
               autoComplete="off"
               className={errorsStep1.username ? "error" : ""}
             />
             {errorsStep1.username && <p>{errorsStep1.username.message}</p>}
           </div>
 
-          <div className={classes.form_item_row}>
+          <div className={`${classes.form_item_row} ${classes.anchor_input}`}>
             <label>Пароль</label>
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               {...registerStep1("password")}
               placeholder="Введите Пароль"
               autoComplete="off"
               className={errorsStep1.password ? "error" : ""}
             />
+            <span onClick={() => setShowPassword(prev => !prev)}>
+              {showPassword ? <Open /> : <Close />}
+            </span>
             {errorsStep1.password && <p>{errorsStep1.password.message}</p>}
+            
           </div>
+          
 
           <div className={classes.form_item_row}>
             <label>Подтверждение пароля</label>

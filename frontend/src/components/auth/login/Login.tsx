@@ -8,8 +8,8 @@ import { LoginScheme } from "@/schemas/LoginScheme";
 import { InferType } from "yup";
 import { API_URL } from '@/../axiosInstance';
 import classes from './Login.module.scss';
-import Close from '@/assets/icons/colored/close.svg';
-import Open from '@/assets/icons/colored/open.svg';
+import Close from '@/assets/icons/monochrome/close.svg';
+import Open from '@/assets/icons/monochrome/open.svg';
 
 type LoginFormData = InferType<typeof LoginScheme>;
 
@@ -24,8 +24,15 @@ interface ApiResponse {
 interface LoginFormProps {
   onOpenReset?: () => void;
 }
+interface LoginFormProps {
+  onOpenReset?: () => void;
+  onOpenRegister?: () => void;
+}
 
-const LoginForm: React.FC<LoginFormProps> = ({ onOpenReset }) => {
+const LoginForm: React.FC<LoginFormProps> = ({
+  onOpenReset,
+  onOpenRegister
+}) => {
   const [loading, setLoading] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -65,7 +72,10 @@ const LoginForm: React.FC<LoginFormProps> = ({ onOpenReset }) => {
     e.preventDefault();
     if (onOpenReset) onOpenReset();
   };
-
+  const handleOpenRegister = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (onOpenRegister) onOpenRegister();
+  };
   return (
     <form onSubmit={handleSubmit(onSubmit)} className={classes.form_con_log}>
       <div className={classes.form_item_row}>
@@ -89,7 +99,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onOpenReset }) => {
           placeholder="Введите пароль"
           className={errors.password ? "error" : ""}
         />
-        <span onClick={() => setShowPassword(prev => !prev)} style={{ cursor: "pointer" }}>
+        <span onClick={() => setShowPassword(prev => !prev)}>
           {showPassword ? <Open /> : <Close />}
         </span>
 
@@ -101,6 +111,13 @@ const LoginForm: React.FC<LoginFormProps> = ({ onOpenReset }) => {
           onClick={handleForgotPassword}
         >
           Забыли пароль?
+        </button>
+        <button
+          type="button"
+          className={classes.link}
+          onClick={handleOpenRegister}
+        >
+          Зарегистрироваться
         </button>
       </div>
 

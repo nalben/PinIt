@@ -57,12 +57,17 @@ const Welcome = () => {
             setIsLoginOpen(false);
             setIsResetOpen(true);
           }}
+          onOpenRegister={() => {
+            setIsLoginOpen(false);
+            setIsRegisterOpen(true);
+          }}
         />
       </AuthModal>
 
       <AuthModal
         isOpen={isRegisterOpen}
         onClose={() => setIsRegisterOpen(false)}
+        closeOnOverlayClick={false}
       >
         <RegisterForm />
       </AuthModal>
