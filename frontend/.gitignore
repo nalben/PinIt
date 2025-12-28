@@ -1,7 +1,4 @@
 /build
 node_modules
-<<<<<<< HEAD
 isLocal.js
-=======
-isLocal.js
->>>>>>> 2136e1066fd90087edd9f1c18f8b5762849d13ce
+
