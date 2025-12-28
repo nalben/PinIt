@@ -4,8 +4,10 @@ import LoginForm from "./login/Login";
 import RegisterForm from "./register/Register";
 import ResetPasswordForm from "./reset/ResetPasswordForm";
 
+export type AuthTriggerType = "login" | "register" | "reset";
+
 interface AuthTriggerProps {
-  type: "login" | "register";
+  type: AuthTriggerType;
   children: React.ReactNode;
   closeOnOverlayClick?: boolean;
 }
@@ -15,36 +17,41 @@ const AuthTrigger: React.FC<AuthTriggerProps> = ({
   children,
   closeOnOverlayClick = true,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isResetOpen, setIsResetOpen] = useState(false);
+  const [current, setCurrent] = useState<AuthTriggerType | null>(null);
+
+  const open = (t: AuthTriggerType) => setCurrent(t);
+  const close = () => setCurrent(null);
 
   return (
     <>
-      <span onClick={() => setIsOpen(true)}>{children}</span>
+      <span onClick={() => open(type)}>{children}</span>
 
       <AuthModal
-        isOpen={isOpen}
-        onClose={() => setIsOpen(false)}
+        isOpen={current === "login"}
+        onClose={close}
         closeOnOverlayClick={closeOnOverlayClick}
       >
-        {type === "login" ? (
-          <LoginForm
-            onOpenReset={() => {
-              setIsOpen(false);
-              setIsResetOpen(true);
-            }}
-          />
-        ) : (
-          <RegisterForm />
-        )}
+        <LoginForm
+          onOpenReset={() => open("reset")}
+          onOpenRegister={() => open("register")}
+        />
       </AuthModal>
 
       <AuthModal
-        isOpen={isResetOpen}
-        onClose={() => setIsResetOpen(false)}
+        isOpen={current === "register"}
+        onClose={close}
         closeOnOverlayClick={false}
       >
-        <ResetPasswordForm onClose={() => setIsResetOpen(false)} />
+        <RegisterForm />
+      </AuthModal>
+
+      <AuthModal
+        isOpen={current === "reset"}
+        onClose={close}
+        closeOnOverlayClick={false}
+        onBack={() => open("login")}
+      >
+        <ResetPasswordForm onClose={close} />
       </AuthModal>
     </>
   );
