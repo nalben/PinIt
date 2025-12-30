@@ -115,7 +115,7 @@ const RegisterForm: React.FC = () => {
       localStorage.setItem("username", res.data.username);
       localStorage.setItem("userId", res.data.id.toString());
 
-      navigate("/home");
+      window.location.href = "/home";
     } catch (err: any) {
       const msg =
         err?.response?.data?.message || "Неверный код подтверждения";

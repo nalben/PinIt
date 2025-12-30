@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import classes from './AuthModal.module.scss';
 import Back from '@/assets/icons/colored/back.svg'
 
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onBack?: () => void;           // новый пропс для стрелочки "назад"
+  onBack?: () => void;
   children: React.ReactNode;
   closeOnOverlayClick?: boolean;
 }
@@ -17,6 +17,18 @@ const AuthModal: React.FC<AuthModalProps> = ({
   children,
   closeOnOverlayClick = true,
 }) => {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleOverlayClick = () => {
@@ -31,7 +43,6 @@ const AuthModal: React.FC<AuthModalProps> = ({
         className={classes.modal}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Закрыть */}
         <button
           type="button"
           className={classes.close}

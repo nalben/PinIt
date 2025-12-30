@@ -191,7 +191,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose }) => {
       onClose();
 
       if (location.pathname === "/welcome") {
-        navigate("/home");
+        window.location.href = "/home";
       } else {
         window.location.reload();
       }

@@ -60,7 +60,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
       localStorage.setItem("username", res.data.username || "");
       localStorage.setItem("userId", res.data.id?.toString() || "");
 
-      navigate("/home");
+      window.location.href = "/home";
     } catch (err: any) {
       setServerMessage(err?.response?.data?.message || "Ошибка при логине");
     } finally {
