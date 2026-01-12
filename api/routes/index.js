@@ -4,11 +4,12 @@ const router = express.Router();
 const cardsRoutes = require('./cards');
 const authRoutes = require('./auth');
 const authMiddleware = require('../middleware/authMiddleware');
+const profileRoutes = require('./profile');
 
-// Все роуты /cards защищены authMiddleware
 router.use('/cards', authMiddleware, cardsRoutes);
 
-// Роуты для аутентификации
 router.use('/auth', authRoutes);
+
+router.use('/profile', profileRoutes);
 
 module.exports = router;

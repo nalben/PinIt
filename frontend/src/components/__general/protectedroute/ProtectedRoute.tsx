@@ -15,7 +15,6 @@ const ProtectedRoute: React.FC<Props> = ({ children }) => {
       return;
     }
 
-    // ===== выбираем адрес бэка =====
     const isLocal = window.location.hostname === "localhost";
     const baseURL = isLocal ? "http://localhost:3001" : "http://10.8.0.1:4000";
 

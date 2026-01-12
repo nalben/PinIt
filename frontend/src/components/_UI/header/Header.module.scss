@@ -93,6 +93,12 @@
     border-top: none;
     height: fit-content;
     font-weight: 700;
+    & span{
+        max-width: fluid-prop(200,75,550,320);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 }
 .noti{
     transition: all 0.5s;
@@ -110,13 +116,22 @@
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    font-size: fluid-prop(20,14,1920,320);
+    font-size: fluid-prop(22,18,1920,320);
     color: var(--);
     transition: all 0.5s;
     cursor: pointer;
     & svg{
         max-width: 40px;
         color: var(--pink);
+    }
+    & img{
+        max-width: 40px;
+        min-width: 40px;
+        max-height: 40px;
+        min-height: 40px;
+        object-fit: cover;
+        object-position: center;
+        border-radius: 100%;
     }
     &:hover{
         opacity: 0.6;
@@ -140,6 +155,16 @@
     padding: fluid-prop(20,12,1050,320);
     cursor: pointer;
     & svg{
-        max-width: 50px;
+        max-width: 40px;
+    }
+}
+.header_reg{
+    cursor: pointer;
+    transition: all 0.3s;
+    &:hover{
+        & span{
+            opacity: 0.8;
+            transition: all 0.3s;
+        }
     }
 }
