@@ -42,6 +42,16 @@ const router = createBrowserRouter([
         )
       },
       {
+        path: "/dashboard",
+        element: (
+          <ProtectedRoute>
+            <Suspense fallback={<div>Loading...</div>}>
+              <LazyHome/>
+            </Suspense>
+          </ProtectedRoute>
+        )
+      },
+      {
         path: "*",
         element: <Navigate to="/" replace />
       }
