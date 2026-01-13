@@ -7,10 +7,12 @@ import HomeSkeleton from "./pages/home/HomeSkeleton";
 import WelcomeSkeleton from "./pages/welcome/WelcomeSkeleton";
 import { LazyWelcome } from "./pages/welcome/Welcome.lazy";
 import PublicRoute from "./components/__general/publicroute/PublicRoute";
+import { LazyProfile } from "./pages/profile/Profile.lazy";
+import ProfileSkeleton from "./pages/profile/ProfileSkeleton";
 import ProtectedRoute from "./components/__general/protectedroute/ProtectedRoute";
 
 
-const useDocumentTitle = (defaultTitle = 'MyApp') => {
+const useDocumentTitle = (defaultTitle = 'PinIt') => {
   const location = useLocation();
 
   useEffect(() => {
@@ -21,6 +23,9 @@ const useDocumentTitle = (defaultTitle = 'MyApp') => {
         break;
       case '/home':
         document.title = 'Home | PinIt';
+        break;
+      case '/profile':
+        document.title = 'Profile | PinIt';
         break;
       default:
         document.title = defaultTitle;
@@ -54,6 +59,28 @@ const router = createBrowserRouter([
           <PublicRoute>
             <Suspense fallback={<WelcomeSkeleton />}><LazyWelcome /></Suspense>
           </PublicRoute>
+        )
+      },
+      {
+        path: "/profile",
+        element: (
+          <ProtectedRoute>
+            <Suspense fallback={<ProfileSkeleton />}>
+              <LazyProfile />
+            </Suspense>
+          </ProtectedRoute>
+        )
+      },
+      {
+        path: "/user",
+        element: <Navigate to="/home" replace />
+      },
+      {
+        path: "/user/:username",
+        element: (
+          <Suspense fallback={<ProfileSkeleton />}>
+            <LazyProfile />
+          </Suspense>
         )
       },
       {
