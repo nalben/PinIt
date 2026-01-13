@@ -11,7 +11,7 @@
     width: min(70%, 280px);
     z-index: 9;
     position: absolute;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px) brightness(0.3);
     left: 0;
     top: 0;
     bottom: 0;
@@ -26,6 +26,7 @@
     }
     @media (min-width: 1050px) {
         translate: 0;
+        backdrop-filter: brightness(100%);
         border: none;
         padding: 0;
         position: static;
@@ -93,7 +94,7 @@
     border-top: none;
     height: fit-content;
     font-weight: 700;
-    & span{
+    & .profile_header_top{
         max-width: fluid-prop(200,75,550,320);
         white-space: nowrap;
         overflow: hidden;
@@ -115,6 +116,7 @@
 .profile{
     display: flex;
     align-items: center;
+    color: var(--pink);
     gap: 0.5rem;
     font-size: fluid-prop(22,18,1920,320);
     color: var(--);
@@ -136,6 +138,14 @@
     &:hover{
         opacity: 0.6;
         transition: all 0.5s;
+    }
+}
+.profile_button{
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    & img{
+        max-width: 50px;
     }
 }
 .active{
@@ -166,5 +176,28 @@
             opacity: 0.8;
             transition: all 0.3s;
         }
+    }
+}
+.profile_name_drop_con{
+    max-width: fluid-prop(253, 128, 550, 320);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.email_drop {
+    gap: 10px;
+    & svg {
+        max-width: 20px;
+        rotate: 135deg;
+        fill: var(--pink);
+    }
+    font-size: 14px;
+    opacity: 0.8;
+    display: flex;
+    & span{
+        max-width: fluid-prop(253, 128, 550, 320);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 }

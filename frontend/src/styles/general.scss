@@ -27,7 +27,9 @@ a:visited {
 a:hover {
     text-decoration: none;
 }
-
+a{
+    color: inherit;
+}
 
 aside,
 nav,
@@ -63,7 +65,13 @@ button:focus,
 button:active {
     outline: none;
 }
-
+button{
+    background-color: transparent;
+    font-size: inherit;
+    color: inherit;
+    font-weight: inherit;
+    font-family: inherit;
+}
 a {
     display: flex;
     width: fit-content;
@@ -104,6 +112,5 @@ textarea:-webkit-autofill {
 :global(.toggle_active_reset){
     background-color: transparent !important;
 }
-
 
 

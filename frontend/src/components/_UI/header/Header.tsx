@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import classes from './Header.module.scss';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import Noti from '@/assets/icons/monochrome/noti.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Burger from '@/assets/icons/monochrome/burger.svg';
@@ -9,10 +9,14 @@ import { API_URL } from "@/../axiosInstance";
 import AuthOnly from '@/components/__general/authonly/Authonly';
 import GuestOnly from '@/components/__general/guestonly/Guestonly';
 import AuthTrigger from '@/components/auth/AuthTrigger';
+import DropdownWrapper from '../dropdownwrapper/DropdownWrapper';
+import LogoutButton from '@/components/__general/logoutbutton/LogoutButton';
+import Arrow from '@/assets/icons/monochrome/back.svg'
 
 interface UserProfile {
   username: string;
   avatar?: string | null;
+  email?: string;
 }
 
 const Header = () => {
@@ -43,15 +47,25 @@ const Header = () => {
   }, []);
 
   useEffect(() => {
+    if (menuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
   const fetchProfile = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const res = await axios.get<UserProfile>(`${API_URL}/api/profile`, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
+      const res = await axios.get<UserProfile>(`${API_URL}/api/profile/me`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
 
       setUser(res.data);
@@ -62,6 +76,14 @@ const Header = () => {
 
   fetchProfile();
 }, []);
+
+const location = useLocation();
+const isProfileActive = () => {
+  if (location.pathname === '/profile') return true;
+  if (user && location.pathname === `/user/${user.username}`) return true;
+  return false;
+};
+
 
   return (
     <header className={classes.container}>
@@ -92,16 +114,21 @@ const Header = () => {
           ABOUT
         </NavLink>
         <GuestOnly>
-            <AuthTrigger
-            type='login'
-            >
+            <AuthTrigger type='login'>
                 <div className={classes.item}>PROFILE</div>
             </AuthTrigger>
         </GuestOnly>
         <AuthOnly>
-            <NavLink to="/profile" className={linkClass}>
+          <NavLink
+            to="/profile"
+            className={() =>
+              isProfileActive()
+                ? `${classes.item} ${classes.active}`
+                : classes.item
+            }
+          >
             PROFILE
-            </NavLink>
+          </NavLink>
         </AuthOnly>
       </nav>
 
@@ -109,18 +136,43 @@ const Header = () => {
         <AuthOnly>
             <div className={classes.user}>
                 <div className={classes.noti}>
-                <Noti />
+                  <Noti />
                 </div>
-                <div className={classes.profile}>
-                {user?.avatar ? (
-                    <img src={user.avatar} alt="Аватар" className={classes.avatar} />
-                ) : (
-                    <Default />
-                )}
-                <span>
-                    {user?.username || 'Загрузка...'}
-                </span>
-                </div>
+                <DropdownWrapper right profile>
+                  <div className={classes.profile}>
+                    {user?.avatar ? (
+                        <img src={user.avatar} alt="Аватар" className={classes.avatar} />
+                    ) : (
+                        <Default />
+                    )}
+                    <span className={classes.profile_header_top}>
+                        {user?.username || 'Загрузка...'}
+                    </span>
+                  </div>
+                  <div>
+                    <NavLink to="/profile">
+                      <div className={classes.profile_button}>
+                        {user?.avatar ? (
+                          <img src={user.avatar} alt="Аватар" className={classes.avatar} />
+                            ) : (
+                              <Default />
+                        )}
+                        <div className={classes.profile_name_drop_con}>
+                          <span className={classes.name_drop}>
+                            {user?.username || 'Загрузка...'}
+                          </span>
+                          <div className={classes.email_drop}>
+                            <span className={classes.email_drop_item}>
+                              {user?.email}
+                            </span>
+                            <Arrow/>
+                          </div>
+                        </div>
+                      </div>
+                    </NavLink>
+                    <LogoutButton/>
+                  </div>
+                </DropdownWrapper>
             </div>
         </AuthOnly>
         <GuestOnly>

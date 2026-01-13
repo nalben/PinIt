@@ -1,5 +1,6 @@
+// Profile.tsx
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import classes from "./Profile.module.scss";
 import axiosInstance from "../../../axiosInstance";
 
@@ -14,8 +15,7 @@ interface ProfileData {
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
 const Profile = () => {
-  const { username } = useParams();
-  const navigate = useNavigate();
+  const { username } = useParams<{ username: string }>();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [error, setError] = useState<ProfileError | null>(null);
@@ -23,17 +23,8 @@ const Profile = () => {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const url = username
-          ? `/api/profile/${username}`
-          : `/api/profile`;
-
+        const url = `/api/profile/${username}`;
         const { data } = await axiosInstance.get<ProfileData>(url);
-
-        if (username && data.isOwner) {
-          navigate("/profile", { replace: true });
-          return;
-        }
-
         setProfile(data);
       } catch (err: any) {
         if (err.response?.status === 404) {
@@ -44,8 +35,8 @@ const Profile = () => {
       }
     };
 
-    fetchProfile();
-  }, [username, navigate]);
+    if (username) fetchProfile();
+  }, [username]);
 
   if (error === "NOT_FOUND") {
     return (
@@ -62,9 +53,7 @@ const Profile = () => {
     <div className={classes.Profile}>
       <h1>{profile.username}</h1>
 
-      {profile.avatar && (
-        <img src={profile.avatar} alt="avatar" />
-      )}
+      {profile.avatar && <img src={profile.avatar} alt="avatar" />}
 
       {profile.isOwner ? (
         <p>Это ваш профиль</p>

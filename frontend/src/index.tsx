@@ -10,6 +10,7 @@ import PublicRoute from "./components/__general/publicroute/PublicRoute";
 import { LazyProfile } from "./pages/profile/Profile.lazy";
 import ProfileSkeleton from "./pages/profile/ProfileSkeleton";
 import ProtectedRoute from "./components/__general/protectedroute/ProtectedRoute";
+import ProfileRedirect from "./components/__general/profileredirect/ProfileRedirect";
 
 
 const useDocumentTitle = (defaultTitle = 'PinIt') => {
@@ -63,13 +64,7 @@ const router = createBrowserRouter([
       },
       {
         path: "/profile",
-        element: (
-          <ProtectedRoute>
-            <Suspense fallback={<ProfileSkeleton />}>
-              <LazyProfile />
-            </Suspense>
-          </ProtectedRoute>
-        )
+        element: <ProfileRedirect />
       },
       {
         path: "/user",

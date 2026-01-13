@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import classes from './AuthModal.module.scss';
-import Back from '@/assets/icons/colored/back.svg';
+import Back from '@/assets/icons/monochrome/back.svg';
 
 interface AuthModalProps {
   isOpen: boolean;

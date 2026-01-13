@@ -1,0 +1,49 @@
+.wrapper{
+    position: relative;
+}
+.menu{
+    position: absolute;
+    background-color: var(--grey20);
+    border: var(--border);
+    border-color: var(--pink);
+    width: fit-content;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+.item{
+    padding: 10px;
+    transition: all 0.3s;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    &:not(:last-child) {
+        border-bottom: var(--border);
+        border-color: var(--pink);
+    }
+    &:hover{
+        background-color: var(--grey10);
+        transition: all 0.3s;
+    }
+}
+.left {
+    left: 0;
+}
+
+.middle {
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.right {
+    right: 0;
+}
+.profile{
+    top: calc(100% + 15px);
+    &.right{
+        right: -31px
+    }
+}
