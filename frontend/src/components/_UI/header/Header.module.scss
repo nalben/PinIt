@@ -171,6 +171,9 @@
 .header_reg{
     cursor: pointer;
     transition: all 0.3s;
+    & span{
+        width: max-content;
+    }
     &:hover{
         & span{
             opacity: 0.8;

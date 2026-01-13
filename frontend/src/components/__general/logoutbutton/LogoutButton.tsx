@@ -3,7 +3,9 @@ import classes from './LogoutButton.module.scss'
 
 const LogoutButton: React.FC = () => {
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('token',);
+    localStorage.removeItem('username',);
+    localStorage.removeItem('userId',);
     window.location.reload();
   };
 
