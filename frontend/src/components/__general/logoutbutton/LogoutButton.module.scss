@@ -1,0 +1,11 @@
+.button{
+    display: flex;
+    width: 100%;
+    justify-content: center;
+    gap: 10px;
+    & svg {
+        max-width: 20px;
+        rotate: -135deg;
+        fill: var(--pink);
+    }
+}

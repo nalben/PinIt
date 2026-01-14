@@ -1,5 +1,6 @@
 import React from 'react';
 import classes from './LogoutButton.module.scss'
+import Arrow from '@/assets/icons/monochrome/back.svg'
 
 const LogoutButton: React.FC = () => {
   const handleLogout = () => {
@@ -12,6 +13,7 @@ const LogoutButton: React.FC = () => {
   return (
     <button onClick={handleLogout} className={classes.button}>
       Logout
+      <Arrow/>
     </button>
   );
 };

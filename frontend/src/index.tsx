@@ -11,6 +11,8 @@ import { LazyProfile } from "./pages/profile/Profile.lazy";
 import ProfileSkeleton from "./pages/profile/ProfileSkeleton";
 import ProtectedRoute from "./components/__general/protectedroute/ProtectedRoute";
 import ProfileRedirect from "./components/__general/profileredirect/ProfileRedirect";
+import { LazyAbout } from "@/pages/about/About.lazy";
+import AboutSkeleton from "./pages/about/AboutSkeleton";
 
 
 const useDocumentTitle = (defaultTitle = 'PinIt') => {
@@ -33,7 +35,6 @@ const useDocumentTitle = (defaultTitle = 'PinIt') => {
     }
   }, [location.pathname, defaultTitle]);
 };
-
 
 const AppWithTitle = () => {
   useDocumentTitle();
@@ -82,6 +83,12 @@ const router = createBrowserRouter([
         path: "/home",
         element: (
           <Suspense fallback={<HomeSkeleton />}><LazyHome /></Suspense>
+        )
+      },
+      {
+        path: "/about",
+        element: (
+          <Suspense fallback={<AboutSkeleton />}><LazyAbout /></Suspense>
         )
       },
       {

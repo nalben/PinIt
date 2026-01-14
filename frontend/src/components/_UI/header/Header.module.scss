@@ -95,10 +95,13 @@
     height: fit-content;
     font-weight: 700;
     & .profile_header_top{
-        max-width: fluid-prop(200,75,550,320);
+        max-width: fluid-prop(90,70,1050,320);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        @media (min-width:1050px) {
+            max-width: fluid-prop(200,90,1920,1050);
+        }
     }
 }
 .noti{
@@ -182,7 +185,7 @@
     }
 }
 .profile_name_drop_con{
-    max-width: fluid-prop(253, 128, 550, 320);
+    max-width: fluid-prop(253, 143, 1920, 1050);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -198,7 +201,7 @@
     opacity: 0.8;
     display: flex;
     & span{
-        max-width: fluid-prop(253, 128, 550, 320);
+        max-width: fluid-prop(253, 143, 1920, 1050);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;

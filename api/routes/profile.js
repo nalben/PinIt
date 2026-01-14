@@ -3,9 +3,6 @@ const router = express.Router();
 const db = require('../db');
 const jwt = require('jsonwebtoken');
 
-/**
- * Middleware для опциональной авторизации
- */
 const optionalAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return next();
@@ -15,16 +12,10 @@ const optionalAuth = (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
   } catch {
-    // Игнорируем ошибки токена
   }
   next();
 };
 
-/**
- * МОЙ ПРОФИЛЬ
- * GET /api/profile/me
- * Требует авторизацию
- */
 router.get('/me', async (req, res, next) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -49,11 +40,6 @@ router.get('/me', async (req, res, next) => {
   }
 });
 
-/**
- * ПУБЛИЧНЫЙ ПРОФИЛЬ
- * GET /api/profile/:username
- * Доступен всем, email виден только владельцу
- */
 router.get('/:username', optionalAuth, async (req, res) => {
   try {
     const { username } = req.params;

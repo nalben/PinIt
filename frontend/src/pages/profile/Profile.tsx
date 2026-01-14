@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import classes from "./Profile.module.scss";
 import axiosInstance from "../../../axiosInstance";
+import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 
 interface ProfileData {
   id: number;
@@ -40,9 +41,14 @@ const Profile = () => {
 
   if (error === "NOT_FOUND") {
     return (
-      <div className={classes.Profile}>
-        <h1>Пользователь не найден</h1>
+      <div className={classes.Profile_not_found}>
+        <h1>Пользователь <span>{username}</span> не найден</h1>
         <p>Возможно, он был удалён или вы ошиблись в имени.</p>
+        <Mainbtn
+        kind="navlink"
+        href="/home"
+        text="На главную страницу"
+        />
       </div>
     );
   }

@@ -1,0 +1,15 @@
+.Profile_not_found{
+    display: flex;
+    gap: 1rem;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    font-family: "Nata Sans", sans-serif;
+    & h1{
+        & span{
+            color: var(--pink);
+        }
+    }
+}
