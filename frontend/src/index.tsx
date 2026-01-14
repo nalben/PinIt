@@ -14,24 +14,24 @@ import ProfileRedirect from "./components/__general/profileredirect/ProfileRedir
 import { LazyAbout } from "@/pages/about/About.lazy";
 import AboutSkeleton from "./pages/about/AboutSkeleton";
 
-
 const useDocumentTitle = (defaultTitle = 'PinIt') => {
   const location = useLocation();
 
   useEffect(() => {
-    switch (location.pathname) {
-      case '/':
-      case '/welcome':
-        document.title = 'Welcome | PinIt';
-        break;
-      case '/home':
-        document.title = 'Home | PinIt';
-        break;
-      case '/profile':
-        document.title = 'Profile | PinIt';
-        break;
-      default:
-        document.title = defaultTitle;
+    if (location.pathname.startsWith('/user/')) {
+        const username = location.pathname.split('/').pop();
+        document.title = `${username} | PinIt`;
+    } else {
+      switch (location.pathname) {
+        case '/':
+          document.title = 'Welcome | PinIt';
+          break;
+        case '/home':
+          document.title = 'Home | PinIt';
+          break;
+        default:
+          document.title = defaultTitle;
+    }
     }
   }, [location.pathname, defaultTitle]);
 };
@@ -82,13 +82,17 @@ const router = createBrowserRouter([
       {
         path: "/home",
         element: (
-          <Suspense fallback={<HomeSkeleton />}><LazyHome /></Suspense>
+          <Suspense fallback={<HomeSkeleton />}>
+            <LazyHome />
+          </Suspense>
         )
       },
       {
         path: "/about",
         element: (
-          <Suspense fallback={<AboutSkeleton />}><LazyAbout /></Suspense>
+          <Suspense fallback={<AboutSkeleton />}>
+            <LazyAbout />
+          </Suspense>
         )
       },
       {

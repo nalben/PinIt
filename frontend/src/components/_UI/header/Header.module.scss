@@ -96,6 +96,7 @@
     font-weight: 700;
     & .profile_header_top{
         max-width: fluid-prop(90,70,1050,320);
+        user-select: none;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -129,7 +130,7 @@
         max-width: 40px;
         color: var(--pink);
     }
-    & img{
+    & img, svg{
         max-width: 40px;
         min-width: 40px;
         max-height: 40px;
@@ -147,7 +148,7 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    & img{
+    & img, svg{
         max-width: 50px;
     }
 }

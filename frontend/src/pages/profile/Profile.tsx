@@ -4,6 +4,8 @@ import { useParams } from "react-router-dom";
 import classes from "./Profile.module.scss";
 import axiosInstance from "../../../axiosInstance";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
+import Logo from '@/assets/icons/colored/Logo.svg'
+import Default from '@/assets/icons/monochrome/default-user.svg'
 
 interface ProfileData {
   id: number;
@@ -41,7 +43,7 @@ const Profile = () => {
 
   if (error === "NOT_FOUND") {
     return (
-      <div className={classes.Profile_not_found}>
+      <div className={classes.profile_not_found}>
         <h1>Пользователь <span>{username}</span> не найден</h1>
         <p>Возможно, он был удалён или вы ошиблись в имени.</p>
         <Mainbtn
@@ -56,16 +58,30 @@ const Profile = () => {
   if (!profile) return null;
 
   return (
-    <div className={classes.Profile}>
-      <h1>{profile.username}</h1>
+    <div className={classes.profile}>
+      <div className={classes.avatar_con}>
+        {profile.avatar ? <img src={profile.avatar} alt="avatar" /> : <Default />}
+      </div>
+      <div className={classes.profile_username}>
+        <span>{profile.username}</span>
+        <p><Logo/><h1>login</h1></p>
+      </div>
+      <div className={classes.friends}>
+        {profile.isOwner ? (
+            <div>
+              <p>Друзей: 1</p>
+              <div className={classes.owner_btns}>
+                share edit
+              </div>
+            </div>
+          ) : (
+            <div className={classes.guest_btns}>
+              share add
+            </div>
+        )}
+        
 
-      {profile.avatar && <img src={profile.avatar} alt="avatar" />}
-
-      {profile.isOwner ? (
-        <p>Это ваш профиль</p>
-      ) : (
-        <p>Профиль пользователя</p>
-      )}
+      </div>
     </div>
   );
 };

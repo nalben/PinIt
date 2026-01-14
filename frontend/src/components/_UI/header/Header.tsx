@@ -59,31 +59,34 @@ const Header = () => {
   }, [menuOpen]);
 
   useEffect(() => {
-  const fetchProfile = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
+    const fetchProfile = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
 
-      const res = await axios.get<UserProfile>(`${API_URL}/api/profile/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+        const res = await axios.get<UserProfile>(`${API_URL}/api/profile/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
 
-      setUser(res.data);
-    } catch (err) {
-      console.error('Ошибка при получении профиля:', err);
-    }
+        setUser(res.data);
+      } catch (err) {
+        console.error('Ошибка при получении профиля:', err);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  const location = useLocation();
+  const isProfileActive = () => {
+    if (location.pathname === '/profile') return true;
+    if (user && location.pathname === `/user/${user.username}`) return true;
+    return false;
   };
 
-  fetchProfile();
-}, []);
-
-const location = useLocation();
-const isProfileActive = () => {
-  if (location.pathname === '/profile') return true;
-  if (user && location.pathname === `/user/${user.username}`) return true;
-  return false;
-};
-
+  const handleMenuItemClick = () => {
+    setMenuOpen(false);
+  };
 
   return (
     <header className={classes.container}>
@@ -101,16 +104,16 @@ const isProfileActive = () => {
         ref={menuRef}
         className={`${classes.menu} ${menuOpen ? classes.active_menu : ''}`}
       >
-        <NavLink to="/home" className={linkClass}>
+        <NavLink to="/home" className={linkClass} onClick={handleMenuItemClick}>
           HOME
         </NavLink>
-        <NavLink to="/spaces" className={linkClass}>
+        <NavLink to="/spaces" className={linkClass} onClick={handleMenuItemClick}>
           SPACES
         </NavLink>
-        <NavLink to="/todo" className={linkClass}>
+        <NavLink to="/todo" className={linkClass} onClick={handleMenuItemClick}>
           TO DO
         </NavLink>
-        <NavLink to="/about" className={linkClass}>
+        <NavLink to="/about" className={linkClass} onClick={handleMenuItemClick}>
           ABOUT
         </NavLink>
         <GuestOnly>
@@ -126,6 +129,7 @@ const isProfileActive = () => {
                 ? `${classes.item} ${classes.active}`
                 : classes.item
             }
+            onClick={handleMenuItemClick}
           >
             PROFILE
           </NavLink>

@@ -4,10 +4,10 @@ import Arrow from '@/assets/icons/monochrome/back.svg'
 
 const LogoutButton: React.FC = () => {
   const handleLogout = () => {
-    localStorage.removeItem('token',);
-    localStorage.removeItem('username',);
-    localStorage.removeItem('userId',);
-    window.location.reload();
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    localStorage.removeItem('userId');
+    window.location.href = '/welcome';
   };
 
   return (
