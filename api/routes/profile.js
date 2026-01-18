@@ -16,7 +16,7 @@ const optionalAuth = (req, res, next) => {
   next();
 };
 
-router.get('/me', async (req, res, next) => {
+router.get('/me', async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ message: 'Не авторизован' });
@@ -25,7 +25,7 @@ router.get('/me', async (req, res, next) => {
     const userId = decoded.id;
 
     const [rows] = await db.execute(
-      'SELECT id, username, avatar, role, email FROM users WHERE id = ?',
+      'SELECT id, username, nickname, avatar, role, email FROM users WHERE id = ?',
       [userId]
     );
 
@@ -35,7 +35,7 @@ router.get('/me', async (req, res, next) => {
       ...rows[0],
       isOwner: true,
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });
@@ -45,7 +45,7 @@ router.get('/:username', optionalAuth, async (req, res) => {
     const { username } = req.params;
 
     const [rows] = await db.execute(
-      'SELECT id, username, role, avatar, created_at, email FROM users WHERE username = ?',
+      'SELECT id, username, nickname, role, avatar, created_at, email FROM users WHERE username = ?',
       [username]
     );
 
@@ -56,13 +56,14 @@ router.get('/:username', optionalAuth, async (req, res) => {
     res.json({
       id: rows[0].id,
       username: rows[0].username,
+      nickname: rows[0].nickname,
       avatar: rows[0].avatar,
       role: rows[0].role,
       created_at: rows[0].created_at,
       email: isOwner ? rows[0].email : undefined,
       isOwner
     });
-  } catch (err) {
+  } catch {
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });

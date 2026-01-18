@@ -18,20 +18,15 @@ const useDocumentTitle = (defaultTitle = 'PinIt') => {
   const location = useLocation();
 
   useEffect(() => {
-    if (location.pathname.startsWith('/user/')) {
-        const username = location.pathname.split('/').pop();
-        document.title = `${username} | PinIt`;
-    } else {
-      switch (location.pathname) {
-        case '/':
-          document.title = 'Welcome | PinIt';
-          break;
-        case '/home':
-          document.title = 'Home | PinIt';
-          break;
-        default:
-          document.title = defaultTitle;
-    }
+    switch (location.pathname) {
+      case '/':
+        document.title = 'Welcome | PinIt';
+        break;
+      case '/home':
+        document.title = 'Home | PinIt';
+        break;
+      default:
+        document.title = defaultTitle;
     }
   }, [location.pathname, defaultTitle]);
 };

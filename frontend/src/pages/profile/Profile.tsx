@@ -9,10 +9,12 @@ import Default from '@/assets/icons/monochrome/default-user.svg'
 
 interface ProfileData {
   id: number;
-  username: string;
   avatar?: string | null;
   role: string;
   isOwner: boolean;
+  username: string;
+  nickname?: string | null;
+  
 }
 
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
@@ -41,6 +43,13 @@ const Profile = () => {
     if (username) fetchProfile();
   }, [username]);
 
+useEffect(() => {
+  if (!profile) return;
+
+  const titleName = profile.nickname || profile.username;
+  document.title = `${titleName} | PinIt`;
+}, [profile]);
+
   if (error === "NOT_FOUND") {
     return (
       <div className={classes.profile_not_found}>
@@ -57,14 +66,16 @@ const Profile = () => {
 
   if (!profile) return null;
 
+  const UserNickname = profile.nickname ? profile.nickname : profile.username;
+
   return (
     <div className={classes.profile}>
       <div className={classes.avatar_con}>
         {profile.avatar ? <img src={profile.avatar} alt="avatar" /> : <Default />}
       </div>
       <div className={classes.profile_username}>
-        <span>{profile.username}</span>
-        <p><Logo/><h1>login</h1></p>
+        <span>{UserNickname}</span>
+        <p><Logo/><h1>{profile.username}</h1></p>
       </div>
       <div className={classes.friends}>
         {profile.isOwner ? (
