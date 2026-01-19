@@ -5,8 +5,10 @@ type DropdownWrapperProps = {
   left?: boolean;
   right?: boolean;
   profile?: boolean;
+  noti?: boolean;
   middle?: boolean;
-  children: [React.ReactNode, React.ReactNode]; // первый div = кнопка, второй = дропдаун
+  children: [React.ReactNode, React.ReactNode];
+  closeOnClick?: boolean; // Новый пропс
 };
 
 const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
@@ -14,7 +16,9 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   right,
   middle,
   profile,
+  noti,
   children,
+  closeOnClick = true, // Значение по умолчанию
 }) => {
   const [button, dropdown] = children;
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -33,9 +37,10 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     if (left) classes.push(styles.left);
     if (right) classes.push(styles.right);
     if (profile) classes.push(styles.profile);
+    if (noti) classes.push(styles.noti);
     if (middle) classes.push(styles.middle);
 
-    if (!left && !right && !profile && !middle) {
+    if (!left && !right && !profile && !middle && !noti) {
       classes.push(styles.middle);
     }
 
@@ -54,7 +59,6 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       setPositionClass(prev => `${prev} ${styles.left}`);
   };
 
-  // Закрытие дропдауна при клике вне
   const handleClickOutside = (event: MouseEvent) => {
     const wrapper = wrapperRef.current;
     const menu = dropdownRef.current;
@@ -76,7 +80,13 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       window.removeEventListener("resize", updatePosition);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [left, right, middle, profile, open]);
+  }, [left, right, middle, profile, noti, open]);
+
+  const handleDropdownClick = (event: React.MouseEvent) => {
+    if (!closeOnClick) {
+      event.stopPropagation();
+    }
+  };
 
   return (
     <div ref={wrapperRef} className={styles.wrapper}>
@@ -87,7 +97,12 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
         <div
           ref={dropdownRef}
           className={`${styles.menu} ${positionClass}`}
-          onClick={() => setOpen(false)}
+          onClick={(event) => {
+            if (closeOnClick) {
+              setOpen(false);
+            }
+            handleDropdownClick(event); // Обработчик клика на меню
+          }}
         >
           {React.isValidElement(dropdown) &&
             React.Children.map(dropdown.props.children, (child, index) => (

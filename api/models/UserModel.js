@@ -1,3 +1,5 @@
+// api/models/UserModel.js
+
 const pool = require('../db');
 
 const UserModel = {
@@ -69,6 +71,41 @@ const UserModel = {
     return pool.query(
       'UPDATE users SET password_hash = ? WHERE id = ?',
       [hash, userId]
+    );
+  },
+
+  // Добавленные функции для работы с друзьями
+  findFriendsByUserId: async (userId) => {
+    const [rows] = await pool.query(
+      `
+      SELECT u.*
+      FROM users u
+      JOIN friends f ON u.id = f.friend_id AND f.user_id = ?
+      `,
+      [userId]
+    );
+    return rows;
+  },
+
+  sendFriendRequest: async ({ user_id, friend_id }) => {
+    const [result] = await pool.query(
+      'INSERT INTO friends_requests (user_id, friend_id) VALUES (?, ?)',
+      [user_id, friend_id]
+    );
+    return result.insertId;
+  },
+
+  acceptFriendRequest: async (request_id) => {
+    return pool.query(
+      'UPDATE friends_requests SET status = \'accepted\' WHERE id = ?',
+      [request_id]
+    );
+  },
+
+  rejectFriendRequest: async (request_id) => {
+    return pool.query(
+      'UPDATE friends_requests SET status = \'rejected\' WHERE id = ?',
+      [request_id]
     );
   }
 };

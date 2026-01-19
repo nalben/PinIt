@@ -18,13 +18,13 @@ const authController = {
     try {
       const { email, username } = req.body;
       if (!email || !username)
-        return res.status(400).json({ message: "Email и username обязательны" });
+        return res.status(400).json({ message: "Email и login обязательны" });
 
       if (await UserModel.findByEmail(email))
         return res.status(400).json({ message: "Email уже занят" });
 
       if (await UserModel.findByUsername(username))
-        return res.status(400).json({ message: "Username уже занят" });
+        return res.status(400).json({ message: "login уже занят" });
 
       const code = Math.floor(100000 + Math.random() * 900000).toString();
       authController.codes[email] = code;
@@ -73,7 +73,7 @@ const authController = {
       }
 
       if (await UserModel.findByUsername(username))
-        return res.status(400).json({ message: "Username уже занят" });
+        return res.status(400).json({ message: "login уже занят" });
 
       if (await UserModel.findByEmail(email))
         return res.status(400).json({ message: "Email уже зарегистрирован" });
@@ -188,7 +188,7 @@ const authController = {
     const { email, code } = req.body;
 
     if (!authController.codes[email] || authController.codes[email] !== code) {
-      return res.status(400).json({ message: "Неверный код или истёкший" });
+      return res.status(400).json({ message: "Неверный код" });
     }
 
     res.json({ message: "Код подтверждён" });

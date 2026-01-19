@@ -89,8 +89,6 @@ useEffect(() => {
               share add
             </div>
         )}
-        
-
       </div>
     </div>
   );

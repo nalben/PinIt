@@ -140,7 +140,14 @@ const Header = () => {
         <AuthOnly>
             <div className={classes.user}>
                 <div className={classes.noti}>
-                  <Noti />
+                  <DropdownWrapper right noti closeOnClick={false}>
+                    <div className={classes.noti_icon_con}>
+                      <Noti />
+                    </div>
+                    <div className={classes.noti_con}>
+                      mama
+                    </div>
+                  </DropdownWrapper>
                 </div>
                 <DropdownWrapper right profile>
                   <div className={classes.profile}>
