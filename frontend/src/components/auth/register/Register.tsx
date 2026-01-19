@@ -140,19 +140,19 @@ const RegisterForm: React.FC = () => {
               type="email"
               {...registerStep1("email")}
               placeholder="Введите адрес электронной почты "
-              autoComplete="off"
+              // autoComplete="off"
               className={errorsStep1.email ? "error" : ""}
             />
             {errorsStep1.email && <p>{errorsStep1.email.message}</p>}
           </div>
 
           <div className={classes.form_item_row}>
-            <label>Имя пользователя</label>
+            <label>Логин</label>
             <input
               type="text"
               {...registerStep1("username")}
-              placeholder="Введите имя пользователя"
-              autoComplete="off"
+              placeholder="Введите логин"
+              // autoComplete="off"
               className={errorsStep1.username ? "error" : ""}
             />
             {errorsStep1.username && <p>{errorsStep1.username.message}</p>}
@@ -164,7 +164,7 @@ const RegisterForm: React.FC = () => {
               type={showPassword ? "text" : "password"}
               {...registerStep1("password")}
               placeholder="Введите Пароль"
-              autoComplete="off"
+              // autoComplete="off"
               className={errorsStep1.password ? "error" : ""}
             />
             <span onClick={() => setShowPassword(prev => !prev)}>

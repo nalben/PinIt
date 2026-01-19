@@ -25,6 +25,9 @@ const useDocumentTitle = (defaultTitle = 'PinIt') => {
       case '/home':
         document.title = 'Home | PinIt';
         break;
+      case '/about':
+        document.title = 'About | PinIt';
+        break;
       default:
         document.title = defaultTitle;
     }

@@ -20,7 +20,6 @@ interface ApiResponse {
   id?: number;
 }
 
-// Callback родителя для открытия reset-модалки
 interface LoginFormProps {
   onOpenReset?: () => void;
 }
@@ -79,12 +78,12 @@ const LoginForm: React.FC<LoginFormProps> = ({
   return (
     <form onSubmit={handleSubmit(onSubmit)} className={classes.form_con_log}>
       <div className={classes.form_item_row}>
-        <label>Имя пользователя</label>
+        <label>Логин</label>
         <input
           type="text"
           {...register("username")}
-          autoComplete="off"
-          placeholder="Введите имя пользователя"
+          // autoComplete="off"
+          placeholder="Введите логин"
           className={errors.username ? "error" : ""}
         />
         {errors.username && <p>{errors.username.message}</p>}
@@ -95,7 +94,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
         <input
           type={showPassword ? "text" : "password"}
           {...register("password")}
-          autoComplete="off"
+          // autoComplete="off"
           placeholder="Введите пароль"
           className={errors.password ? "error" : ""}
         />

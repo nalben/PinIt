@@ -218,14 +218,14 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose }) => {
               className={inputType === "username" ? classes.active : "toggle_active_reset"}
               onClick={() => handleToggle("username")}
             >
-              Имя пользователя
+              Логин
             </button>
             <button
               type="button"
               className={inputType === "email" ? classes.active : "toggle_active_reset"}
               onClick={() => handleToggle("email")}
             >
-              Адрес электронной почты
+              Почта
             </button>
           </div>
 
@@ -233,12 +233,12 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose }) => {
 
           {inputType === "username" && (
             <div className={classes.form_item_row}>
-              <label>Имя пользователя</label>
+              <label>Логин</label>
               <input
                 type="text"
                 {...regStep1("username")}
-                placeholder="Введите имя пользователя"
-                autoComplete="off"
+                placeholder="Введите логин"
+                // autoComplete="off"
                 className={errorsStep1.username ? "error" : ""}
               />
               {errorsStep1.username && <p className={classes.error}>{errorsStep1.username.message}</p>}
@@ -247,12 +247,12 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose }) => {
 
           {inputType === "email" && (
             <div className={classes.form_item_row}>
-              <label>Адрес электронной почты</label>
+              <label>Почта</label>
               <input
                 type="text"
                 {...regStep1("email")}
                 placeholder="Введите адрес электронной почты"
-                autoComplete="off"
+                // autoComplete="off"
                 className={errorsStep1.email ? "error" : ""}
               />
               {errorsStep1.email && <p className={classes.error}>{errorsStep1.email.message}</p>}
