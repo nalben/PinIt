@@ -8,7 +8,7 @@ type DropdownWrapperProps = {
   noti?: boolean;
   middle?: boolean;
   children: [React.ReactNode, React.ReactNode];
-  closeOnClick?: boolean; // Новый пропс
+  closeOnClick?: boolean;
 };
 
 const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
@@ -18,7 +18,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   profile,
   noti,
   children,
-  closeOnClick = true, // Значение по умолчанию
+  closeOnClick = true,
 }) => {
   const [button, dropdown] = children;
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -46,7 +46,6 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 
     setPositionClass(classes.join(" "));
 
-    // Проверка выхода за края экрана
     const wrapperRect = wrapper.getBoundingClientRect();
     const menuWidth = menu.offsetWidth;
     const menuLeft = wrapperRect.left + menu.offsetLeft;
@@ -101,7 +100,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
             if (closeOnClick) {
               setOpen(false);
             }
-            handleDropdownClick(event); // Обработчик клика на меню
+            handleDropdownClick(event);
           }}
         >
           {React.isValidElement(dropdown) &&

@@ -4,11 +4,11 @@ const db = require('../db');
 const jwt = require('jsonwebtoken');
 
 const optionalAuth = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return next();
+  const token = req.headers.authorization?.split(' ')[1];
+  
+  if (!token) return next();
 
   try {
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded;
   } catch {
@@ -64,6 +64,26 @@ router.get('/:username', optionalAuth, async (req, res) => {
       isOwner
     });
   } catch {
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+router.get('/:username/friends-count', optionalAuth, async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const [rows] = await db.execute(
+      'SELECT COUNT(*) AS friend_count FROM friends WHERE user_id = (SELECT id FROM users WHERE username = ?)',
+      [username]
+    );
+
+    if (!rows.length) return res.status(404).json({ message: 'Пользователь не найден' });
+
+    res.json({
+      friend_count: rows[0].friend_count
+    });
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });

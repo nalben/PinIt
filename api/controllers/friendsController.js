@@ -1,11 +1,12 @@
-// src/controllers/friendsController.js
+const db = require('../db');
+const UserModel = require('../models/UserModel');
+const { Op } = require('sequelize');
 
-const db = require('../db'); // Предполагаем, что у вас есть модель для работы с базой данных
-
+// Отправка запроса в друзья
 exports.sendFriendRequest = async (req, res) => {
   try {
     const { friend_id } = req.body;
-    const user_id = req.user.id; // Получаем ID пользователя из JWT-токена
+    const user_id = req.user.id;
 
     if (user_id === friend_id) {
       return res.status(400).json({ message: 'Нельзя отправить запрос на самого себя' });
@@ -32,10 +33,11 @@ exports.sendFriendRequest = async (req, res) => {
   }
 };
 
+// Принятие запроса в друзья
 exports.acceptFriendRequest = async (req, res) => {
   try {
     const { request_id } = req.params;
-    const user_id = req.user.id; // Получаем ID пользователя из JWT-токена
+    const user_id = req.user.id;
 
     const request = await db.friends_requests.findByPk(request_id);
 
@@ -46,7 +48,6 @@ exports.acceptFriendRequest = async (req, res) => {
     request.status = 'accepted';
     await request.save();
 
-    // Добавляем связи в таблицу friends
     await db.friends.create({
       user_id: request.user_id,
       friend_id: request.friend_id
@@ -59,10 +60,11 @@ exports.acceptFriendRequest = async (req, res) => {
   }
 };
 
+// Отклонение запроса в друзья
 exports.rejectFriendRequest = async (req, res) => {
   try {
     const { request_id } = req.params;
-    const user_id = req.user.id; // Получаем ID пользователя из JWT-токена
+    const user_id = req.user.id;
 
     const request = await db.friends_requests.findByPk(request_id);
 
@@ -77,5 +79,86 @@ exports.rejectFriendRequest = async (req, res) => {
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Ошибка при отклонении запроса' });
+  }
+};
+
+// Получение списка друзей пользователя
+exports.getFriends = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+
+    const [friends] = await db.execute(
+      `SELECT u.id, u.username, u.nickname, u.avatar, f.created_at
+       FROM friends f
+       JOIN users u 
+         ON (u.id = f.user_id AND f.friend_id = ?) 
+         OR (u.id = f.friend_id AND f.user_id = ?)
+      `, 
+      [user_id, user_id]
+    );
+
+    return res.status(200).json(friends);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Ошибка при получении друзей' });
+  }
+};
+
+
+// Получение количества друзей пользователя
+exports.getFriendCount = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+
+    const friendCount = await db.friends.count({
+      where: { [Op.or]: [{ user_id }, { friend_id: user_id }] }
+    });
+
+    return res.status(200).json({ friend_count: friendCount });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Ошибка при получении количества друзей' });
+  }
+};
+
+// Удаление друга
+exports.removeFriend = async (req, res) => {
+  try {
+    const { friend_id } = req.params;
+    const user_id = req.user.id;
+
+    const deleted = await db.friends.destroy({
+      where: {
+        [Op.or]: [
+          { user_id, friend_id },
+          { user_id: friend_id, friend_id: user_id }
+        ]
+      }
+    });
+
+    if (!deleted) return res.status(404).json({ message: 'Друг не найден' });
+
+    return res.status(200).json({ message: 'Друг удалён' });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Ошибка при удалении друга' });
+  }
+};
+
+// Получение входящих запросов в друзья
+exports.getFriendRequests = async (req, res) => {
+  try {
+    const { user_id } = req.params;
+    const requests = await db.friends_requests.findAll({
+      where: { friend_id: user_id, status: 'sent' },
+      include: [
+        { model: UserModel, as: 'user', attributes: ['id', 'username', 'nickname', 'avatar'] }
+      ]
+    });
+
+    return res.status(200).json(requests);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Ошибка при получении запросов на дружбу' });
   }
 };

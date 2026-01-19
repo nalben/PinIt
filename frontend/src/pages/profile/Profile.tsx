@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import classes from "./Profile.module.scss";
 import axiosInstance from "../../../axiosInstance";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 import Logo from '@/assets/icons/colored/Logo.svg'
 import Default from '@/assets/icons/monochrome/default-user.svg'
+import AuthModal from "@/components/auth/authmodal/AuthModal";
+import DropdownWrapper from "@/components/_UI/dropdownwrapper/DropdownWrapper";
 
 interface ProfileData {
   id: number;
@@ -12,17 +14,70 @@ interface ProfileData {
   role: string;
   isOwner: boolean;
   username: string;
+  created_at: string;
   nickname?: string | null;
-  
 }
 
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
 const Profile = () => {
   const { username } = useParams<{ username: string }>();
-
+  
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [error, setError] = useState<ProfileError | null>(null);
+  const [friendCount, setFriendCount] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isFriendsOpen, setIsFriendsOpen] = useState(false);
+  
+  const [friends, setFriends] = useState<ProfileData[]>([]);
+  
+// Функция для выбора правильного склонения
+  const declension = (number: number, titles: [string, string, string]) => {
+    const n = Math.abs(number) % 100;
+    const n1 = n % 10;
+    if (n > 10 && n < 20) return titles[2];
+    if (n1 > 1 && n1 < 5) return titles[1];
+    if (n1 === 1) return titles[0];
+    return titles[2];
+  };
+
+  // Функция "n времени назад"
+  const timeAgo = (dateString: string) => {
+    const now = new Date();
+    const past = new Date(dateString);
+    const diffMs = now.getTime() - past.getTime(); // разница в миллисекундах
+
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffSeconds / 60);
+    const diffHours = Math.floor(diffMinutes / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    const diffMonths = Math.floor(diffDays / 30);
+    const diffYears = Math.floor(diffDays / 365);
+
+    if (diffYears > 0) return `${diffYears} ${declension(diffYears, ['год', 'года', 'лет'])} `;
+    if (diffMonths > 0) return `${diffMonths} ${declension(diffMonths, ['месяц', 'месяца', 'месяцев'])} `;
+    if (diffDays > 0) return `${diffDays} ${declension(diffDays, ['день', 'дня', 'дней'])} `;
+    if (diffHours > 0) return `${diffHours} ${declension(diffHours, ['час', 'часа', 'часов'])} `;
+    if (diffMinutes > 0) return `${diffMinutes} ${declension(diffMinutes, ['минуту', 'минуты', 'минут'])} `;
+    return 'только что';
+  };
+
+
+useEffect(() => {
+  if (!profile) return;
+
+  const fetchFriends = async () => {
+    try {
+      const { data } = await axiosInstance.get<ProfileData[]>(`/api/friends/${profile.id}`);
+      setFriends(data);
+    } catch (err) {
+      console.error('Ошибка при получении друзей', err);
+    }
+  };
+
+  fetchFriends();
+}, [profile]);
+
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -36,28 +91,55 @@ const Profile = () => {
         } else {
           setError("UNKNOWN");
         }
+      } finally {
+        setIsLoading(false);
       }
     };
 
-    if (username) fetchProfile();
+
+
+    const fetchFriendCount = async () => {
+      try {
+        const url = `/api/profile/${username}/friends-count`;
+        const { data } = await axiosInstance.get<{ friend_count: number }>(url);
+        setFriendCount(data.friend_count);
+      } catch (err: any) {
+        console.error("Error fetching friend count:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (username) {
+      fetchProfile();
+      fetchFriendCount();
+    }
   }, [username]);
 
-useEffect(() => {
-  if (!profile) return;
+  useEffect(() => {
+    if (!profile) return;
 
-  const titleName = profile.nickname || profile.username;
-  document.title = `${titleName} | PinIt`;
-}, [profile]);
+    const titleName = profile.nickname || profile.username;
+    document.title = `${titleName} | PinIt`;
+  }, [profile]);
+
+  if (isLoading) {
+    return (
+      <div className={classes.profile_loading}>
+        <p>Загрузка...</p>
+      </div>
+    );
+  }
 
   if (error === "NOT_FOUND") {
     return (
       <div className={classes.profile_not_found}>
         <h1>Пользователь <span>{username}</span> не найден</h1>
-        <p>Возможно, он был удалён или вы ошиблись в имени.</p>
+        <p>Возможно, он был удален или вы ошиблись в имени.</p>
         <Mainbtn
-        kind="navlink"
-        href="/home"
-        text="На главную страницу"
+          kind="navlink"
+          href="/home"
+          text="На главную страницу"
         />
       </div>
     );
@@ -66,6 +148,7 @@ useEffect(() => {
   if (!profile) return null;
 
   const UserNickname = profile.nickname ? profile.nickname : profile.username;
+
 
   return (
     <div className={classes.profile}>
@@ -78,16 +161,70 @@ useEffect(() => {
       </div>
       <div className={classes.friends}>
         {profile.isOwner ? (
-            <div>
-              <p>Друзей: 1</p>
-              <div className={classes.owner_btns}>
-                share edit
-              </div>
+          <div className={classes.profile_interact_con}>
+
+              <button
+                type="button"
+                className={classes.friends_btn}
+                onClick={() => setIsFriendsOpen(true)}
+              >
+                Друзей: {friendCount ?? 'нет'}
+              </button>
+              <AuthModal isOpen={isFriendsOpen} onClose={() => setIsFriendsOpen(false)}>
+                <div className={classes.friends_modal}>
+                  <strong>Друзья</strong>
+                  <div className={classes.friends_item_con}>
+                    {friends.map(friend => (
+                      <div key={friend.id} className={classes.friend_item}>
+                        <Link to={`/user/${friend.username}`} className={classes.friend_info}>
+                          <div className={classes.friend_info_wrap}>
+                            {friend.avatar ? (
+                              <img src={friend.avatar} alt="avatar" />
+                            ) : (
+                              <Default />
+                            )}
+
+                            <div className={classes.friend_info_text}>
+                              <span>{friend.nickname || friend.username}</span>
+                              <p>в друзьях: {timeAgo(friend.created_at)}</p>
+                            </div>
+                          </div>
+                        </Link>
+
+                        <Mainbtn
+                          text="добавить"
+                          variant="auth"
+                          kind="button"
+                          onClick={async () => {
+                            try {
+                              await axiosInstance.delete(`/api/friends/${friend.id}`);
+                              setFriends(prev => prev.filter(f => f.id !== friend.id));
+                            } catch (err) {
+                              console.error('Ошибка при удалении друга', err);
+                            }
+                          }}
+                        />
+                      </div>
+                    ))}
+                    
+                  </div>
+                </div>
+              </AuthModal>
+
+
+            <div className={classes.owner_btns}>
+              <Mainbtn 
+              text="share"
+              />
+              <Mainbtn 
+              text="edit"
+              />
             </div>
-          ) : (
-            <div className={classes.guest_btns}>
-              share add
-            </div>
+          </div>
+        ) : (
+          <div className={classes.guest_btns}>
+            share add
+          </div>
         )}
       </div>
     </div>

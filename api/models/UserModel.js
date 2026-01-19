@@ -107,6 +107,27 @@ const UserModel = {
       'UPDATE friends_requests SET status = \'rejected\' WHERE id = ?',
       [request_id]
     );
+  },
+
+  countFriendsByUserId: async (userId) => {
+    const [rows] = await pool.query(
+      'SELECT COUNT(*) AS friend_count FROM friends WHERE user_id = ?',
+      [userId]
+    );
+    return rows[0].friend_count;
+  },
+
+  findFriendRequestsForUser: async (userId) => {
+    const [rows] = await pool.query(
+      `
+      SELECT ur.*
+      FROM users u
+      JOIN friends_requests ur ON u.id = ur.user_id AND ur.friend_id = ?
+      WHERE ur.status = 'sent'
+      `,
+      [userId]
+    );
+    return rows;
   }
 };
 

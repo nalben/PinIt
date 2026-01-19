@@ -62,3 +62,99 @@
     font-size: fluid-prop(20,18,1920,320);
     font-weight: 600;
 }
+.profile_interact_con{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+    & button{
+        cursor: pointer;
+        transition: all 0.3s;
+        &:hover{
+            opacity: 0.6;
+            transition: all 0.3s;
+        }
+    }
+}
+.owner_btns{
+    display: flex;
+    gap: 0.5rem;
+}
+.friends_modal{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    & strong{
+        font-size: fluid-prop(26,20,1920,320);
+    }
+    
+}
+.friends_item_con{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-height: fluid-prop(700,300,1920,320);
+    overflow-y: auto;
+
+    &::-webkit-scrollbar {
+        width: 10px;
+    }
+    
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    &::-webkit-scrollbar-thumb {
+        cursor: pointer;
+        background: var(--pink);
+        border-radius: 5px;
+    }
+}
+.friend_item{
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    align-items: center;
+    & img ,svg{
+        max-height: fluid-prop(50,40,1920,320);
+        max-width: fluid-prop(50, 40, 1920, 320);
+    }
+    & button{
+        font-size: fluid-prop(20,14,1920,320);
+        font-weight: 600;
+        height: fit-content;
+        padding-inline: fluid-prop(20, 5, 1920, 320);
+        padding-block: fluid-prop(15, 10, 1920, 320);
+    }
+
+}
+.friend_info{
+    display: flex;
+    gap: 1rem;
+    transition: all 0.3s;
+    &:hover{
+        opacity: 0.6;
+        transition: all 0.3s;
+    }
+}
+.friend_info_wrap{
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+.friend_info_text{
+    & span {
+        display: block;
+        max-width: fluid-prop(230, 110, 1050, 320);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: fluid-prop(18, 16, 1920, 320);
+    }
+    & p{
+        text-wrap: balance;
+        color: var(--cyan);
+        font-size: fluid-prop(16,14,1920,320);
+    }
+}
+
