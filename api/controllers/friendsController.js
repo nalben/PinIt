@@ -1,3 +1,5 @@
+// api/controllers/friendsController.js
+
 const db = require('../db');
 const UserModel = require('../models/UserModel');
 const { Op } = require('sequelize');
@@ -12,21 +14,21 @@ exports.sendFriendRequest = async (req, res) => {
       return res.status(400).json({ message: 'Нельзя отправить запрос на самого себя' });
     }
 
-    const existingRequest = await db.friends_requests.findOne({
-      where: { user_id, friend_id, status: 'sent' }
-    });
+    const [existing] = await db.execute(
+      `SELECT * FROM friend_requests WHERE user_id = ? AND friend_id = ? AND status = 'sent'`,
+      [user_id, friend_id]
+    );
 
-    if (existingRequest) {
+    if (existing.length > 0) {
       return res.status(400).json({ message: 'Запрос уже был отправлен' });
     }
 
-    const newRequest = await db.friends_requests.create({
-      user_id,
-      friend_id,
-      status: 'sent'
-    });
+    const [result] = await db.execute(
+      `INSERT INTO friend_requests (user_id, friend_id, status) VALUES (?, ?, 'sent')`,
+      [user_id, friend_id]
+    );
 
-    return res.status(201).json(newRequest);
+    return res.status(201).json({ id: result.insertId, user_id, friend_id, status: 'sent' });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Ошибка при отправке запроса' });
@@ -39,19 +41,26 @@ exports.acceptFriendRequest = async (req, res) => {
     const { request_id } = req.params;
     const user_id = req.user.id;
 
-    const request = await db.friends_requests.findByPk(request_id);
+    const [requests] = await db.execute(
+      `SELECT * FROM friend_requests WHERE id = ? AND status = 'sent' AND friend_id = ?`,
+      [request_id, user_id]
+    );
 
-    if (!request || request.status !== 'sent' || request.friend_id !== user_id) {
+    if (requests.length === 0) {
       return res.status(404).json({ message: 'Запрос не найден или уже обработан' });
     }
 
-    request.status = 'accepted';
-    await request.save();
+    const request = requests[0];
 
-    await db.friends.create({
-      user_id: request.user_id,
-      friend_id: request.friend_id
-    });
+    await db.execute(
+      `INSERT INTO friends (user_id, friend_id) VALUES (?, ?)`,
+      [request.user_id, request.friend_id]
+    );
+
+    await db.execute(
+      `DELETE FROM friend_requests WHERE id = ?`,
+      [request_id]
+    );
 
     return res.status(200).json({ message: 'Запрос принят' });
   } catch (error) {
@@ -60,27 +69,34 @@ exports.acceptFriendRequest = async (req, res) => {
   }
 };
 
+
 // Отклонение запроса в друзья
 exports.rejectFriendRequest = async (req, res) => {
   try {
     const { request_id } = req.params;
     const user_id = req.user.id;
 
-    const request = await db.friends_requests.findByPk(request_id);
+    const [requests] = await db.execute(
+      `SELECT * FROM friend_requests WHERE id = ? AND status = 'sent' AND friend_id = ?`,
+      [request_id, user_id]
+    );
 
-    if (!request || request.status !== 'sent' || request.friend_id !== user_id) {
+    if (requests.length === 0) {
       return res.status(404).json({ message: 'Запрос не найден или уже обработан' });
     }
 
-    request.status = 'rejected';
-    await request.save();
+    await db.execute(
+      `UPDATE friend_requests SET status = 'rejected' WHERE id = ?`,
+      [request_id]
+    );
 
-    return res.status(200).json({ message: 'Запрос отклонен' });
+    return res.status(200).json({ message: 'Запрос отклонён' });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Ошибка при отклонении запроса' });
   }
 };
+
 
 // Получение списка друзей пользователя
 exports.getFriends = async (req, res) => {
@@ -110,33 +126,32 @@ exports.getFriendCount = async (req, res) => {
   try {
     const { user_id } = req.params;
 
-    const friendCount = await db.friends.count({
-      where: { [Op.or]: [{ user_id }, { friend_id: user_id }] }
-    });
+    const [result] = await db.execute(
+      `SELECT COUNT(*) AS friend_count FROM friends WHERE user_id = ? OR friend_id = ?`,
+      [user_id, user_id]
+    );
 
-    return res.status(200).json({ friend_count: friendCount });
+    return res.status(200).json({ friend_count: result[0].friend_count });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Ошибка при получении количества друзей' });
   }
 };
 
-// Удаление друга
 exports.removeFriend = async (req, res) => {
   try {
-    const { friend_id } = req.params;
     const user_id = req.user.id;
+    const { friend_id } = req.params;
 
-    const deleted = await db.friends.destroy({
-      where: {
-        [Op.or]: [
-          { user_id, friend_id },
-          { user_id: friend_id, friend_id: user_id }
-        ]
-      }
-    });
+    const [result] = await db.execute(
+      `DELETE FROM friends
+       WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)`,
+      [user_id, friend_id, friend_id, user_id]
+    );
 
-    if (!deleted) return res.status(404).json({ message: 'Друг не найден' });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Друг не найден' });
+    }
 
     return res.status(200).json({ message: 'Друг удалён' });
   } catch (error) {
@@ -145,16 +160,42 @@ exports.removeFriend = async (req, res) => {
   }
 };
 
+// Удаление заявки на дружбу
+exports.removeFriendRequest = async (req, res) => {
+  try {
+    const { request_id } = req.params;
+    const user_id = req.user.id;
+
+    const [result] = await db.execute(
+      `DELETE FROM friend_requests
+       WHERE id = ? AND (user_id = ? OR friend_id = ?) AND status = 'sent'`,
+      [request_id, user_id, user_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Запрос не найден' });
+    }
+
+    return res.status(200).json({ message: 'Запрос отменён' });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка' });
+  }
+};
+
 // Получение входящих запросов в друзья
 exports.getFriendRequests = async (req, res) => {
   try {
     const { user_id } = req.params;
-    const requests = await db.friends_requests.findAll({
-      where: { friend_id: user_id, status: 'sent' },
-      include: [
-        { model: UserModel, as: 'user', attributes: ['id', 'username', 'nickname', 'avatar'] }
-      ]
-    });
+
+    const [requests] = await db.execute(
+      `SELECT fr.id, fr.user_id, fr.friend_id, fr.status, fr.created_at,
+              u.username, u.nickname, u.avatar
+       FROM friend_requests fr
+       JOIN users u ON u.id = fr.user_id
+       WHERE fr.friend_id = ? AND fr.status = 'sent'`,
+      [user_id]
+    );
 
     return res.status(200).json(requests);
   } catch (error) {

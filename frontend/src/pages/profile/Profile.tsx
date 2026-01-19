@@ -18,6 +18,13 @@ interface ProfileData {
   nickname?: string | null;
 }
 
+type FriendStatus = 'friend' | 'none' | 'sent';
+
+interface FriendItem extends ProfileData {
+  friendStatus: FriendStatus;
+  requestId?: number;
+}
+
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
 const Profile = () => {
@@ -28,8 +35,7 @@ const Profile = () => {
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFriendsOpen, setIsFriendsOpen] = useState(false);
-  
-  const [friends, setFriends] = useState<ProfileData[]>([]);
+  const [friends, setFriends] = useState<FriendItem[]>([]);
   
 // Функция для выбора правильного склонения
   const declension = (number: number, titles: [string, string, string]) => {
@@ -62,14 +68,21 @@ const Profile = () => {
     return 'только что';
   };
 
-
 useEffect(() => {
   if (!profile) return;
 
   const fetchFriends = async () => {
     try {
-      const { data } = await axiosInstance.get<ProfileData[]>(`/api/friends/${profile.id}`);
-      setFriends(data);
+      const { data } = await axiosInstance.get<ProfileData[]>(
+        `/api/friends/${profile.id}`
+      );
+
+      const mapped: FriendItem[] = data.map((f) => ({
+        ...f,
+        friendStatus: 'friend',
+      }));
+
+      setFriends(mapped); // ← ТОЛЬКО ТАК
     } catch (err) {
       console.error('Ошибка при получении друзей', err);
     }
@@ -78,6 +91,62 @@ useEffect(() => {
   fetchFriends();
 }, [profile]);
 
+
+const handleFriendAction = async (friend: FriendItem) => {
+  try {
+    // 1. Удаление из друзей
+    if (friend.friendStatus === 'friend') {
+      await axiosInstance.delete(`/api/friends/${friend.id}`);
+      setFriends(prev =>
+        prev.map(f =>
+          f.id === friend.id
+            ? { ...f, friendStatus: 'none' }
+            : f
+        )
+      );
+    }
+
+    // 2. Отправка заявки
+    if (friend.friendStatus === 'none') {
+      const { data } = await axiosInstance.post<{ id: number }>(
+        `/api/friends/send`,
+        { friend_id: friend.id }
+      );
+
+      setFriends(prev =>
+        prev.map(f =>
+          f.id === friend.id
+            ? { ...f, friendStatus: 'sent', requestId: data.id }
+            : f
+        )
+      );
+    }
+
+    // 3. Отмена заявки
+    if (friend.friendStatus === 'sent' && friend.requestId) {
+      await axiosInstance.delete(
+        `/api/friends/remove-request/${friend.requestId}`
+      );
+
+      setFriends(prev =>
+        prev.map(f =>
+          f.id === friend.id
+            ? { ...f, friendStatus: 'none', requestId: undefined }
+            : f
+        )
+      );
+    }
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+
+const getButtonText = (status: FriendStatus) => {
+  if (status === 'friend') return 'удалить';
+  if (status === 'none') return 'добавить';
+  return 'отправлено';
+};
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -192,21 +261,13 @@ useEffect(() => {
                         </Link>
 
                         <Mainbtn
-                          text="добавить"
+                          text={getButtonText(friend.friendStatus)}
                           variant="auth"
                           kind="button"
-                          onClick={async () => {
-                            try {
-                              await axiosInstance.delete(`/api/friends/${friend.id}`);
-                              setFriends(prev => prev.filter(f => f.id !== friend.id));
-                            } catch (err) {
-                              console.error('Ошибка при удалении друга', err);
-                            }
-                          }}
+                          onClick={() => handleFriendAction(friend)}
                         />
                       </div>
                     ))}
-                    
                   </div>
                 </div>
               </AuthModal>

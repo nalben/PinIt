@@ -22,6 +22,7 @@ app.use(express.json());
 app.use('/', routes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/private', privateRoutes);
+app.use('/api/friends', privateRoutes);
 
 // ============================
 // Запуск сервера

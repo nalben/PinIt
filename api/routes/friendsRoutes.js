@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const friendsController = require('../controllers/friendsController');
+const authMiddleware = require('../middleware/authMiddleware');
 
-router.post('/send', friendsController.sendFriendRequest);
-router.put('/accept/:request_id', friendsController.acceptFriendRequest);
-router.put('/reject/:request_id', friendsController.rejectFriendRequest);
-
-router.get('/:user_id', friendsController.getFriends);
-router.get('/friend-count/:user_id', friendsController.getFriendCount);
-router.get('/friend-requests/:user_id', friendsController.getFriendRequests);
+router.post('/send', authMiddleware, friendsController.sendFriendRequest);
+router.put('/accept/:request_id', authMiddleware, friendsController.acceptFriendRequest);
+router.put('/reject/:request_id', authMiddleware, friendsController.rejectFriendRequest);
+router.delete('/remove-request/:request_id', authMiddleware, friendsController.removeFriendRequest);
+router.delete('/:friend_id', authMiddleware, friendsController.removeFriend);
+router.get('/:user_id', authMiddleware, friendsController.getFriends);
 
 module.exports = router;
