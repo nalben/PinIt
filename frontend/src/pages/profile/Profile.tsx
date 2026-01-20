@@ -158,34 +158,42 @@ const handleFriendAction = async (userId: number) => {
     if (current === 'friend') {
   try {
     await axiosInstance.delete(`/api/friends/${userId}`);
+
+    // Меняем только статус
     setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-    setFriends(prev => {
-      const updated = prev.filter(f => f.id !== userId);
-      if (updated.length === 0) setIsFriendsOpen(false); // Закрываем модалку, если друзей нет
-      return updated;
-    });
+
+    setFriends(prev =>
+      prev.map(f =>
+        f.id === userId
+          ? { ...f, friendStatus: 'none' } // не удаляем, просто меняем статус
+          : f
+      )
+    );
   } catch (err: any) {
     if (err.response?.status === 404) {
-      // Друг не найден — удаляем из списка друзей
-      setFriends(prev => {
-        const updated = prev.filter(f => f.id !== userId);
-        if (updated.length === 0) setIsFriendsOpen(false); // Закрываем модалку
-        return updated;
-      });
       setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
+      setFriends(prev =>
+        prev.map(f =>
+          f.id === userId
+            ? { ...f, friendStatus: 'none' }
+            : f
+        )
+      );
     } else {
       console.error(err);
     }
   }
-}else if (current === 'none') {
+}
+
+else if (current === 'none') {
       const { data } = await axiosInstance.post<{ id: number }>(
         `/api/friends/send`,
         { friend_id: userId }
       );
       setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'sent', requestId: data.id } }));
     } else if (current === 'sent' && requestId) {
-      await axiosInstance.put(`/api/friends/reject/${requestId}`);
-      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'rejected', requestId } }));
+      await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
+      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
     }
   } catch (e) {
     console.error(e);
