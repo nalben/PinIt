@@ -6,7 +6,11 @@ import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 import Logo from '@/assets/icons/colored/Logo.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import AuthModal from "@/components/auth/authmodal/AuthModal";
+import GuestOnly from "@/components/__general/guestonly/Guestonly";
+import AuthTrigger from "@/components/auth/AuthTrigger";
+import AuthOnly from "@/components/__general/authonly/Authonly";
 
+// Интерфейсы
 interface ProfileData {
   id: number;
   avatar?: string | null;
@@ -26,19 +30,19 @@ interface FriendItem extends ProfileData {
 
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
+// Компонент
 const Profile = () => {
   const { username } = useParams<{ username: string }>();
-
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [error, setError] = useState<ProfileError | null>(null);
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFriendsOpen, setIsFriendsOpen] = useState(false);
   const [friends, setFriends] = useState<FriendItem[]>([]);
-
+  
   // Состояние для статусов друзей
   const [friendStatusById, setFriendStatusById] = useState<Record<number, { status: FriendStatus; requestId?: number }>>({});
-
+  const [shareTextById, setShareTextById] = useState<Record<number, string>>({});
   // Функция склонения
   const declension = (number: number, titles: [string, string, string]) => {
     const n = Math.abs(number) % 100;
@@ -48,7 +52,18 @@ const Profile = () => {
     if (n1 === 1) return titles[0];
     return titles[2];
   };
-
+  // Функция скопировано
+  const handleShare = (userId: number, username: string) => {
+  const profileUrl = `${window.location.origin}/user/${username}`;
+  navigator.clipboard.writeText(profileUrl)
+    .then(() => {
+      setShareTextById(prev => ({ ...prev, [userId]: 'Скопировано' }));
+      setTimeout(() => {
+        setShareTextById(prev => ({ ...prev, [userId]: 'Поделиться' }));
+      }, 2000);
+    })
+    .catch(err => console.error('Ошибка копирования в буфер:', err));
+};
   // Функция "n времени назад"
   const timeAgo = (dateString: string) => {
     const now = new Date();
@@ -60,7 +75,6 @@ const Profile = () => {
     const diffDays = Math.floor(diffHours / 24);
     const diffMonths = Math.floor(diffDays / 30);
     const diffYears = Math.floor(diffDays / 365);
-
     if (diffYears > 0) return `${diffYears} ${declension(diffYears, ['год', 'года', 'лет'])}`;
     if (diffMonths > 0) return `${diffMonths} ${declension(diffMonths, ['месяц', 'месяца', 'месяцев'])}`;
     if (diffDays > 0) return `${diffDays} ${declension(diffDays, ['день', 'дня', 'дней'])}`;
@@ -76,7 +90,6 @@ const Profile = () => {
         const url = `/api/profile/${username}`;
         const { data } = await axiosInstance.get<ProfileData>(url);
         setProfile(data);
-
         const countUrl = `/api/profile/${username}/friends-count`;
         const { data: countData } = await axiosInstance.get<{ friend_count: number }>(countUrl);
         setFriendCount(countData.friend_count);
@@ -91,7 +104,6 @@ const Profile = () => {
             [data.id]: { status: statusData.status, requestId: statusData.requestId }
           }));
         }
-
       } catch (err: any) {
         if (err.response?.status === 404) setError("NOT_FOUND");
         else setError("UNKNOWN");
@@ -106,13 +118,11 @@ const Profile = () => {
   // Загрузка друзей владельца
   useEffect(() => {
     if (!profile || !profile.isOwner) return;
-
     const fetchFriends = async () => {
       try {
         const { data } = await axiosInstance.get<ProfileData[]>(`/api/friends/${profile.id}`);
         const mapped: FriendItem[] = data.map(f => ({ ...f, friendStatus: 'friend' }));
         setFriends(mapped);
-
         const statusMap: Record<number, { status: FriendStatus }> = {};
         data.forEach(f => (statusMap[f.id] = { status: 'friend' }));
         setFriendStatusById(prev => ({ ...prev, ...statusMap }));
@@ -161,6 +171,7 @@ const Profile = () => {
     return classes.friend_btn_sent;
   };
 
+  // Отрисовка компонента
   if (isLoading) return <div className={classes.profile_loading}><p>Загрузка...</p></div>;
   if (error === "NOT_FOUND") return (
     <div className={classes.profile_not_found}>
@@ -178,12 +189,10 @@ const Profile = () => {
       <div className={classes.avatar_con}>
         {profile.avatar ? <img src={profile.avatar} alt="avatar" /> : <Default />}
       </div>
-
       <div className={classes.profile_username}>
         <span>{UserNickname}</span>
         <p><Logo/><h1>{profile.username}</h1></p>
       </div>
-
       <div className={classes.friends}>
         {profile.isOwner ? (
           <div className={classes.profile_interact_con}>
@@ -195,7 +204,6 @@ const Profile = () => {
             >
               Друзей: {friendCount ?? 'нет'}
             </button>
-
             <AuthModal isOpen={isFriendsOpen} onClose={() => setIsFriendsOpen(false)}>
               <div className={classes.friends_modal}>
                 <strong>Друзья</strong>
@@ -227,23 +235,42 @@ const Profile = () => {
                 </div>
               </div>
             </AuthModal>
-
             <div className={classes.interact_btns}>
-              <Mainbtn text="Поделиться" />
+              <Mainbtn
+                text={shareTextById[profile.id] || 'Поделиться'}
+                variant="auth"
+                kind="button"
+                onClick={() => handleShare(profile.id, profile.username)}
+              />
               <Mainbtn text="Редактировать" />
             </div>
           </div>
         ) : (
           <div className={classes.interact_btns}>
-            <Mainbtn text="Поделиться" />
-            <div className={getButtonClass(profileFriendStatus)}>
-              <Mainbtn
-                text={getButtonText(profileFriendStatus)}
-                variant="auth"
-                kind="button"
-                onClick={() => handleFriendAction(profile.id)}
-              />
-            </div>
+            <Mainbtn
+              text={shareTextById[profile.id] || 'Поделиться'}
+              variant="mini"
+              kind="button"
+              onClick={() => handleShare(profile.id, profile.username)}
+            />
+            <GuestOnly>
+              <AuthTrigger type='login'>
+                  <div className={getButtonClass(profileFriendStatus)}>
+                    <Mainbtn 
+                    text="добавить"/>
+                  </div>
+              </AuthTrigger>
+            </GuestOnly>
+            <AuthOnly>
+              <div className={getButtonClass(profileFriendStatus)}>
+                <Mainbtn
+                  text={getButtonText(profileFriendStatus)}
+                  variant="auth"
+                  kind="button"
+                  onClick={() => handleFriendAction(profile.id)}
+                />
+              </div>
+            </AuthOnly>
           </div>
         )}
       </div>

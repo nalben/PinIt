@@ -3,7 +3,7 @@ import classes from './Mainbtn.module.scss';
 import { NavLink } from 'react-router-dom';
 
 export type ButtonType = 'button' | 'submit' | 'reset';
-export type Variant = 'auth' | 'none';             // можно добавлять другие варианты
+export type Variant = 'auth' | 'none' | 'mini';             // можно добавлять другие варианты
 export type Type = 'button' | 'link' | 'navlink';
 
 interface MainbtnProps {

@@ -7,9 +7,24 @@
     padding-block: fluid-prop(10,8,1920,320);
     transition: all 0.3s;
     cursor: pointer;
-    font-family: "Nata Sans", sans-serif; // 100-900
+    font-family: "Nata Sans", sans-serif;
     &:hover{
         transition: all 0.3s;
         opacity: 0.6;
     }
+}
+.mini{
+    color: var(--pink);
+    transition: all 0.3s;
+    cursor: pointer;
+    font-family: "Nata Sans", sans-serif;
+    &:hover {
+        transition: all 0.3s;
+        opacity: 0.6;
+    }
+    border: var(--border);
+    font-size: fluid-prop(20, 14, 1920, 320);
+    height: fit-content;
+    padding-inline: fluid-prop(20, 5, 1920, 320);
+    padding-block: fluid-prop(15, 10, 1920, 320);
 }

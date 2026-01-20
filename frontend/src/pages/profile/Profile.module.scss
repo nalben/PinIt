@@ -118,23 +118,23 @@
     }
 }
 .friend_btn_remove {
-    background-color: rgb(255 47 47);
+    background-color: rgb(255 104 104);
     & button {
-        color: var(--blue20) !important;
+        color: var(--blue20);
     }
 }
 
 .friend_btn_add {
-    background-color: rgb(88 255 59);
+    background-color: rgb(106 189 91);
     & button {
-        color: var(--blue20) !important;
+        color: var(--blue20);
     }
 }
 
 .friend_btn_sent {
-    background-color: rgb(233, 255, 68);
+    background-color: rgb(240 255 129);
     & button{
-        color: var(--blue20) !important;
+        color: var(--blue20);
     }
 }
 .friend_item{

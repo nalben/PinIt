@@ -22,15 +22,14 @@ interface ApiResponse {
 
 interface LoginFormProps {
   onOpenReset?: () => void;
-}
-interface LoginFormProps {
-  onOpenReset?: () => void;
   onOpenRegister?: () => void;
+  onClose?: () => void;
 }
 
 const LoginForm: React.FC<LoginFormProps> = ({
   onOpenReset,
-  onOpenRegister
+  onOpenRegister,
+  onClose
 }) => {
   const [loading, setLoading] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
@@ -59,7 +58,8 @@ const LoginForm: React.FC<LoginFormProps> = ({
       localStorage.setItem("username", res.data.username || "");
       localStorage.setItem("userId", res.data.id?.toString() || "");
 
-      window.location.href = "/home";
+      onClose?.();
+      window.location.reload();
     } catch (err: any) {
       setServerMessage(err?.response?.data?.message || "Ошибка при логине");
     } finally {

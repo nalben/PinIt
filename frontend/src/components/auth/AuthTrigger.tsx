@@ -34,6 +34,7 @@ const AuthTrigger: React.FC<AuthTriggerProps> = ({
         <LoginForm
           onOpenReset={() => open("reset")}
           onOpenRegister={() => open("register")}
+          onClose={close}
         />
       </AuthModal>
 

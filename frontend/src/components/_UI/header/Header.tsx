@@ -145,7 +145,7 @@ const Header = () => {
                       <Noti />
                     </div>
                     <div className={classes.noti_con}>
-                      mama
+                      список уведомлений
                     </div>
                   </DropdownWrapper>
                 </div>
