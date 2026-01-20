@@ -21,7 +21,8 @@ interface ProfileData {
   nickname?: string | null;
 }
 
-type FriendStatus = 'friend' | 'none' | 'sent';
+type FriendStatus = 'friend' | 'none' | 'sent' | 'rejected' | 'received';
+
 
 interface FriendItem extends ProfileData {
   friendStatus: FriendStatus;
@@ -85,35 +86,45 @@ const Profile = () => {
 
   // Загрузка профиля и количества друзей
   useEffect(() => {
-    const fetchProfileData = async () => {
-      try {
-        const url = `/api/profile/${username}`;
-        const { data } = await axiosInstance.get<ProfileData>(url);
-        setProfile(data);
-        const countUrl = `/api/profile/${username}/friends-count`;
-        const { data: countData } = await axiosInstance.get<{ friend_count: number }>(countUrl);
-        setFriendCount(countData.friend_count);
+  const fetchProfileData = async () => {
+    try {
+      const url = `/api/profile/${username}`;
+      const { data } = await axiosInstance.get<ProfileData>(url);
+      setProfile(data);
 
-        // Если это не владелец, подгружаем статус дружбы
-        if (!data.isOwner) {
-          const { data: statusData } = await axiosInstance.get<{ status: FriendStatus; requestId?: number }>(
-            `/api/friends/status/${data.id}`
-          );
-          setFriendStatusById(prev => ({
-            ...prev,
-            [data.id]: { status: statusData.status, requestId: statusData.requestId }
-          }));
-        }
-      } catch (err: any) {
-        if (err.response?.status === 404) setError("NOT_FOUND");
-        else setError("UNKNOWN");
-      } finally {
-        setIsLoading(false);
+      const countUrl = `/api/profile/${username}/friends-count`;
+      const { data: countData } =
+        await axiosInstance.get<{ friend_count: number }>(countUrl);
+      setFriendCount(countData.friend_count);
+
+      if (!data.isOwner) {
+        const { data: statusData } = await axiosInstance.get<{
+          status: FriendStatus;
+          requestId?: number;
+        }>(`/api/friends/status/${data.id}`);
+
+        console.log('FRIEND STATUS FROM SERVER:', statusData);
+
+        setFriendStatusById(prev => ({
+          ...prev,
+          [data.id]: {
+            status: statusData.status,
+            requestId: statusData.requestId
+          }
+        }));
+        
       }
-    };
+    } catch (err: any) {
+      if (err.response?.status === 404) setError("NOT_FOUND");
+      else setError("UNKNOWN");
+    } finally {
+      setIsLoading(false);
+    }
+    
+  };
 
-    if (username) fetchProfileData();
-  }, [username]);
+  if (username) fetchProfileData();
+}, [username]);
 
   // Загрузка друзей владельца
   useEffect(() => {
@@ -130,6 +141,7 @@ const Profile = () => {
         console.error(err);
       }
     };
+    
 
     fetchFriends();
   }, [profile]);
@@ -138,37 +150,67 @@ const Profile = () => {
   const profileFriendStatus = profile ? friendStatusById[profile.id]?.status ?? 'none' : 'none';
 
   // Действие с другом
-  const handleFriendAction = async (userId: number) => {
-    const current = friendStatusById[userId]?.status ?? 'none';
-    const requestId = friendStatusById[userId]?.requestId;
+const handleFriendAction = async (userId: number) => {
+  const current = friendStatusById[userId]?.status ?? 'none';
+  const requestId = friendStatusById[userId]?.requestId;
 
-    try {
-      if (current === 'friend') {
-        await axiosInstance.delete(`/api/friends/${userId}`);
-        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-      } else if (current === 'none') {
-        const { data } = await axiosInstance.post<{ id: number }>(`/api/friends/send`, { friend_id: userId });
-        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'sent', requestId: data.id } }));
-      } else if (current === 'sent' && requestId) {
-        await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
-        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-      }
-    } catch (e) {
-      console.error(e);
+  try {
+    if (current === 'friend') {
+  try {
+    await axiosInstance.delete(`/api/friends/${userId}`);
+    setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
+    setFriends(prev => {
+      const updated = prev.filter(f => f.id !== userId);
+      if (updated.length === 0) setIsFriendsOpen(false); // Закрываем модалку, если друзей нет
+      return updated;
+    });
+  } catch (err: any) {
+    if (err.response?.status === 404) {
+      // Друг не найден — удаляем из списка друзей
+      setFriends(prev => {
+        const updated = prev.filter(f => f.id !== userId);
+        if (updated.length === 0) setIsFriendsOpen(false); // Закрываем модалку
+        return updated;
+      });
+      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
+    } else {
+      console.error(err);
     }
-  };
+  }
+}else if (current === 'none') {
+      const { data } = await axiosInstance.post<{ id: number }>(
+        `/api/friends/send`,
+        { friend_id: userId }
+      );
+      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'sent', requestId: data.id } }));
+    } else if (current === 'sent' && requestId) {
+      await axiosInstance.put(`/api/friends/reject/${requestId}`);
+      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'rejected', requestId } }));
+    }
+  } catch (e) {
+    console.error(e);
+  }
+};
+
 
   // Классы и тексты кнопок
-  const getButtonText = (status: FriendStatus) => {
-    if (status === 'friend') return 'удалить';
-    if (status === 'none') return 'добавить';
-    return 'отправлено';
-  };
+const getButtonText = (status: FriendStatus) => {
+  if (status === 'friend') return 'удалить';
+  if (status === 'none') return 'добавить';
+  if (status === 'sent') return 'отправлено';
+  if (status === 'received') return 'входящая заявка';
+  if (status === 'rejected') return 'отклонено';
+  return '';
+};
+
 
   const getButtonClass = (status: FriendStatus) => {
     if (status === 'friend') return classes.friend_btn_remove;
     if (status === 'none') return classes.friend_btn_add;
-    return classes.friend_btn_sent;
+    if (status === 'sent') return classes.friend_btn_sent;
+    if (status === 'rejected') return classes.friend_btn_disabled;
+    if (status === 'received') return classes.friend_btn_received;
+    return '';
   };
 
   // Отрисовка компонента
@@ -183,6 +225,7 @@ const Profile = () => {
   if (!profile) return null;
 
   const UserNickname = profile.nickname || profile.username;
+  const currentStatus = friendStatusById[profile.id]?.status ?? 'none';
 
   return (
     <div className={classes.profile}>
@@ -267,6 +310,7 @@ const Profile = () => {
                   text={getButtonText(profileFriendStatus)}
                   variant="auth"
                   kind="button"
+                  disabled={profileFriendStatus === 'rejected' || profileFriendStatus === 'received'}
                   onClick={() => handleFriendAction(profile.id)}
                 />
               </div>

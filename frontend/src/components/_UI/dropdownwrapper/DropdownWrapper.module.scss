@@ -2,6 +2,14 @@
     position: relative;
 }
 .menu{
+    &.noti{
+        & .item{
+            cursor: auto;
+            &:hover{
+                background-color: transparent;
+            }
+        }
+    }
     position: absolute;
     background-color: var(--grey20);
     border: var(--border);
@@ -49,4 +57,13 @@
 }
 .noti{
     top: calc(100% + 15px);
+    &.right{
+        right:-144px;
+        @media (min-width:420px) {
+            right: -100px;
+        }
+        @media (min-width:600px) {
+            right: 0px;
+        }
+    }
 }

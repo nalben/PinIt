@@ -10,9 +10,10 @@ interface MainbtnProps {
   text: string;
   variant?: Variant;
   kind?: Type;
-  type?: ButtonType; // применяется только если kind === 'button'
-  href?: string;     // применяется для link/navlink
+  type?: ButtonType;
+  href?: string;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  disabled?: boolean;
 }
 
 const Mainbtn: React.FC<MainbtnProps> = ({
@@ -22,16 +23,22 @@ const Mainbtn: React.FC<MainbtnProps> = ({
   type = 'button',
   href = '#',
   onClick,
+  disabled = false,
 }) => {
   const className = `${classes.mainBtn} ${classes[variant]}`;
 
   if (kind === 'button') {
-    return (
-      <button type={type} className={className} onClick={onClick}>
-        {text}
-      </button>
-    );
-  }
+  return (
+    <button
+      type={type}
+      className={className}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {text}
+    </button>
+  );
+}
 
   if (kind === 'link') {
     return (

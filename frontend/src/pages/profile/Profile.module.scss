@@ -137,6 +137,19 @@
         color: var(--blue20);
     }
 }
+.friend_btn_disabled{
+    background-color: rgb(115 103 103);
+    & button {
+        color: var(--blue20);
+    }
+}
+.friend_btn_received{
+    background-color: rgb(240 255 129);
+    & button {
+        color: var(--blue20);
+    }
+}
+
 .friend_item{
     display: flex;
     gap: 1rem;

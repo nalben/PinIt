@@ -10,5 +10,8 @@ router.delete('/remove-request/:request_id', authMiddleware, friendsController.r
 router.delete('/:friend_id', authMiddleware, friendsController.removeFriend);
 router.get('/:user_id', authMiddleware, friendsController.getFriends);
 router.get('/status/:other_user_id', authMiddleware, friendsController.getFriendStatus);
+router.get('/requests/incoming', authMiddleware, friendsController.getFriendRequests);
+router.get('/count/:user_id', authMiddleware, friendsController.getFriendCount);
+
 
 module.exports = router;

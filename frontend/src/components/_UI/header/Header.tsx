@@ -5,18 +5,28 @@ import Noti from '@/assets/icons/monochrome/noti.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Burger from '@/assets/icons/monochrome/burger.svg';
 import axios from 'axios';
-import { API_URL } from "@/../axiosInstance";
+import axiosInstance, { API_URL } from "@/../axiosInstance";
 import AuthOnly from '@/components/__general/authonly/Authonly';
 import GuestOnly from '@/components/__general/guestonly/Guestonly';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import DropdownWrapper from '../dropdownwrapper/DropdownWrapper';
 import LogoutButton from '@/components/__general/logoutbutton/LogoutButton';
 import Arrow from '@/assets/icons/monochrome/back.svg'
+import Accept from '@/assets/icons/monochrome/accept.svg'
+import Deny from '@/assets/icons/monochrome/deny.svg'
 
 interface UserProfile {
   username: string;
   avatar?: string | null;
   email?: string;
+}
+interface FriendRequestNoti {
+  id: number;
+  user_id: number;
+  username: string;
+  nickname?: string;
+  avatar?: string | null;
+  created_at: string;
 }
 
 const Header = () => {
@@ -24,6 +34,7 @@ const Header = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const menuRef = useRef<HTMLElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
+  const [requests, setRequests] = useState<FriendRequestNoti[]>([]);
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
@@ -45,6 +56,31 @@ const Header = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const fetchRequests = async () => {
+      try {
+        const { data } = await axiosInstance.get<FriendRequestNoti[]>(
+          '/api/friends/requests/incoming'
+        );
+        setRequests(data);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    fetchRequests();
+  }, []);
+
+  const acceptRequest = async (requestId: number) => {
+    await axiosInstance.put(`/api/friends/accept/${requestId}`);
+    setRequests(prev => prev.filter(r => r.id !== requestId));
+  };
+
+  const rejectRequest = async (requestId: number) => {
+    await axiosInstance.put(`/api/friends/reject/${requestId}`);
+    setRequests(prev => prev.filter(r => r.id !== requestId));
+  };
 
   useEffect(() => {
     if (menuOpen) {
@@ -136,19 +172,46 @@ const Header = () => {
         </AuthOnly>
       </nav>
 
-      <div>
+      <div className={classes.profile_container}>
         <AuthOnly>
             <div className={classes.user}>
                 <div className={classes.noti}>
                   <DropdownWrapper right noti closeOnClick={false}>
                     <div className={classes.noti_icon_con}>
                       <Noti />
+                      {requests.length > 0 && <span className={classes.badge} />}
                     </div>
+
                     <div className={classes.noti_con}>
-                      список уведомлений
+                      <span className={classes.empty}>
+                        {requests.length === 0 ? 'Нет уведомлений' : 'Уведомления'}
+                      </span>
+                      {requests.map(req => (
+                        <div key={req.id} className={classes.noti_item}>
+                          {req.avatar ? (
+                            <img src={req.avatar} alt="avatar" />
+                          ) : (
+                            <Default />
+                          )}
+
+                          <span>
+                            <span>{req.nickname || req.username}</span> подал заявку в друзья
+                          </span>
+
+                          <div className={classes.noti_int}>
+                            <button onClick={() => acceptRequest(req.id)}>
+                              <Accept />
+                            </button>
+                            <button onClick={() => rejectRequest(req.id)}>
+                              <Deny />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </DropdownWrapper>
                 </div>
+
                 <DropdownWrapper right profile>
                   <div className={classes.profile}>
                     {user?.avatar ? (
