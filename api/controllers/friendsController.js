@@ -203,3 +203,45 @@ exports.getFriendRequests = async (req, res) => {
     return res.status(500).json({ message: 'Ошибка при получении запросов на дружбу' });
   }
 };
+
+exports.getFriendStatus = async (req, res) => {
+  try {
+    const currentUserId = req.user.id;
+    const { other_user_id } = req.params;
+
+    if (currentUserId === Number(other_user_id)) {
+      return res.status(400).json({ message: "Нельзя проверять статус с самим собой" });
+    }
+
+    // Проверка дружбы
+    const [friends] = await db.execute(
+      `SELECT * FROM friends 
+       WHERE (user_id = ? AND friend_id = ?) 
+          OR (user_id = ? AND friend_id = ?)`,
+      [currentUserId, other_user_id, other_user_id, currentUserId]
+    );
+    if (friends.length > 0) return res.status(200).json({ status: "friend" });
+
+    // Исходящая заявка
+    const [sent] = await db.execute(
+      `SELECT * FROM friend_requests 
+       WHERE user_id = ? AND friend_id = ? AND status = 'sent'`,
+      [currentUserId, other_user_id]
+    );
+    if (sent.length > 0) return res.status(200).json({ status: "sent", requestId: sent[0].id });
+
+    // Входящая заявка
+    const [received] = await db.execute(
+      `SELECT * FROM friend_requests 
+       WHERE user_id = ? AND friend_id = ? AND status = 'sent'`,
+      [other_user_id, currentUserId]
+    );
+    if (received.length > 0) return res.status(200).json({ status: "received", requestId: received[0].id });
+
+    // Нет связи
+    return res.status(200).json({ status: "none" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Ошибка при получении статуса дружбы" });
+  }
+};

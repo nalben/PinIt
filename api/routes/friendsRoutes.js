@@ -9,5 +9,6 @@ router.put('/reject/:request_id', authMiddleware, friendsController.rejectFriend
 router.delete('/remove-request/:request_id', authMiddleware, friendsController.removeFriendRequest);
 router.delete('/:friend_id', authMiddleware, friendsController.removeFriend);
 router.get('/:user_id', authMiddleware, friendsController.getFriends);
+router.get('/status/:other_user_id', authMiddleware, friendsController.getFriendStatus);
 
 module.exports = router;
