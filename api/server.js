@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 
-// Роуты
+// Роуты API
 const routes = require('./routes');
 const profileRoutes = require('./routes/profileRoutes');
 const privateRoutes = require('./routes/private');
@@ -19,13 +19,28 @@ app.use(cors());
 app.use(express.json());
 
 // ============================
-// Основные роуты
+// API маршруты
 // ============================
-app.use('/', routes);
+app.use('/api', routes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/private', privateRoutes);
 app.use('/api/friends', friendsRoutes);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ============================
+// Путь к сборке фронтенда
+// ============================
+const frontendPath = path.join(__dirname, '../frontend/build');
+
+// Статика фронтенда
+app.use(express.static(frontendPath));
+
+// ============================
+// Fallback для SPA
+// ============================
+// Все остальные GET-запросы отдаем index.html
+app.get('/*', (req, res) => {
+  res.sendFile(path.join(frontendPath, 'index.html'));
+});
 
 // ============================
 // Запуск сервера
