@@ -10,6 +10,7 @@ import GuestOnly from "@/components/__general/guestonly/Guestonly";
 import AuthTrigger from "@/components/auth/AuthTrigger";
 import ResetPasswordForm from "@/components/auth/reset/ResetPasswordForm";
 import AuthOnly from "@/components/__general/authonly/Authonly";
+import Edit from '@/assets/icons/monochrome/edit.svg'
 // Интерфейсы
 interface ProfileData {
   id: number;
@@ -51,7 +52,7 @@ const Profile = () => {
   const [statusInput, setStatusInput] = useState<string>('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [openModal, setOpenModal] = useState<OpenModal>(null);
-
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   // Склонение
   const declension = (number: number, titles: [string, string, string]) => {
     const n = Math.abs(number) % 100;
@@ -91,7 +92,12 @@ const Profile = () => {
     if (diffMinutes > 0) return `${diffMinutes} ${declension(diffMinutes, ['минуту', 'минуты', 'минут'])}`;
     return 'только что';
   };
-
+  useEffect(() => {
+    if (openModal !== 'edit') {
+      setAvatarPreview(null);
+      setAvatarFile(null);
+    }
+  }, [openModal]);
   useEffect(() => {
     if (profile) {
       setNicknameInput(profile.nickname || '');
@@ -277,14 +283,14 @@ const Profile = () => {
                 onClick={() => setOpenModal("edit")}
               />
 
-              {/* Модалка редактирования */}
               <AuthModal
                 isOpen={openModal === "edit"}
                 onClose={() => setOpenModal(null)}
                 closeOnOverlayClick={false}
               >
-                <div className={classes.edit_modal}>
+                <div>
                   <form
+                    className={classes.edit_modal}
                     onSubmit={async (e) => {
                       e.preventDefault();
                       try {
@@ -308,17 +314,78 @@ const Profile = () => {
                       }
                     }}
                   >
-                    <input type="text" name="nickname" value={nicknameInput} onChange={e => setNicknameInput(e.target.value)} placeholder="Никнейм" />
-                    <input type="text" name="status" value={statusInput} onChange={e => setStatusInput(e.target.value)} placeholder="Статус" />
-                    <input type="file" name="avatar" accept="image/*" onChange={e => setAvatarFile(e.target.files?.[0] || null)} />
+                    <div className={classes.avatar_upload}>
+                      <label htmlFor="avatar" className={classes.upload_label}>
+                        {avatarPreview ? (
+                          <img src={avatarPreview} alt="avatar preview" />
+                        ) : profile.avatar ? (
+                          <img
+                            src={
+                              profile.avatar.startsWith('/uploads/')
+                                ? `${API_URL}${profile.avatar}`
+                                : `${API_URL}/uploads/${profile.avatar}`
+                            }
+                            alt="avatar"
+                          />
+                        ) : (
+                          <Default />
+                        )}
+                        <Edit />
+                      </label>
+                      <label htmlFor="avatar" className={classes.upload_label}>
+                        <span>изменить</span>
+                      </label>
+                      <input
+                        type="file"
+                        id="avatar"
+                        name="avatar"
+                        accept="image/png, image/jpeg, image/webp"
+                        onChange={e => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+
+                          if (!file.type.startsWith('image/')) {
+                            alert('Можно загружать только изображения');
+                            e.target.value = '';
+                            return;
+                          }
+
+                          setAvatarFile(file);
+                          setAvatarPreview(URL.createObjectURL(file));
+                        }}
+                      />
+                    </div>
+                    <label className={classes.itput_text_label}>
+                    <span className={classes.itput_text_label_item}>Никнейм</span>
+                    <input
+                      type="text"
+                      name="nickname"
+                      maxLength={50}
+                      value={nicknameInput}
+                      onChange={e => setNicknameInput(e.target.value)}
+                      placeholder="Введите никнейм"
+                    />
+                  </label>
+
+                  <label className={classes.itput_text_label}>
+                    <span className={classes.itput_text_label_item}>Статус</span>
+                    <input
+                      type="text"
+                      name="status"
+                      maxLength={100}
+                      value={statusInput}
+                      onChange={e => setStatusInput(e.target.value)}
+                      placeholder="Введите статус"
+                    />
+                  </label>
+                  <div className={classes.edit_menu_int}>
+                    <Mainbtn type="button" text="Изменить пароль" onClick={() => setOpenModal("reset")} />
                     <Mainbtn text="Сохранить" type="submit" />
+                  </div>
                   </form>
 
-                  <Mainbtn type="button" text="Изменить пароль" onClick={() => setOpenModal("reset")} />
                 </div>
               </AuthModal>
-
-              {/* Модалка смены пароля */}
               <AuthModal
                 isOpen={openModal === "reset"}
                 onClose={() => setOpenModal(null)}

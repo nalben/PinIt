@@ -100,7 +100,17 @@
             max-width: min(45%, 230px);
         }
     }
-    & .friend_btn_received, .friend_btn_sent, .friend_btn_remove, .friend_btn_add, .friend_btn_disabled{
+    & span{
+        & .friend_btn_received,
+            .friend_btn_sent,
+            .friend_btn_remove,
+            .friend_btn_add,
+            .friend_btn_disabled{
+                width: auto;
+                max-width: none;
+        }
+    }
+    & span, .friend_btn_received, .friend_btn_sent, .friend_btn_remove, .friend_btn_add, .friend_btn_disabled{
         width: 100%;
         max-width: min(70%, 200px);
         & button{
@@ -238,5 +248,104 @@
         color: var(--cyan);
         cursor: pointer;
         opacity: 0.5;
+    }
+}
+
+.edit_modal{
+    max-width: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    & input[type="text"] {
+        border: var(--border);
+        padding: 10px;
+        color: var(--pink);
+        transition: all 0.3s;
+        &::placeholder {
+            color: var(--grey10);      
+            transition: all 0.3s;
+        }
+        &:focus{
+            border-color: var(--pink);
+            transition: all 0.3s;
+            &::placeholder {
+                transition: all 0.3s;
+                color: var(--cyan);
+            }
+        }
+    }
+}
+.avatar_upload {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    & input{
+        width: 0px;
+        height: 0px;
+    }
+}
+.upload_label {
+    cursor: pointer;
+    height: fit-content;
+    position: relative;
+    &:hover{
+        & svg:nth-child(1), img:nth-child(1) {
+            opacity: 0.5;
+            transition: all 0.5s;
+        }
+        & svg:nth-child(2) {
+            opacity: 1;
+            transition: all 0.5s;
+        }
+    }
+    & svg:nth-child(1), img:nth-child(1){
+        transition: all 0.5s;
+        border-radius: 50%;
+        overflow: hidden;
+        max-width:  80px;
+        min-width:  80px;
+        max-height: 80px;
+        min-height: 80px;
+        object-fit: cover;
+        object-position: center;
+    }
+    & svg:nth-child(2){
+        opacity: 0;
+        width: 35px;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        transition: all 0.5s;
+    }
+    & span{
+        border: var(--border);
+        border-color: var(--pink);
+        padding: 10px;
+        transition: all 0.3s;
+        &:hover{
+            opacity: 0.6;
+            transition: all 0.3s;
+        }
+    }
+}
+.itput_text_label{
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.edit_menu_int{
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    @media (min-width:500px) {
+        flex-direction: row;
+        gap: 0.5rem;
+    }
+    & button{
+        font-size: fluid-prop(20,14,1920,320);
+        width: 100%;
+        white-space: nowrap;
     }
 }

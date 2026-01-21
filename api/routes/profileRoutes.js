@@ -34,7 +34,15 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Только изображения'), false);
+    }
+    cb(null, true);
+  },
+});
 
 /* ============================
    PUT /api/profile/me
