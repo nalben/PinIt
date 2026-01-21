@@ -1,5 +1,4 @@
 require('dotenv').config();
-
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -9,7 +8,7 @@ const routes = require('./routes');
 const profileRoutes = require('./routes/profileRoutes');
 const privateRoutes = require('./routes/private');
 const friendsRoutes = require('./routes/friendsRoutes');
-const frontendPath = path.join(__dirname, '../frontend/build');
+
 const app = express();
 
 // ============================
@@ -17,26 +16,34 @@ const app = express();
 // ============================
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use(express.static(frontendPath));
 
 // ============================
-// Основные роуты API
+// API роуты
 // ============================
-app.use('/', routes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/private', privateRoutes);
 app.use('/api/friends', friendsRoutes);
+app.use('/', routes);
 
 // ============================
 // Статика фронтенда
 // ============================
-app.use(express.static(path.join(__dirname, '../frontend/build')));
+const frontendPath = path.join(__dirname, '../frontend/build');
 
-// Фallback для React Router
-app.use((req, res, next) => {
+// 1. Сначала отдаём реальные файлы (JS, CSS, картинки)
+app.use(express.static(frontendPath));
+
+// 2. Файлы из папки uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ============================
+// React Router fallback
+// ============================
+// Любой не найденный путь отдаём index.html
+app.get('*', (req, res) => {
   res.sendFile(path.join(frontendPath, 'index.html'));
 });
+
 // ============================
 // Запуск сервера
 // ============================
