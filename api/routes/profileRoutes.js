@@ -45,7 +45,7 @@ router.get('/:username', optionalAuth, async (req, res) => {
     const { username } = req.params;
 
     const [rows] = await db.execute(
-      'SELECT id, username, nickname, role, avatar, created_at, email FROM users WHERE username = ?',
+      'SELECT id, username, nickname, role, avatar, created_at, email, status FROM users WHERE username = ?',
       [username]
     );
 
@@ -61,6 +61,7 @@ router.get('/:username', optionalAuth, async (req, res) => {
       role: rows[0].role,
       created_at: rows[0].created_at,
       email: isOwner ? rows[0].email : undefined,
+      status: rows[0].status,  // <- добавляем сюда
       isOwner
     });
   } catch {

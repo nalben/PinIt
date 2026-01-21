@@ -19,6 +19,7 @@ interface ProfileData {
   username: string;
   created_at: string;
   nickname?: string | null;
+  status?: string | null;
 }
 
 type FriendStatus = 'friend' | 'none' | 'sent' | 'rejected' | 'received';
@@ -242,6 +243,16 @@ const getButtonText = (status: FriendStatus) => {
       </div>
       <div className={classes.profile_username}>
         <span>{UserNickname}</span>
+        {profile.isOwner ? (
+          profile.status ? (
+            <div className={classes.profile_status}>{profile.status}</div>
+          ) : (
+            <h6>установить статус</h6>
+          )
+        ) : (
+          profile.status && <div className={classes.profile_status}>{profile.status}</div>
+        )}
+
         <p><Logo/><h1>{profile.username}</h1></p>
       </div>
       <div className={classes.friends}>

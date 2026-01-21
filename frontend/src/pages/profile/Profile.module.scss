@@ -38,7 +38,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.7rem;
     & span{
         font-size: fluid-prop(34,26,1920,320);
 
@@ -199,3 +199,13 @@
     }
 }
 
+.profile_status{
+    color: var(--cyan);
+}
+.profile_username{
+    & h6{
+        color: var(--cyan);
+        cursor: pointer;
+        opacity: 0.5;
+    }
+}
