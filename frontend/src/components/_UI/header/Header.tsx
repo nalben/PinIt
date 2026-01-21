@@ -188,14 +188,19 @@ const Header = () => {
                       </span>
                       {requests.map(req => (
                         <div key={req.id} className={classes.noti_item}>
-                          {req.avatar ? (
-                            <img src={req.avatar} alt="avatar" />
-                          ) : (
-                            <Default />
-                          )}
+                          <NavLink to={`/user/${req.username}`} className={classes.noti_user_link}>
+                            {req.avatar ? (
+                              <img src={req.avatar} alt="avatar" />
+                            ) : (
+                              <Default />
+                            )}
+                          </NavLink>
 
                           <span>
-                            <span>{req.nickname || req.username}</span> подал заявку в друзья
+                            <NavLink to={`/user/${req.username}`} className={classes.noti_user_link}>
+                              <span>{req.nickname || req.username}</span>
+                            </NavLink>
+                            подал заявку в друзья
                           </span>
 
                           <div className={classes.noti_int}>

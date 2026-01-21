@@ -5,8 +5,9 @@ const cors = require('cors');
 
 // Роуты
 const routes = require('./routes');
-const profileRoutes = require('./routes/profile');
+const profileRoutes = require('./routes/profileRoutes');
 const privateRoutes = require('./routes/private');
+const friendsRoutes = require('./routes/friendsRoutes');
 
 const app = express();
 
@@ -22,7 +23,7 @@ app.use(express.json());
 app.use('/', routes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/private', privateRoutes);
-app.use('/api/friends', privateRoutes);
+app.use('/api/friends', friendsRoutes);
 
 // ============================
 // Запуск сервера
