@@ -19,7 +19,7 @@ export function buildWebpack(options: BuildOptions): webpack.Configuration{
             filename: '[name].[contenthash].js',
             clean: true,
             // publicPath: isDev ? '/' : '/PinIt/frontend', // для git pages
-            publicPath: isLocal ? '/' : './'
+            publicPath: '/'
         },
         
         plugins: buildPlugins(options),
