@@ -100,7 +100,7 @@
             max-width: min(45%, 230px);
         }
     }
-    & .friend_btn_received{
+    & .friend_btn_received, .friend_btn_sent, .friend_btn_remove, .friend_btn_add, .friend_btn_disabled{
         width: 100%;
         max-width: min(70%, 200px);
         & button{
