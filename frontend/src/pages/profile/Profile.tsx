@@ -139,7 +139,7 @@ const Profile = () => {
     if (!profile || !profile.isOwner) return;
     const fetchFriends = async () => {
       try {
-        const { data } = await axiosInstance.get<ProfileData[]>(`/api/friends/${profile.id}`);
+        const { data } = await axiosInstance.get<ProfileData[]>(`/api/friends/all/${profile.id}`);
         const mapped: FriendItem[] = data.map(f => ({ ...f, friendStatus: 'friend' }));
         setFriends(mapped);
         const statusMap: Record<number, { status: FriendStatus }> = {};
@@ -224,7 +224,7 @@ const Profile = () => {
       <div className={classes.profile_username}>
         <span>{UserNickname}</span>
         {profile.status && <div className={classes.profile_status}>{profile.status}</div>}
-        <p><Logo /><h1>{profile.username}</h1></p>
+        <div><Logo /><h1>{profile.username}</h1></div>
       </div>
       <div className={classes.friends}>
         {profile.isOwner ? (
@@ -241,19 +241,25 @@ const Profile = () => {
               <div className={classes.friends_modal}>
                 <strong>Друзья</strong>
                 <div className={classes.friends_item_con}>
-                  {friends.map(friend => {
-                    const status = friendStatusById[friend.id]?.status ?? 'friend';
-                    return (
-                      <div key={friend.id} className={classes.friend_item}>
-                        <Link to={`/user/${friend.username}`} className={classes.friend_info}>
-                          <div className={classes.friend_info_wrap}>
-                            {friend.avatar ? <img src={friend.avatar} alt="avatar" /> : <Default />}
-                            <div className={classes.friend_info_text}>
-                              <span>{friend.nickname || friend.username}</span>
-                              <p>в друзьях: {timeAgo(friend.created_at)}</p>
+                    {friends.map(friend => {
+                      const status = friendStatusById[friend.id]?.status ?? 'friend';
+                      const avatarSrc = friend.avatar
+                        ? friend.avatar.startsWith('/uploads/')
+                          ? `${API_URL}${friend.avatar}`
+                          : `${API_URL}/uploads/${friend.avatar}`
+                        : null;
+
+                      return (
+                        <div key={friend.id} className={classes.friend_item}>
+                          <Link to={`/user/${friend.username}`} className={classes.friend_info}>
+                            <div className={classes.friend_info_wrap}>
+                              {avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />}
+                              <div className={classes.friend_info_text}>
+                                <span>{friend.nickname || friend.username}</span>
+                                <p>в друзьях: {timeAgo(friend.created_at)}</p>
+                              </div>
                             </div>
-                          </div>
-                        </Link>
+                          </Link>
                         <div className={getButtonClass(status)}>
                           <Mainbtn
                             text={getButtonText(status)}

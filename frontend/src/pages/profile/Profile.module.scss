@@ -44,7 +44,7 @@
         font-size: fluid-prop(34,26,1920,320);
         font-weight: 600;
     }
-    & p{
+    & div{
         display: flex;
         font-size: fluid-prop(22,18,1920,320);
         gap: 0.5rem;
@@ -195,7 +195,11 @@
     align-items: center;
     & img ,svg{
         max-height: fluid-prop(50,40,1920,320);
-        max-width: fluid-prop(50, 40, 1920, 320);
+        max-width: fluid-prop(50,40,1920,320);
+        min-height: fluid-prop(50,40,1920,320);
+        min-width: fluid-prop(50,40,1920,320);
+        object-fit: cover;
+        object-position: center;
     }
     & button{
         font-size: fluid-prop(20,14,1920,320);
