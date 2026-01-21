@@ -116,16 +116,13 @@ exports.getFriends = async (req, res) => {
   try {
     const { user_id } = req.params;
 
-    const [friends] = await db.execute(
-    `SELECT u.id, u.username, u.nickname, u.avatar, f.created_at
-    FROM friends f
-    JOIN users u ON u.id = CASE
-        WHEN f.user_id = ? THEN f.friend_id
-        ELSE f.user_id
-    END
-    WHERE f.user_id = ? OR f.friend_id = ?`,
-    [user_id, user_id, user_id]
-  );
+const [friends] = await db.execute(
+      `SELECT u.id, u.username, u.nickname, u.avatar, f.created_at
+       FROM friends f
+       JOIN users u ON u.id = f.friend_id
+       WHERE f.user_id = ?`,
+      [user_id]
+    );
 
     return res.status(200).json(friends);
   } catch (error) {

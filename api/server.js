@@ -2,6 +2,7 @@ require('dotenv').config();
 
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 
 // Роуты
 const routes = require('./routes');
@@ -24,6 +25,7 @@ app.use('/', routes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/private', privateRoutes);
 app.use('/api/friends', friendsRoutes);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ============================
 // Запуск сервера

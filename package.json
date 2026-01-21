@@ -1,0 +1,55 @@
+{
+  "name": "pinit",
+  "version": "1.0.0",
+  "description": "",
+  "main": "template.config.js",
+  "dependencies": {
+    "accepts": "^1.3.8",
+    "base64id": "^2.0.0",
+    "cookie": "^0.7.2",
+    "cors": "^2.8.5",
+    "debug": "^4.4.3",
+    "dottie": "^2.0.6",
+    "engine.io": "^6.6.5",
+    "engine.io-parser": "^5.2.3",
+    "inflection": "^1.13.4",
+    "lodash": "^4.17.21",
+    "mime-db": "^1.52.0",
+    "mime-types": "^2.1.35",
+    "moment": "^2.30.1",
+    "moment-timezone": "^0.5.48",
+    "ms": "^2.1.3",
+    "multer": "^2.0.2",
+    "negotiator": "^0.6.3",
+    "object-assign": "^4.1.1",
+    "pg-connection-string": "^2.10.0",
+    "retry-as-promised": "^7.1.1",
+    "semver": "^7.7.3",
+    "sequelize": "^6.37.7",
+    "sequelize-pool": "^7.1.0",
+    "socket.io": "^4.8.3",
+    "socket.io-adapter": "^2.5.6",
+    "socket.io-parser": "^4.2.5",
+    "toposort-class": "^1.0.1",
+    "undici-types": "^7.16.0",
+    "uuid": "^8.3.2",
+    "validator": "^13.15.26",
+    "vary": "^1.1.2",
+    "wkx": "^0.5.0",
+    "ws": "^8.18.3"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nalben/PinIt.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/nalben/PinIt/issues"
+  },
+  "homepage": "https://github.com/nalben/PinIt#readme"
+}

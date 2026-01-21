@@ -9,6 +9,8 @@ type DropdownWrapperProps = {
   middle?: boolean;
   children: [React.ReactNode, React.ReactNode];
   closeOnClick?: boolean;
+  isOpen?: boolean; // управляемое состояние
+  onClose?: () => void; // callback для закрытия
 };
 
 const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
@@ -19,14 +21,36 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   noti,
   children,
   closeOnClick = true,
+  isOpen: controlledOpen,
+  onClose,
 }) => {
   const [button, dropdown] = children;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [positionClass, setPositionClass] = useState("");
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
 
-  const toggleDropdown = () => setOpen(prev => !prev);
+  // используем управляемое состояние, если оно передано
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+
+  const toggleDropdown = () => {
+    if (controlledOpen !== undefined) {
+      controlledOpen ? onClose?.() : setInternalOpen(prev => !prev);
+    } else {
+      setInternalOpen(prev => !prev);
+    }
+  };
+
+  const handleDropdownClick = (event: React.MouseEvent) => {
+    if (!closeOnClick) event.stopPropagation();
+  };
+
+  const handleItemClick = () => {
+    if (closeOnClick) {
+      if (controlledOpen !== undefined) onClose?.();
+      else setInternalOpen(false);
+    }
+  };
 
   const updatePosition = () => {
     const wrapper = wrapperRef.current;
@@ -39,10 +63,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     if (profile) classes.push(styles.profile);
     if (noti) classes.push(styles.noti);
     if (middle) classes.push(styles.middle);
-
-    if (!left && !right && !profile && !middle && !noti) {
-      classes.push(styles.middle);
-    }
+    if (!left && !right && !profile && !middle && !noti) classes.push(styles.middle);
 
     setPositionClass(classes.join(" "));
 
@@ -67,7 +88,8 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       menu &&
       !menu.contains(event.target as Node)
     ) {
-      setOpen(false);
+      if (controlledOpen !== undefined) onClose?.();
+      else setInternalOpen(false);
     }
   };
 
@@ -81,12 +103,6 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     };
   }, [left, right, middle, profile, noti, open]);
 
-  const handleDropdownClick = (event: React.MouseEvent) => {
-    if (!closeOnClick) {
-      event.stopPropagation();
-    }
-  };
-
   return (
     <div ref={wrapperRef} className={styles.wrapper}>
       <div onClick={toggleDropdown} className={styles.button}>
@@ -96,16 +112,11 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
         <div
           ref={dropdownRef}
           className={`${styles.menu} ${positionClass}`}
-          onClick={(event) => {
-            if (closeOnClick) {
-              setOpen(false);
-            }
-            handleDropdownClick(event);
-          }}
+          onClick={handleDropdownClick}
         >
           {React.isValidElement(dropdown) &&
             React.Children.map(dropdown.props.children, (child, index) => (
-              <div key={index} className={styles.item}>
+              <div key={index} className={styles.item} onClick={handleItemClick}>
                 {child}
               </div>
             ))}

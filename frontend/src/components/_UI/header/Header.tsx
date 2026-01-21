@@ -35,6 +35,7 @@ const Header = () => {
   const menuRef = useRef<HTMLElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
   const [requests, setRequests] = useState<FriendRequestNoti[]>([]);
+  const [notiOpen, setNotiOpen] = useState(false);
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
@@ -112,6 +113,23 @@ const Header = () => {
 
     fetchProfile();
   }, []);
+  
+  useEffect(() => {
+    const updateProfile = async () => {
+      try {
+        const { data } = await axiosInstance.get<UserProfile>('/api/profile/me');
+        setUser(data);
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    window.addEventListener('profile-updated', updateProfile);
+
+    return () => {
+      window.removeEventListener('profile-updated', updateProfile);
+    };
+  }, []);
 
   const location = useLocation();
   const isProfileActive = () => {
@@ -176,8 +194,14 @@ const Header = () => {
         <AuthOnly>
             <div className={classes.user}>
                 <div className={classes.noti}>
-                  <DropdownWrapper right noti closeOnClick={false}>
-                    <div className={classes.noti_icon_con}>
+                  <DropdownWrapper
+                    right
+                    noti
+                    isOpen={notiOpen}
+                    onClose={() => setNotiOpen(false)}
+                    closeOnClick={false}
+                  >
+                    <div className={classes.noti_icon_con} onClick={() => setNotiOpen(prev => !prev)}>
                       <Noti />
                       {requests.length > 0 && <span className={classes.badge} />}
                     </div>
@@ -188,16 +212,24 @@ const Header = () => {
                       </span>
                       {requests.map(req => (
                         <div key={req.id} className={classes.noti_item}>
-                          <NavLink to={`/user/${req.username}`} className={classes.noti_user_link}>
+                          <NavLink to={`/user/${req.username}`} className={classes.noti_user_link} onClick={() => setNotiOpen(false)}>
                             {req.avatar ? (
-                              <img src={req.avatar} alt="avatar" />
+                              <img
+                                src={
+                                  req.avatar.startsWith('/uploads/')
+                                    ? `${API_URL}${req.avatar}`
+                                    : `${API_URL}/uploads/${req.avatar}`
+                                }
+                                alt="Аватар"
+                                className={classes.avatar}
+                              />
                             ) : (
                               <Default />
                             )}
                           </NavLink>
 
                           <span>
-                            <NavLink to={`/user/${req.username}`} className={classes.noti_user_link}>
+                            <NavLink to={`/user/${req.username}`} className={classes.noti_user_link} onClick={() => setNotiOpen(false)}>
                               <span>{req.nickname || req.username}</span>
                             </NavLink>
                             подал заявку в друзья
@@ -220,21 +252,37 @@ const Header = () => {
                 <DropdownWrapper right profile>
                   <div className={classes.profile}>
                     {user?.avatar ? (
-                        <img src={user.avatar} alt="Аватар" className={classes.avatar} />
+                      <img
+                        src={
+                          user.avatar.startsWith('/uploads/')
+                            ? `${API_URL}${user.avatar}`
+                            : `${API_URL}/uploads/${user.avatar}`
+                        }
+                        alt="Аватар"
+                        className={classes.avatar}
+                      />
                     ) : (
-                        <Default />
+                      <Default />
                     )}
                     <span className={classes.profile_header_top}>
-                        {user?.username || 'Загрузка...'}
+                      {user?.username || 'Загрузка...'}
                     </span>
                   </div>
                   <div>
                     <NavLink to="/profile">
                       <div className={classes.profile_button}>
                         {user?.avatar ? (
-                          <img src={user.avatar} alt="Аватар" className={classes.avatar} />
-                            ) : (
-                              <Default />
+                          <img
+                            src={
+                              user.avatar.startsWith('/uploads/')
+                                ? `${API_URL}${user.avatar}`
+                                : `${API_URL}/uploads/${user.avatar}`
+                            }
+                            alt="Аватар"
+                            className={classes.avatar}
+                          />
+                        ) : (
+                          <Default />
                         )}
                         <div className={classes.profile_name_drop_con}>
                           <span className={classes.name_drop}>

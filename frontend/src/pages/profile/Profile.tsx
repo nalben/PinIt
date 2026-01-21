@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import classes from "./Profile.module.scss";
-import axiosInstance from "../../../axiosInstance";
+import axiosInstance, { API_URL } from "../../../axiosInstance";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 import Logo from '@/assets/icons/colored/Logo.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import AuthModal from "@/components/auth/authmodal/AuthModal";
 import GuestOnly from "@/components/__general/guestonly/Guestonly";
 import AuthTrigger from "@/components/auth/AuthTrigger";
+import ResetPasswordForm from "@/components/auth/reset/ResetPasswordForm";
 import AuthOnly from "@/components/__general/authonly/Authonly";
-
 // Интерфейсы
 interface ProfileData {
   id: number;
@@ -21,9 +21,11 @@ interface ProfileData {
   nickname?: string | null;
   status?: string | null;
 }
-
+interface UpdateProfileResponse {
+  message: string;
+  user: ProfileData;
+}
 type FriendStatus = 'friend' | 'none' | 'sent' | 'rejected' | 'received';
-
 
 interface FriendItem extends ProfileData {
   friendStatus: FriendStatus;
@@ -32,7 +34,9 @@ interface FriendItem extends ProfileData {
 
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
-// Компонент
+// Тип состояния модалки
+type OpenModal = "edit" | "reset" | null;
+
 const Profile = () => {
   const { username } = useParams<{ username: string }>();
   const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -41,11 +45,14 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFriendsOpen, setIsFriendsOpen] = useState(false);
   const [friends, setFriends] = useState<FriendItem[]>([]);
-  
-  // Состояние для статусов друзей
   const [friendStatusById, setFriendStatusById] = useState<Record<number, { status: FriendStatus; requestId?: number }>>({});
   const [shareTextById, setShareTextById] = useState<Record<number, string>>({});
-  // Функция склонения
+  const [nicknameInput, setNicknameInput] = useState<string>('');
+  const [statusInput, setStatusInput] = useState<string>('');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [openModal, setOpenModal] = useState<OpenModal>(null);
+
+  // Склонение
   const declension = (number: number, titles: [string, string, string]) => {
     const n = Math.abs(number) % 100;
     const n1 = n % 10;
@@ -54,19 +61,19 @@ const Profile = () => {
     if (n1 === 1) return titles[0];
     return titles[2];
   };
-  // Функция скопировано
+
   const handleShare = (userId: number, username: string) => {
-  const profileUrl = `${window.location.origin}/user/${username}`;
-  navigator.clipboard.writeText(profileUrl)
-    .then(() => {
-      setShareTextById(prev => ({ ...prev, [userId]: 'Скопировано' }));
-      setTimeout(() => {
-        setShareTextById(prev => ({ ...prev, [userId]: 'Поделиться' }));
-      }, 2000);
-    })
-    .catch(err => console.error('Ошибка копирования в буфер:', err));
-};
-  // Функция "n времени назад"
+    const profileUrl = `${window.location.origin}/user/${username}`;
+    navigator.clipboard.writeText(profileUrl)
+      .then(() => {
+        setShareTextById(prev => ({ ...prev, [userId]: 'Скопировано' }));
+        setTimeout(() => {
+          setShareTextById(prev => ({ ...prev, [userId]: 'Поделиться' }));
+        }, 2000);
+      })
+      .catch(err => console.error('Ошибка копирования в буфер:', err));
+  };
+
   const timeAgo = (dateString: string) => {
     const now = new Date();
     const past = new Date(dateString);
@@ -85,47 +92,41 @@ const Profile = () => {
     return 'только что';
   };
 
-  // Загрузка профиля и количества друзей
   useEffect(() => {
-  const fetchProfileData = async () => {
-    try {
-      const url = `/api/profile/${username}`;
-      const { data } = await axiosInstance.get<ProfileData>(url);
-      setProfile(data);
-
-      const countUrl = `/api/profile/${username}/friends-count`;
-      const { data: countData } =
-        await axiosInstance.get<{ friend_count: number }>(countUrl);
-      setFriendCount(countData.friend_count);
-
-      if (!data.isOwner) {
-        const { data: statusData } = await axiosInstance.get<{
-          status: FriendStatus;
-          requestId?: number;
-        }>(`/api/friends/status/${data.id}`);
-
-        console.log('FRIEND STATUS FROM SERVER:', statusData);
-
-        setFriendStatusById(prev => ({
-          ...prev,
-          [data.id]: {
-            status: statusData.status,
-            requestId: statusData.requestId
-          }
-        }));
-        
-      }
-    } catch (err: any) {
-      if (err.response?.status === 404) setError("NOT_FOUND");
-      else setError("UNKNOWN");
-    } finally {
-      setIsLoading(false);
+    if (profile) {
+      setNicknameInput(profile.nickname || '');
+      setStatusInput(profile.status || '');
     }
-    
-  };
+  }, [profile]);
 
-  if (username) fetchProfileData();
-}, [username]);
+  // Загрузка профиля
+  useEffect(() => {
+    const fetchProfileData = async () => {
+      try {
+        const url = `/api/profile/${username}`;
+        const { data } = await axiosInstance.get<ProfileData>(url);
+        setProfile(data);
+
+        const countUrl = `/api/profile/${username}/friends-count`;
+        const { data: countData } = await axiosInstance.get<{ friend_count: number }>(countUrl);
+        setFriendCount(countData.friend_count);
+
+        if (!data.isOwner) {
+          const { data: statusData } = await axiosInstance.get<{ status: FriendStatus; requestId?: number }>(`/api/friends/status/${data.id}`);
+          setFriendStatusById(prev => ({
+            ...prev,
+            [data.id]: { status: statusData.status, requestId: statusData.requestId }
+          }));
+        }
+      } catch (err: any) {
+        if (err.response?.status === 404) setError("NOT_FOUND");
+        else setError("UNKNOWN");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    if (username) fetchProfileData();
+  }, [username]);
 
   // Загрузка друзей владельца
   useEffect(() => {
@@ -142,76 +143,40 @@ const Profile = () => {
         console.error(err);
       }
     };
-    
-
     fetchFriends();
   }, [profile]);
 
-  // Статус профиля для гостя
   const profileFriendStatus = profile ? friendStatusById[profile.id]?.status ?? 'none' : 'none';
 
-  // Действие с другом
-const handleFriendAction = async (userId: number) => {
-  const current = friendStatusById[userId]?.status ?? 'none';
-  const requestId = friendStatusById[userId]?.requestId;
+  const handleFriendAction = async (userId: number) => {
+    const current = friendStatusById[userId]?.status ?? 'none';
+    const requestId = friendStatusById[userId]?.requestId;
 
-  try {
-    if (current === 'friend') {
-  try {
-    await axiosInstance.delete(`/api/friends/${userId}`);
-
-    // Меняем только статус
-    setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-
-    setFriends(prev =>
-      prev.map(f =>
-        f.id === userId
-          ? { ...f, friendStatus: 'none' } // не удаляем, просто меняем статус
-          : f
-      )
-    );
-  } catch (err: any) {
-    if (err.response?.status === 404) {
-      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-      setFriends(prev =>
-        prev.map(f =>
-          f.id === userId
-            ? { ...f, friendStatus: 'none' }
-            : f
-        )
-      );
-    } else {
-      console.error(err);
+    try {
+      if (current === 'friend') {
+        await axiosInstance.delete(`/api/friends/${userId}`);
+        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
+        setFriends(prev => prev.map(f => f.id === userId ? { ...f, friendStatus: 'none' } : f));
+      } else if (current === 'none') {
+        const { data } = await axiosInstance.post<{ id: number }>(`/api/friends/send`, { friend_id: userId });
+        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'sent', requestId: data.id } }));
+      } else if (current === 'sent' && requestId) {
+        await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
+        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
+      }
+    } catch (e) {
+      console.error(e);
     }
-  }
-}
+  };
 
-else if (current === 'none') {
-      const { data } = await axiosInstance.post<{ id: number }>(
-        `/api/friends/send`,
-        { friend_id: userId }
-      );
-      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'sent', requestId: data.id } }));
-    } else if (current === 'sent' && requestId) {
-      await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
-      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-    }
-  } catch (e) {
-    console.error(e);
-  }
-};
-
-
-  // Классы и тексты кнопок
-const getButtonText = (status: FriendStatus) => {
-  if (status === 'friend') return 'удалить';
-  if (status === 'none') return 'добавить';
-  if (status === 'sent') return 'отправлено';
-  if (status === 'received') return 'входящая заявка';
-  if (status === 'rejected') return 'отклонено';
-  return '';
-};
-
+  const getButtonText = (status: FriendStatus) => {
+    if (status === 'friend') return 'удалить';
+    if (status === 'none') return 'добавить';
+    if (status === 'sent') return 'отправлено';
+    if (status === 'received') return 'входящая заявка';
+    if (status === 'rejected') return 'отклонено';
+    return '';
+  };
 
   const getButtonClass = (status: FriendStatus) => {
     if (status === 'friend') return classes.friend_btn_remove;
@@ -222,7 +187,6 @@ const getButtonText = (status: FriendStatus) => {
     return '';
   };
 
-  // Отрисовка компонента
   if (isLoading) return <div className={classes.profile_loading}><p>Загрузка...</p></div>;
   if (error === "NOT_FOUND") return (
     <div className={classes.profile_not_found}>
@@ -234,26 +198,27 @@ const getButtonText = (status: FriendStatus) => {
   if (!profile) return null;
 
   const UserNickname = profile.nickname || profile.username;
-  const currentStatus = friendStatusById[profile.id]?.status ?? 'none';
 
   return (
     <div className={classes.profile}>
       <div className={classes.avatar_con}>
-        {profile.avatar ? <img src={profile.avatar} alt="avatar" /> : <Default />}
+        {profile.avatar ? (
+          <img
+            src={
+              profile.avatar.startsWith('/uploads/')
+                ? `${API_URL}${profile.avatar}`
+                : `${API_URL}/uploads/${profile.avatar}`
+            }
+            alt="avatar"
+          />
+        ) : (
+          <Default />
+        )}
       </div>
       <div className={classes.profile_username}>
         <span>{UserNickname}</span>
-        {profile.isOwner ? (
-          profile.status ? (
-            <div className={classes.profile_status}>{profile.status}</div>
-          ) : (
-            <h6>установить статус</h6>
-          )
-        ) : (
-          profile.status && <div className={classes.profile_status}>{profile.status}</div>
-        )}
-
-        <p><Logo/><h1>{profile.username}</h1></p>
+        {profile.status && <div className={classes.profile_status}>{profile.status}</div>}
+        <p><Logo /><h1>{profile.username}</h1></p>
       </div>
       <div className={classes.friends}>
         {profile.isOwner ? (
@@ -297,6 +262,7 @@ const getButtonText = (status: FriendStatus) => {
                 </div>
               </div>
             </AuthModal>
+
             <div className={classes.interact_btns}>
               <Mainbtn
                 text={shareTextById[profile.id] || 'Поделиться'}
@@ -304,23 +270,77 @@ const getButtonText = (status: FriendStatus) => {
                 kind="button"
                 onClick={() => handleShare(profile.id, profile.username)}
               />
-              <Mainbtn text="Редактировать" />
+              <Mainbtn
+                text="Редактировать"
+                variant="auth"
+                kind="button"
+                onClick={() => setOpenModal("edit")}
+              />
+
+              {/* Модалка редактирования */}
+              <AuthModal
+                isOpen={openModal === "edit"}
+                onClose={() => setOpenModal(null)}
+                closeOnOverlayClick={false}
+              >
+                <div className={classes.edit_modal}>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      try {
+                        const formData = new FormData();
+                        formData.append('nickname', (e.currentTarget.nickname as HTMLInputElement).value);
+                        formData.append('status', (e.currentTarget.status as HTMLInputElement).value);
+                        const avatarFile = (e.currentTarget.avatar as HTMLInputElement).files?.[0];
+                        if (avatarFile) formData.append('avatar', avatarFile);
+
+                        const { data } = await axiosInstance.put<UpdateProfileResponse>(
+                          '/api/profile/me',
+                          formData,
+                          { headers: { 'Content-Type': 'multipart/form-data' } }
+                        );
+
+                        setProfile(prev => prev ? { ...prev, ...data.user } : data.user);
+                        window.dispatchEvent(new Event('profile-updated'));
+                        setOpenModal(null);
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }}
+                  >
+                    <input type="text" name="nickname" value={nicknameInput} onChange={e => setNicknameInput(e.target.value)} placeholder="Никнейм" />
+                    <input type="text" name="status" value={statusInput} onChange={e => setStatusInput(e.target.value)} placeholder="Статус" />
+                    <input type="file" name="avatar" accept="image/*" onChange={e => setAvatarFile(e.target.files?.[0] || null)} />
+                    <Mainbtn text="Сохранить" type="submit" />
+                  </form>
+
+                  <Mainbtn type="button" text="Изменить пароль" onClick={() => setOpenModal("reset")} />
+                </div>
+              </AuthModal>
+
+              {/* Модалка смены пароля */}
+              <AuthModal
+                isOpen={openModal === "reset"}
+                onClose={() => setOpenModal(null)}
+                closeOnOverlayClick={false}
+              >
+                <ResetPasswordForm
+                  onClose={() => setOpenModal(null)}
+                  initialStep={2}
+                  initialUsername={profile.username}
+                />
+              </AuthModal>
+
             </div>
           </div>
         ) : (
           <div className={classes.interact_btns}>
-            <Mainbtn
-              text={shareTextById[profile.id] || 'Поделиться'}
-              variant="mini"
-              kind="button"
-              onClick={() => handleShare(profile.id, profile.username)}
-            />
+            <Mainbtn text={shareTextById[profile.id] || 'Поделиться'} variant="mini" kind="button" onClick={() => handleShare(profile.id, profile.username)} />
             <GuestOnly>
               <AuthTrigger type='login'>
-                  <div className={getButtonClass(profileFriendStatus)}>
-                    <Mainbtn 
-                    text="добавить"/>
-                  </div>
+                <div className={getButtonClass(profileFriendStatus)}>
+                  <Mainbtn text="добавить" />
+                </div>
               </AuthTrigger>
             </GuestOnly>
             <AuthOnly>

@@ -9,7 +9,7 @@
     display: flex;
     flex-direction: column;
     width: min(70%, 280px);
-    z-index: 9;
+    z-index: 11;
     position: absolute;
     backdrop-filter: blur(10px) brightness(0.3);
     left: 0;
@@ -29,6 +29,7 @@
         backdrop-filter: brightness(100%);
         border: none;
         padding: 0;
+        z-index: 10;
         position: static;
         background-color: transparent;
         width: 100%;
@@ -157,6 +158,10 @@
     & img, svg{
         max-width: 50px;
     }
+    & img:nth-child(1){
+        border-radius: 50%;
+        aspect-ratio: 1/1;
+    }
 }
 .active{
     opacity: 1;
@@ -227,7 +232,18 @@
     width: fluid-prop(350,270,500,320);
     & svg, img{
         cursor: pointer;
+        min-height: 50px;
         max-height: 50px;
+    }
+    & a{
+        img,svg{
+            border-radius: 50%;
+            object-fit: cover;
+            max-height: fluid-prop(50,30,500,320);
+            min-height: fluid-prop(50, 30, 500, 320);
+            max-width: fluid-prop(50, 30, 500, 320);
+            min-width: fluid-prop(50, 30, 500, 320);
+        }
     }
     & span{
         text-wrap: balance;

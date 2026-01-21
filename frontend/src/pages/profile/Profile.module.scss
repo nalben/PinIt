@@ -26,9 +26,10 @@
 .avatar_con{
     border-radius: 50%;
     overflow: hidden;
-    object-fit: cover;
     display: flex;
     & img, svg, g{
+        object-fit: cover;
+        object-position: center;
         max-height: 200px;
         min-height: 200px;
         aspect-ratio: 1 / 1;
@@ -41,7 +42,6 @@
     gap: 0.7rem;
     & span{
         font-size: fluid-prop(34,26,1920,320);
-
         font-weight: 600;
     }
     & p{
@@ -61,11 +61,15 @@
 .friends{
     font-size: fluid-prop(20,18,1920,320);
     font-weight: 600;
+    width: 100%;
+    display: flex;
+    justify-content: center;
 }
 .profile_interact_con{
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    width: 100%;
     align-items: center;
     & button{
         cursor: pointer;
@@ -79,12 +83,36 @@
 .interact_btns{
     display: flex;
     gap: 0.5rem;
-    & button {
+    width: 100%;
+    padding-inline: 10%;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    & button{
         font-size: fluid-prop(20, 14, 1920, 320);
         font-weight: 600;
         height: fit-content;
         padding-inline: fluid-prop(20, 5, 1920, 320);
         padding-block: fluid-prop(15, 10, 1920, 320);
+        width: 100%;
+        max-width: min(70%, 200px);
+        @media (min-width:460px) {
+            max-width: min(45%, 230px);
+        }
+    }
+    & .friend_btn_received{
+        width: 100%;
+        max-width: min(70%, 200px);
+        & button{
+            max-width: none;
+        }
+        @media (min-width:460px) {
+            max-width: min(45%, 230px);
+        }
+    }
+
+    @media (min-width:460px) {
+        flex-direction: row;
     }
 }
 .friends_modal{
@@ -201,6 +229,9 @@
 
 .profile_status{
     color: var(--cyan);
+    text-wrap: balance;
+    align-items: center;
+    text-align: center;
 }
 .profile_username{
     & h6{
