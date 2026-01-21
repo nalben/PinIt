@@ -12,7 +12,6 @@ router.get('/status/:other_user_id', authMiddleware, friendsController.getFriend
 router.get('/requests/incoming', authMiddleware, friendsController.getFriendRequests);
 router.get('/count/:user_id', authMiddleware, friendsController.getFriendCount);
 
-// этот последний
-router.get('/:user_id', authMiddleware, friendsController.getFriends);
+router.get('/all/:user_id', authMiddleware, friendsController.getFriends);
 
 module.exports = router;
