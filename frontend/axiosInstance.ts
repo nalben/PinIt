@@ -3,7 +3,7 @@ import isLocal from "./isLocal";
 
 export const API_URL: string = isLocal
   ? "http://localhost:3001"
-  : "https://pin-it.ru/api";
+  : "http://77.105.129.150/api";
 
 const axiosInstance = axios.create({
   baseURL: API_URL,
