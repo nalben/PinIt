@@ -65,7 +65,7 @@ const RegisterForm: React.FC = () => {
       setLoading(true);
       setCodeError(null);
 
-      await axios.post(`${API_URL}/auth/send-code`, {
+      await axios.post(`${API_URL}/api/auth/send-code`, {
         email: data.email,
         username: data.username,
       });
@@ -99,14 +99,14 @@ const RegisterForm: React.FC = () => {
       setLoading(true);
       setCodeError(null);
 
-      await axios.post(`${API_URL}/auth/register`, {
+      await axios.post(`${API_URL}/api/auth/register`, {
         email: emailValue,
         username: usernameValue,
         password: passwordValue,
         code: data.code,
       });
 
-      const res = await axios.post<LoginResponse>(`${API_URL}/auth/login`, {
+      const res = await axios.post<LoginResponse>(`${API_URL}/api/auth/login`, {
         username: usernameValue,
         password: passwordValue,
       });

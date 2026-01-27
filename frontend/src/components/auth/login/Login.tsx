@@ -52,7 +52,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
       setLoading(true);
       setServerMessage(null);
 
-      const res = await axios.post<ApiResponse>(`${API_URL}/auth/login`, data);
+      const res = await axios.post<ApiResponse>(`${API_URL}/api/auth/login`, data);
 
       localStorage.setItem("token", res.data.token || "");
       localStorage.setItem("username", res.data.username || "");

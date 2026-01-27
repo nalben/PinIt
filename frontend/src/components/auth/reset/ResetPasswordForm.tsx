@@ -109,7 +109,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
       try {
         setLoading(true);
         // Получаем email по username
-        const res = await axios.post<CheckResetUserResponse>(`${API_URL}/auth/check-reset-user`, {
+        const res = await axios.post<CheckResetUserResponse>(`${API_URL}/api/auth/check-reset-user`, {
           inputType: "username",
           username: initialUsername
         });
@@ -118,7 +118,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
         setMaskedEmail(res.data.maskedEmail);
 
         // Отправляем код на email
-        await axios.post(`${API_URL}/auth/send-reset-code`, { email: res.data.email });
+        await axios.post(`${API_URL}/api/auth/send-reset-code`, { email: res.data.email });
 
       } catch (err: any) {
         setError(err?.response?.data?.message || "Ошибка сервера");
@@ -148,12 +148,12 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
         email: data.email,
       };
 
-      const res = await axios.post<CheckResetUserResponse>(`${API_URL}/auth/check-reset-user`, payload);
+      const res = await axios.post<CheckResetUserResponse>(`${API_URL}/api/auth/check-reset-user`, payload);
 
       setEmailValue(res.data.email);
       setMaskedEmail(res.data.maskedEmail);
 
-      await axios.post(`${API_URL}/auth/send-reset-code`, { email: res.data.email });
+      await axios.post(`${API_URL}/api/auth/send-reset-code`, { email: res.data.email });
 
       setStep(2);
     } catch (err: any) {
@@ -174,7 +174,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
       setLoading(true);
       setError(null);
 
-      await axios.post(`${API_URL}/auth/verify-reset-code`, { email: emailValue, code: data.code });
+      await axios.post(`${API_URL}/api/auth/verify-reset-code`, { email: emailValue, code: data.code });
 
       setStep(3);
     } catch (err: any) {
@@ -200,7 +200,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
       setLoading(true);
       setError(null);
 
-      const res = await axios.post<SetNewPasswordResponse>(`${API_URL}/auth/set-new-password`, {
+      const res = await axios.post<SetNewPasswordResponse>(`${API_URL}/api/auth/set-new-password`, {
         email: emailValue,
         password: data.password,
       });

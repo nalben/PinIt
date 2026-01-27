@@ -53,6 +53,8 @@ const Profile = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [openModal, setOpenModal] = useState<OpenModal>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const isAuth = Boolean(localStorage.getItem("token"));
+
   // Склонение
   const declension = (number: number, titles: [string, string, string]) => {
     const n = Math.abs(number) % 100;
@@ -107,32 +109,48 @@ const Profile = () => {
 
   // Загрузка профиля
   useEffect(() => {
-    const fetchProfileData = async () => {
-      try {
-        const url = `/api/profile/${username}`;
-        const { data } = await axiosInstance.get<ProfileData>(url);
-        setProfile(data);
+  const fetchProfileData = async () => {
+    try {
+      const { data } =
+        await axiosInstance.get<ProfileData>(`/api/profile/${username}`);
+      setProfile(data);
 
-        const countUrl = `/api/profile/${username}/friends-count`;
-        const { data: countData } = await axiosInstance.get<{ friend_count: number }>(countUrl);
-        setFriendCount(countData.friend_count);
+      const { data: countData } =
+        await axiosInstance.get<{ friend_count: number }>(
+          `/api/profile/${username}/friends-count`
+        );
+      setFriendCount(countData.friend_count);
 
-        if (!data.isOwner) {
-          const { data: statusData } = await axiosInstance.get<{ status: FriendStatus; requestId?: number }>(`/api/friends/status/${data.id}`);
-          setFriendStatusById(prev => ({
-            ...prev,
-            [data.id]: { status: statusData.status, requestId: statusData.requestId }
-          }));
-        }
-      } catch (err: any) {
-        if (err.response?.status === 404) setError("NOT_FOUND");
-        else setError("UNKNOWN");
-      } finally {
-        setIsLoading(false);
+      // ❗ ТОЛЬКО если пользователь авторизован
+      if (!data.isOwner && isAuth) {
+        const { data: statusData } =
+          await axiosInstance.get<{ status: FriendStatus; requestId?: number }>(
+            `/api/friends/status/${data.id}`
+          );
+
+        setFriendStatusById(prev => ({
+          ...prev,
+          [data.id]: {
+            status: statusData.status,
+            requestId: statusData.requestId
+          }
+        }));
       }
-    };
-    if (username) fetchProfileData();
-  }, [username]);
+
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setError("NOT_FOUND");
+      } else {
+        console.error(err);
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (username) fetchProfileData();
+}, [username, isAuth]);
+
 
   // Загрузка друзей владельца
   useEffect(() => {

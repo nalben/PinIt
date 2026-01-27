@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 
-const optionalAuth = require('../middleware/authMiddleware');
+const optionalAuth = require('../middleware/optionalAuth');
 const profileController = require('../controllers/profileController');
 
 /* ============================

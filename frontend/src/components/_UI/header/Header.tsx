@@ -59,19 +59,32 @@ const Header = () => {
   }, []);
 
   useEffect(() => {
-    const fetchRequests = async () => {
-      try {
-        const { data } = await axiosInstance.get<FriendRequestNoti[]>(
-          '/api/friends/requests/incoming'
-        );
-        setRequests(data);
-      } catch (e) {
+  const fetchRequests = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        // Гость — не делаем запрос
+        setRequests([]);
+        return;
+      }
+
+      const { data } = await axiosInstance.get<FriendRequestNoti[]>(
+        '/api/friends/requests/incoming'
+      );
+      setRequests(data);
+    } catch (e: any) {
+      // Игнорируем 401 — просто не показываем уведомления
+      if (e.response?.status === 401) {
+        setRequests([]);
+      } else {
         console.error(e);
       }
-    };
+    }
+  };
 
-    fetchRequests();
-  }, []);
+  fetchRequests();
+}, []);
+
 
   const acceptRequest = async (requestId: number) => {
     await axiosInstance.put(`/api/friends/accept/${requestId}`);
