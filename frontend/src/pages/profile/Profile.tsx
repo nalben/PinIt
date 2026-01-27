@@ -65,9 +65,38 @@ const Profile = () => {
     return titles[2];
   };
 
+  const safeCopyToClipboard = (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      // стандартный способ на HTTPS или localhost
+      return navigator.clipboard.writeText(text);
+    } else {
+      // fallback для HTTP или старых браузеров
+      return new Promise<void>((resolve, reject) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed'; // чтобы не скроллило страницу
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        try {
+          const successful = document.execCommand('copy');
+          document.body.removeChild(textarea);
+          if (successful) resolve();
+          else reject(new Error('Не удалось скопировать'));
+        } catch (err) {
+          document.body.removeChild(textarea);
+          reject(err);
+        }
+      });
+    }
+  };
+  
   const handleShare = (userId: number, username: string) => {
+    // собираем ссылку на текущий сайт
     const profileUrl = `${window.location.origin}/user/${username}`;
-    navigator.clipboard.writeText(profileUrl)
+    safeCopyToClipboard(profileUrl)
       .then(() => {
         setShareTextById(prev => ({ ...prev, [userId]: 'Скопировано' }));
         setTimeout(() => {
@@ -76,6 +105,7 @@ const Profile = () => {
       })
       .catch(err => console.error('Ошибка копирования в буфер:', err));
   };
+
 
   const timeAgo = (dateString: string) => {
     const now = new Date();
