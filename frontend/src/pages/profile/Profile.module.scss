@@ -353,3 +353,12 @@
         white-space: nowrap;
     }
 }
+
+.heart{
+    border-radius: 0;
+    clip-path:
+            shape(from 50% 91%,
+                line to 90% 50%,
+                arc to 50% 9% of 1%,
+                arc to 10% 50% of 1%);
+}

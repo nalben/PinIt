@@ -92,7 +92,7 @@ const Profile = () => {
       });
     }
   };
-  
+
   const handleShare = (userId: number, username: string) => {
     // собираем ссылку на текущий сайт
     const profileUrl = `${window.location.origin}/user/${username}`;
@@ -255,7 +255,9 @@ const Profile = () => {
 
   return (
     <div className={classes.profile}>
-      <div className={classes.avatar_con}>
+      <div 
+        className={`${classes.avatar_con} ${profile.id === 20 ? classes.heart : ''}`}
+      >
         {profile.avatar ? (
           <img
             src={
