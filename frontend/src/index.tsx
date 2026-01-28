@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from './components/app/App';
-import { createBrowserRouter, Navigate, RouterProvider, useLocation } from "react-router-dom";
+import { createBrowserRouter, matchPath, Navigate, RouterProvider, useLocation } from "react-router-dom";
 import { Suspense, useEffect } from "react";
 import { LazyHome } from "@/pages/home/Home.lazy";
 import HomeSkeleton from "./pages/home/HomeSkeleton";
@@ -11,22 +11,35 @@ import { LazyProfile } from "./pages/profile/Profile.lazy";
 import ProfileSkeleton from "./pages/profile/ProfileSkeleton";
 import ProtectedRoute from "./components/__general/protectedroute/ProtectedRoute";
 import ProfileRedirect from "./components/__general/profileredirect/ProfileRedirect";
-import { LazyAbout } from "@/pages/about/About.lazy";
-import AboutSkeleton from "./pages/about/AboutSkeleton";
+import { LazyTodo } from "./pages/todo/Todo.Lazy";
+import TodoSkeleton from "./pages/todo/TodoSkeleton";
+import { LazySpaces } from "./pages/spaces/Spaces.Lazy";
+import SpacesSkeleton from "./pages/spaces/SpacesSkeleton";
 
-const useDocumentTitle = (defaultTitle = 'PinIt') => {
+const useDocumentTitle = (defaultTitle = "PinIt") => {
   const location = useLocation();
 
   useEffect(() => {
+    const profileMatch = matchPath("/user/:username", location.pathname);
+
+    if (profileMatch?.params?.username) {
+      document.title = `${profileMatch.params.username} | PinIt`;
+      return;
+    }
+
     switch (location.pathname) {
-      case '/':
-        document.title = 'Welcome | PinIt';
+      case "/":
+      case "/welcome":
+        document.title = "Welcome | PinIt";
         break;
-      case '/home':
-        document.title = 'Home | PinIt';
+      case "/home":
+        document.title = "Home | PinIt";
         break;
-      case '/about':
-        document.title = 'About | PinIt';
+      case "/spaces":
+        document.title = "Spaces | PinIt";
+        break;
+      case "/todo":
+        document.title = "TODO | PinIt";
         break;
       default:
         document.title = defaultTitle;
@@ -86,10 +99,18 @@ const router = createBrowserRouter([
         )
       },
       {
-        path: "/about",
+        path: "/todo",
         element: (
-          <Suspense fallback={<AboutSkeleton />}>
-            <LazyAbout />
+          <Suspense fallback={<TodoSkeleton />}>
+            <LazyTodo />
+          </Suspense>
+        )
+      },
+      {
+        path: "/spaces",
+        element: (
+          <Suspense fallback={<SpacesSkeleton />}>
+            <LazySpaces />
           </Suspense>
         )
       },

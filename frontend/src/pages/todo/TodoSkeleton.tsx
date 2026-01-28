@@ -1,10 +1,10 @@
 import React from 'react';
 
-export const AboutSkeleton = () => {
+export const TodoSkeleton = () => {
     return (
         <div>
         </div>
     );
 };
 
-export default AboutSkeleton;
+export default TodoSkeleton;

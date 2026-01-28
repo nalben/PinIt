@@ -108,9 +108,30 @@
 }
 .noti{
     transition: all 0.3s;
+    position: relative;
     & svg{
         max-width: 30px;
         padding-top: 5px;
+    }
+}
+.noti_lenght{
+    border-radius: 100%;
+    background-color: #ff3e3e;
+    padding: 2px 5px;
+    position: absolute;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--grey20);
+    z-index: 11;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1 / 1;
+    width: 20px;
+    left: -4px;
+    top: -4px;
+    &.noti_none{
+        display: none;
     }
 }
 .noti_icon_con{
@@ -281,6 +302,11 @@
 }
 .empty{
     white-space: nowrap;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: fluid-prop(350, 270, 500, 320);
 }
 .friend_btn_disabled {
     opacity: 0.5;

@@ -14,7 +14,7 @@ import LogoutButton from '@/components/__general/logoutbutton/LogoutButton';
 import Arrow from '@/assets/icons/monochrome/back.svg'
 import Accept from '@/assets/icons/monochrome/accept.svg'
 import Deny from '@/assets/icons/monochrome/deny.svg'
-
+import { connectNotificationsSocket, disconnectNotificationsSocket } from '@/services/notificationsSocket';
 interface UserProfile {
   username: string;
   avatar?: string | null;
@@ -58,31 +58,37 @@ const Header = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  useEffect(() => {
+useEffect(() => {
   const fetchRequests = async () => {
     try {
       const token = localStorage.getItem('token');
       if (!token) {
-        // Гость — не делаем запрос
         setRequests([]);
         return;
       }
 
-      const { data } = await axiosInstance.get<FriendRequestNoti[]>(
-        '/api/friends/requests/incoming'
-      );
+      const { data } = await axiosInstance.get<FriendRequestNoti[]>('/api/friends/requests/incoming');
       setRequests(data);
     } catch (e: any) {
-      // Игнорируем 401 — просто не показываем уведомления
-      if (e.response?.status === 401) {
-        setRequests([]);
-      } else {
-        console.error(e);
-      }
+      if (e.response?.status === 401) setRequests([]);
+      else console.error(e);
     }
   };
 
   fetchRequests();
+
+  connectNotificationsSocket(
+  (newReq) => {
+    setRequests(prev => prev.some(r => r.id === newReq.id) ? prev : [newReq, ...prev]);
+  },
+  (removed) => {
+    const removedId = Number(removed.requestId);
+    setRequests(prev => prev.filter(r => r.id !== removedId));
+  }
+);
+
+
+  return () => disconnectNotificationsSocket();
 }, []);
 
 
@@ -178,10 +184,7 @@ const Header = () => {
           SPACES
         </NavLink>
         <NavLink to="/todo" className={linkClass} onClick={handleMenuItemClick}>
-          TO DO
-        </NavLink>
-        <NavLink to="/about" className={linkClass} onClick={handleMenuItemClick}>
-          ABOUT
+          TODO
         </NavLink>
         <GuestOnly>
             <AuthTrigger type='login'>
@@ -206,7 +209,12 @@ const Header = () => {
       <div className={classes.profile_container}>
         <AuthOnly>
             <div className={classes.user}>
-                <div className={classes.noti}>
+                <div className={`${classes.noti} ${requests.length > 0 ? classes.noti_have : ''}`}>
+                  <div className={`${classes.noti_lenght} ${requests.length <= 0 ? classes.noti_none : ''}`}>
+                    <span>
+                      {requests.length > 10 ? '10+' : requests.length}
+                    </span>
+                  </div>
                   <DropdownWrapper
                     right
                     noti

@@ -7,10 +7,15 @@
     align-items: center;
     justify-content: center;
     font-family: "Nata Sans", sans-serif;
+    text-wrap: balance;
+    text-align: center;
     & h1{
         & span{
             color: var(--pink);
         }
+    }
+    & a{
+        font-size: fluid-prop(28,20,1920,320);
     }
 }
 
@@ -246,6 +251,7 @@
     text-wrap: balance;
     align-items: center;
     text-align: center;
+    max-width: 505px;
 }
 .profile_username{
     & h6{

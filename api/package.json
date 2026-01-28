@@ -18,6 +18,10 @@
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.15.3",
     "nodemailer": "^7.0.10",
-    "resend": "^6.5.2"
+    "resend": "^6.5.2",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/socket.io": "^3.0.1"
   }
 }
