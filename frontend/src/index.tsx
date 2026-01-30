@@ -39,7 +39,7 @@ const useDocumentTitle = (defaultTitle = "PinIt") => {
         document.title = "Spaces | PinIt";
         break;
       case "/todo":
-        document.title = "TODO | PinIt";
+        document.title = "Todo | PinIt";
         break;
       default:
         document.title = defaultTitle;
