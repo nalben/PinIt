@@ -1,0 +1,86 @@
+.friends_container{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.friends_list{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+    padding-right: 5px;
+        &::-webkit-scrollbar {
+            width: 10px;
+        }
+    
+        &::-webkit-scrollbar-track {
+            background: transparent;
+        }
+    
+        &::-webkit-scrollbar-thumb {
+            cursor: pointer;
+            background: var(--pink);
+            border-radius: 5px;
+        }
+}
+.friends_list_item{
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 1rem;
+
+    & svg, img{
+        max-width: fluid-prop(80, 60,1920,320);
+        max-height: fluid-prop(80, 60, 1920, 320);
+        min-width: fluid-prop(80, 60, 1920, 320);
+        min-height: fluid-prop(80, 60, 1920, 320);
+        object-fit: cover;
+        object-position: center;
+    }
+    & .friend_list_img_con{
+        grid-area: img;
+    }
+    & span{
+        max-width: fluid-prop(400,210,850,540);
+        text-wrap: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        color: var(--pink);
+        cursor: pointer;
+        & a{
+            display: inline;
+        }
+    }
+    & .friend_list_username_con{
+        grid-area: username;
+    }
+    & p{
+        grid-area: time;
+        font-size: fluid-prop(18,16,1920,320);
+    }
+    & button{
+        margin-left: auto;
+        grid-area: button;
+        align-self: center;
+        width: 100%;
+        margin-top: 1rem;
+    }
+    grid-template-areas:
+    "img username username"
+    "img time time"
+    "button button button";
+    @media (min-width:540px) {
+        grid-template-areas:
+        "img username button"
+        "img time button";
+        & button{
+            width: auto;
+            margin-top: 0;
+        }
+    }
+    
+}
+.friends_list_epmty{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}

@@ -1,19 +1,17 @@
-import FlowBoardContainer from '@/components/flow/FlowBoardContainer';
-import classes from './Home.module.scss'
 import React from 'react';
-import FlowBoard from '@/components/flow/FlowBoard';
+import classes from './Home.module.scss';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
-
+import Lastdesks from '@/components/lastdesks/Lastdesks';
+import FriendsList from '@/components/friendlist/Friendlist';
 
 const Home = () => {
-
-
+    const userId = Number(localStorage.getItem('userId')); // получаем текущего пользователя
 
     return (
         <div className={classes.home}>
             <main className={classes.home_container}>
                 <section className={classes.welcome_container}>
-                    <h1>Добро пожаловать в PinIt</h1>
+                    <h1>Добро пожаловать в&nbsp;PinIt</h1>
                     <h2>Создайте свою доску или присоединяйтесь к доскам своих друзей</h2>
                     <Mainbtn
                         variant='mini'
@@ -21,44 +19,8 @@ const Home = () => {
                     />
                 </section>
                 <div className={classes.left}>
-                    <section className={classes.desks_container}>
-                        <h2>последние открытые доски:</h2>
-                        <div className={classes.desks_list}>
-                            <div className={classes.desks_item}>
-                                <img src="" alt="" />
-                                <h3>название</h3>
-                                <p>описание</p>
-                                <Mainbtn
-                                    variant='mini'
-                                    text='открыть'
-                                />
-                            </div>
-                        </div>
-                        or if epmty
-                        <div className={classes.desks_empty}>
-                            <h2>Досок не найдено</h2>
-                            <Mainbtn
-                                variant='mini'
-                                text='Создать доску'
-                            />
-                        </div>
-                    </section>
-                    <section className={classes.friends_container}>
-                        <h2>Друзья:</h2>
-                        <div className={classes.friends_list}>
-                            <div className={classes.friends_list_item}>
-                                img name open
-                            </div>
-                        </div>
-                        of if epmty
-                        <div className={classes.friends_list_epmty}>
-                            <h2>Заявок в друзья не найдено</h2>
-                            <Mainbtn
-                                variant='mini'
-                                text='пригласить в друзья'
-                            />
-                        </div>
-                    </section>
+                    <Lastdesks />
+                    {userId && <FriendsList userId={userId} />}
                 </div>
                 <div className={classes.right}>
                     <section className={classes.friends_invites_container}>
@@ -70,7 +32,7 @@ const Home = () => {
                         </div>
                         of if epmty
                         <div className={classes.friends_invites_list_epmty}>
-                            <h2>Заявок в друзья не найдено</h2>
+                            <h3>Заявок в друзья не найдено</h3>
                             <Mainbtn
                                 variant='mini'
                                 text='пригласить в друзья'
@@ -86,7 +48,7 @@ const Home = () => {
                         </div>
                         of if epmty
                         <div className={classes.desks_invites_list_epmty}>
-                            <h2>Пришлашений в доски не найдено</h2>
+                            <h3>Пришлашений в доски не найдено</h3>
                             <Mainbtn
                                 variant='mini'
                                 text='Создать свою доску'
@@ -100,9 +62,9 @@ const Home = () => {
                         </div>
                         or if empty
                         <div className={classes.todo_items_empty}>
-                            <h2>
+                            <h3>
                                 ToDo листов не найдено
-                            </h2>
+                            </h3>
                             <Mainbtn
                                 text='Создать лист'
                                 variant='mini'

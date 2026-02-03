@@ -6,6 +6,9 @@ const authRoutes = require('./auth');
 const authMiddleware = require('../middleware/authMiddleware');
 const profileRoutes = require('./profileRoutes');
 const friendsRoutes = require('./friendsRoutes');
+const boardsRoutes = require('./boards');
+
+router.use('/boards', authMiddleware, boardsRoutes);
 
 router.use('/cards', authMiddleware, cardsRoutes);
 
