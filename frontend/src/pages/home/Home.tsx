@@ -20,7 +20,11 @@ const Home = () => {
                 </section>
                 <div className={classes.left}>
                     <Lastdesks />
-                    {userId && <FriendsList userId={userId} />}
+                    {userId > 0 ? (
+                        <FriendsList userId={userId} />
+                        ) : (
+                        <FriendsList userId={0} />
+                    )}
                 </div>
                 <div className={classes.right}>
                     <section className={classes.friends_invites_container}>

@@ -10,6 +10,7 @@ import { API_URL } from "@/../axiosInstance";
 import classes from "./Register.module.scss";
 import Close from '@/assets/icons/monochrome/close.svg';
 import Open from '@/assets/icons/monochrome/open.svg';
+import { useAuthStore } from '@/store/authStore';
 
 
 type RegisterFormData = InferType<typeof RegisterScheme> & {
@@ -26,6 +27,7 @@ const RegisterForm: React.FC = () => {
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const login = useAuthStore(state => state.login);
 
   const [emailValue, setEmailValue] = useState("");
   const [usernameValue, setUsernameValue] = useState("");
@@ -112,10 +114,12 @@ const RegisterForm: React.FC = () => {
       });
 
       localStorage.setItem("token", res.data.token);
-      localStorage.setItem("username", res.data.username);
-      localStorage.setItem("userId", res.data.id.toString());
 
-      window.location.href = "/home";
+      login({
+        id: res.data.id,
+        username: res.data.username,
+      });
+
     } catch (err: any) {
       const msg =
         err?.response?.data?.message || "Неверный код подтверждения";

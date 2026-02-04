@@ -15,6 +15,7 @@ import Arrow from '@/assets/icons/monochrome/back.svg'
 import Accept from '@/assets/icons/monochrome/accept.svg'
 import Deny from '@/assets/icons/monochrome/deny.svg'
 import { connectNotificationsSocket, disconnectNotificationsSocket } from '@/services/notificationsSocket';
+import { useAuthStore } from '@/store/authStore';
 interface UserProfile {
   username: string;
   avatar?: string | null;
@@ -31,7 +32,7 @@ interface FriendRequestNoti {
 
 const Header = () => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const { user, login, logout } = useAuthStore();
   const menuRef = useRef<HTMLElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
   const [requests, setRequests] = useState<FriendRequestNoti[]>([]);
@@ -115,47 +116,58 @@ useEffect(() => {
   }, [menuOpen]);
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        if (!token) return;
+  const fetchProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
 
-        const res = await axios.get<UserProfile>(`${API_URL}/api/profile/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+      const res = await axios.get<UserProfile>(`${API_URL}/api/profile/me`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-        setUser(res.data);
-      } catch (err) {
-        console.error('Ошибка при получении профиля:', err);
-      }
-    };
+      login({
+        id: 0, // API не возвращает id, можно заглушку
+        username: res.data.username,
+        avatar: res.data.avatar,
+        email: res.data.email
+      });
+    } catch (err) {
+      console.error('Ошибка при получении профиля:', err);
+    }
+  };
 
-    fetchProfile();
-  }, []);
+  fetchProfile();
+}, [login]);
+
   
-  useEffect(() => {
-    const updateProfile = async () => {
-      try {
-        const { data } = await axiosInstance.get<UserProfile>('/api/profile/me');
-        setUser(data);
-      } catch (e) {
-        console.error(e);
-      }
-    };
+useEffect(() => {
+  const updateProfile = async () => {
+    try {
+      const { data } = await axiosInstance.get<UserProfile>('/api/profile/me');
+      login({
+        id: 0, // API не возвращает id, можно заглушку
+        username: data.username,
+        avatar: data.avatar,
+        email: data.email
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
-    window.addEventListener('profile-updated', updateProfile);
+  window.addEventListener('profile-updated', updateProfile);
 
-    return () => {
-      window.removeEventListener('profile-updated', updateProfile);
-    };
-  }, []);
+  return () => {
+    window.removeEventListener('profile-updated', updateProfile);
+  };
+}, [login]);
 
   const location = useLocation();
-  const isProfileActive = () => {
-    if (location.pathname === '/profile') return true;
-    if (user && location.pathname === `/user/${user.username}`) return true;
-    return false;
-  };
+const isProfileActive = () => {
+  if (location.pathname === '/profile') return true;
+  if (user && location.pathname === `/user/${user.username}`) return true;
+  return false;
+};
 
   const handleMenuItemClick = () => {
     setMenuOpen(false);

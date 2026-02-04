@@ -10,6 +10,7 @@ import { API_URL } from '@/../axiosInstance';
 import classes from './Login.module.scss';
 import Close from '@/assets/icons/monochrome/close.svg';
 import Open from '@/assets/icons/monochrome/open.svg';
+import { useAuthStore } from '@/store/authStore';
 
 type LoginFormData = InferType<typeof LoginScheme>;
 
@@ -34,6 +35,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
   const [loading, setLoading] = useState(false);
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const login = useAuthStore(state => state.login);
 
   const navigate = useNavigate();
 
@@ -54,12 +56,19 @@ const LoginForm: React.FC<LoginFormProps> = ({
 
       const res = await axios.post<ApiResponse>(`${API_URL}/api/auth/login`, data);
 
-      localStorage.setItem("token", res.data.token || "");
-      localStorage.setItem("username", res.data.username || "");
-      localStorage.setItem("userId", res.data.id?.toString() || "");
+      const { token, username, id } = res.data;
 
-      onClose?.();
-      window.location.reload();
+      if (token && id && username) {
+        localStorage.setItem("token", token);
+
+        login({
+          id,
+          username,
+        });
+
+        onClose?.();
+      }
+
     } catch (err: any) {
       setServerMessage(err?.response?.data?.message || "Ошибка при логине");
     } finally {

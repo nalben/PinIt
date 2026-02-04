@@ -1,18 +1,18 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuthStore } from "@/store/authStore";
 
 const ProfileRedirect = (): JSX.Element | null => {
   const navigate = useNavigate();
+  const user = useAuthStore(state => state.user);
 
   useEffect(() => {
-    const username = localStorage.getItem("username");
-
-    if (username) {
-      navigate(`/user/${username}`, { replace: true });
+    if (user?.username) {
+      navigate(`/user/${user.username}`, { replace: true });
     } else {
       navigate("/home", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, user]);
 
   return null;
 };

@@ -3,6 +3,7 @@ import axiosInstance, { API_URL } from '@/../axiosInstance';
 import Mainbtn from '../_UI/mainbtn/Mainbtn';
 import classes from '../../pages/home/Home.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
+import { useBoardsStore } from '@/store/boardsStore';
 
 interface Board {
   id: number;
@@ -14,27 +15,14 @@ interface Board {
 }
 
 const Lastdesks = () => {
-  const [boards, setBoards] = useState<Board[]>([]);
-  const [recentBoards, setRecentBoards] = useState<Board[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    const loadBoards = async () => {
-      try {
-        const { data: myBoards } = await axiosInstance.get<Board[]>('/api/boards');
-        setBoards(myBoards);
+const { recentBoards, isLoading, loadBoards } = useBoardsStore();
 
-        const { data: recent } = await axiosInstance.get<Board[]>('/api/boards/recent');
-        setRecentBoards(recent);
-      } catch (err) {
-        console.error('Ошибка загрузки досок', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+useEffect(() => {
+  loadBoards();
+}, []);
 
-    loadBoards();
-  }, []);
+
 
   if (isLoading) return <p>Загрузка досок...</p>;
 

@@ -4,6 +4,7 @@ import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import classes from './Friendlist.module.scss';
 import { Link } from "react-router-dom";
+import { useFriendsStore } from "@/store/friendsStore";
 
 interface Friend {
   id: number;
@@ -45,8 +46,6 @@ const timeAgo = (dateString: string) => {
 };
 
 const FriendsList: React.FC<Props> = ({ userId }) => {
-  const [friends, setFriends] = useState<Friend[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
   const friendsListRef = useRef<HTMLDivElement | null>(null);
 
@@ -77,24 +76,14 @@ const FriendsList: React.FC<Props> = ({ userId }) => {
     friendsListRef.current.style.maxHeight = `${height}px`;
   };
 
+
 useEffect(() => {
-  const fetchFriends = async () => {
-    try {
-      const { data } = await axiosInstance.get(
-        `/api/friends/all/${userId}`
-      );
-
-      setFriends(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error("Ошибка при загрузке друзей:", error);
-      setFriends([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  fetchFriends();
+  fetchFriends(userId);
 }, [userId]);
+
+const { friends, isLoading, fetchFriends } = useFriendsStore();
+
+
 
 useEffect(() => {
   recalcMaxHeight();
@@ -121,10 +110,22 @@ useEffect(() => {
   };
 }, [friends]);
 
+  if (userId <= 0) {
+    return (
+      <section className={classes.friends_container}>
+        <h2>Друзья:</h2>
+        <div className={classes.friends_list_epmty}>
+          <h3>Войдите, чтобы увидеть друзей</h3>
+          <Mainbtn variant="mini" text="Войти" />
+        </div>
+      </section>
+    );
+  }
 
   if (isLoading) {
     return <p>Загрузка друзей...</p>;
   }
+
 
   return (
     <section className={classes.friends_container}>
@@ -156,6 +157,7 @@ useEffect(() => {
                 <Mainbtn
                   variant="mini"
                   text="Открыть профиль"
+                  kind="navlink"
                   href={`/user/${friend.username}`}
                 />
               </div>

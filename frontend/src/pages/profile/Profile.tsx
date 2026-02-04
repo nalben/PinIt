@@ -11,6 +11,7 @@ import AuthTrigger from "@/components/auth/AuthTrigger";
 import ResetPasswordForm from "@/components/auth/reset/ResetPasswordForm";
 import AuthOnly from "@/components/__general/authonly/Authonly";
 import Edit from '@/assets/icons/monochrome/edit.svg'
+import { useAuthStore } from "@/store/authStore";
 // Интерфейсы
 interface ProfileData {
   id: number;
@@ -53,7 +54,9 @@ const Profile = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [openModal, setOpenModal] = useState<OpenModal>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const isAuth = Boolean(localStorage.getItem("token"));
+  const { user } = useAuthStore();
+  const isAuth = Boolean(user);
+
 
   // Склонение
   const declension = (number: number, titles: [string, string, string]) => {
@@ -252,24 +255,22 @@ const Profile = () => {
   if (!profile) return null;
 
   const UserNickname = profile.nickname || profile.username;
-
+  const avatarSrc = profile.isOwner && user?.avatar
+    ? (user.avatar.startsWith('/uploads/') ? `${API_URL}${user.avatar}` : `${API_URL}/uploads/${user.avatar}`)
+    : profile.avatar
+      ? (profile.avatar.startsWith('/uploads/') ? `${API_URL}${profile.avatar}` : `${API_URL}/uploads/${profile.avatar}`)
+      : null;
+      
   return (
     <div className={classes.profile}>
       <div 
         className={`${classes.avatar_con} ${profile.id === 20 ? classes.heart : ''}`}
       >
-        {profile.avatar ? (
-          <img
-            src={
-              profile.avatar.startsWith('/uploads/')
-                ? `${API_URL}${profile.avatar}`
-                : `${API_URL}/uploads/${profile.avatar}`
-            }
-            alt="avatar"
-          />
-        ) : (
-          <Default />
-        )}
+      {avatarSrc ? (
+        <img src={avatarSrc} alt="avatar" />
+      ) : (
+        <Default />
+      )}
       </div>
       <div className={classes.profile_username}>
         <span>{UserNickname}</span>
