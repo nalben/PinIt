@@ -1,4 +1,3 @@
-// socketManager.ts
 import { io, Socket } from 'socket.io-client';
 import { API_URL } from '@/../axiosInstance';
 
@@ -11,18 +10,30 @@ type Callbacks = {
   onRemoveRequest?: (data: any) => void;
 };
 
-export const connectSocket = (callbacks: Callbacks) => {
+export const connectSocket = (callbacks?: Callbacks) => {
   const token = localStorage.getItem('token');
-  if (!token || socket) return;
+  if (!token) return;
 
-  socket = io(API_URL, { auth: { token } });
+  // создаём сокет ТОЛЬКО если его нет
+  if (!socket) {
+    socket = io(API_URL, { auth: { token } });
+    socket.on('connect', () => console.log('Socket connected:', socket?.id));
+  }
 
-  socket.on('connect', () => console.log('Socket connected:', socket?.id));
+  // ⚠️ ВАЖНО: подписки добавляем ВСЕГДА
+  if (!callbacks) return;
 
-  if (callbacks.onFriendsUpdate) socket.on('friends:list', callbacks.onFriendsUpdate);
-  if (callbacks.onFriendStatusChange) socket.on('friends:status', callbacks.onFriendStatusChange);
-  if (callbacks.onNewRequest) socket.on('friend_request:new', callbacks.onNewRequest);
-  if (callbacks.onRemoveRequest) socket.on('friend_request:removed', callbacks.onRemoveRequest);
+  if (callbacks.onFriendsUpdate)
+    socket.on('friends:list', callbacks.onFriendsUpdate);
+
+  if (callbacks.onFriendStatusChange)
+    socket.on('friends:status', callbacks.onFriendStatusChange);
+
+  if (callbacks.onNewRequest)
+    socket.on('friend_request:new', callbacks.onNewRequest);
+
+  if (callbacks.onRemoveRequest)
+    socket.on('friend_request:removed', callbacks.onRemoveRequest);
 };
 
 export const disconnectSocket = () => {

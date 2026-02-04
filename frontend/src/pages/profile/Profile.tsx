@@ -58,7 +58,6 @@ const Profile = () => {
   const { user } = useAuthStore();
   const isAuth = Boolean(user);
 
-
   // Склонение
   const declension = (number: number, titles: [string, string, string]) => {
     const n = Math.abs(number) % 100;
@@ -210,9 +209,22 @@ useEffect(() => {
     // обновляем статус текущего профиля и друзей
     setFriendStatusById(prev => ({
       ...prev,
-      [data.userId]: { status: data.status, requestId: data.requestId }
+      [data.userId]: {
+        status: data.status,
+        requestId: data.requestId ?? prev[data.userId]?.requestId
+      }
     }));
-    setFriends(prev => prev.map(f => f.id === data.userId ? { ...f, friendStatus: data.status, requestId: data.requestId } : f));
+    setFriends(prev =>
+      prev.map(f =>
+        f.id === data.userId
+          ? {
+              ...f,
+              friendStatus: data.status,
+              requestId: data.requestId ?? f.requestId
+            }
+          : f
+      )
+    );
   };
   const handleNewRequest = (data: any) => {
     setFriendStatusById(prev => ({
@@ -225,7 +237,9 @@ useEffect(() => {
     const updated = {...prev};
     for (const key in updated) {
       if (updated[key].requestId === data.id) {
-        updated[key] = { status: 'none' };
+        updated[key] = {
+          status: updated[key].status === 'friend' ? 'friend' : 'none'
+        };
       }
     }
     return updated;
@@ -262,7 +276,14 @@ const handleFriendAction = async (userId: number) => {
     } else if (current === 'sent' && requestId) {
       await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
       setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-    }
+    }else if (current === 'received' && requestId) {
+  await axiosInstance.put(`/api/friends/accept/${requestId}`);
+  setFriendStatusById(prev => ({
+    ...prev,
+    [userId]: { status: 'friend' }
+  }));
+}
+
   } catch (e) {
     console.error(e);
   }

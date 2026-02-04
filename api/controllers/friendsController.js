@@ -115,13 +115,16 @@ exports.acceptFriendRequest = async (req, res) => {
 
     // обновляем статус кнопок у обоих
     io.to(`user:${request.user_id}`).emit('friends:status', {
-      userId: request.friend_id,
-      status: 'friend'
-    });
-    io.to(`user:${request.friend_id}`).emit('friends:status', {
-      userId: request.user_id,
-      status: 'friend'
-    });
+  userId: request.friend_id,
+  status: 'friend',
+  requestId: request_id
+});
+
+io.to(`user:${request.friend_id}`).emit('friends:status', {
+  userId: request.user_id,
+  status: 'friend',
+  requestId: request_id
+});
 
     return res.status(200).json({ message: 'Запрос принят' });
   } catch (err) {

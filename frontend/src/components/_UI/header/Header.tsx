@@ -16,6 +16,7 @@ import Accept from '@/assets/icons/monochrome/accept.svg'
 import Deny from '@/assets/icons/monochrome/deny.svg'
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
+import { useUIStore } from '@/store/uiStore';
 
 interface UserProfile {
   username: string;
@@ -37,9 +38,16 @@ const Header = () => {
   const menuRef = useRef<HTMLElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
   const [notiOpen, setNotiOpen] = useState(false);
-  const { requests, fetchRequests, initSocket, disconnectSocket, acceptRequest, rejectRequest } = useNotificationsStore();
+  const { requests, fetchRequests, acceptRequest, rejectRequest } = useNotificationsStore();
+  const {
+    headerDropdown,
+    toggleHeaderDropdown,
+    closeHeaderDropdown
+  } = useUIStore();
 
-
+  const isProfileOpen = headerDropdown === 'profile';
+  const isNotiOpen = headerDropdown === 'notifications';
+    
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
       ? `${classes.item} ${classes.active}`
@@ -63,8 +71,6 @@ const Header = () => {
 
 useEffect(() => {
   fetchRequests();      // загружаем текущие заявки
-  initSocket();         // подключаем веб-сокет
-  return () => disconnectSocket();  // отключаем при размонтировании
 }, []);
 
   useEffect(() => {
@@ -194,11 +200,11 @@ const isProfileActive = () => {
                   <DropdownWrapper
                     right
                     noti
-                    isOpen={notiOpen}
-                    onClose={() => setNotiOpen(false)}
+                    isOpen={isNotiOpen}          // <- правильно
+                    onClose={closeHeaderDropdown} // закроется через store
                     closeOnClick={false}
                   >
-                    <div className={classes.noti_icon_con} onClick={() => setNotiOpen(prev => !prev)}>
+                    <div className={classes.noti_icon_con} onClick={() => toggleHeaderDropdown('notifications')}>
                       <Noti />
                       {requests.length > 0 && <span className={classes.badge} />}
                     </div>
@@ -209,14 +215,14 @@ const isProfileActive = () => {
                       </span>
                       {requests.map(req => (
                         <div key={req.id} className={classes.noti_item}>
-                          <NavLink to={`/user/${req.username}`} className={classes.noti_user_link} onClick={() => setNotiOpen(false)}>
+                          <NavLink
+                            to={`/user/${req.username}`}
+                            className={classes.noti_user_link}
+                            onClick={closeHeaderDropdown} // закрываем dropdown при переходе
+                          >
                             {req.avatar ? (
                               <img
-                                src={
-                                  req.avatar.startsWith('/uploads/')
-                                    ? `${API_URL}${req.avatar}`
-                                    : `${API_URL}/uploads/${req.avatar}`
-                                }
+                                src={req.avatar.startsWith('/uploads/') ? `${API_URL}${req.avatar}` : `${API_URL}/uploads/${req.avatar}`}
                                 alt="Аватар"
                                 className={classes.avatar}
                               />
@@ -226,8 +232,12 @@ const isProfileActive = () => {
                           </NavLink>
 
                           <span>
-                            <NavLink to={`/user/${req.username}`} className={classes.noti_user_link} onClick={() => setNotiOpen(false)}>
-                              <span>{req.nickname || req.username}</span>
+                            <NavLink
+                              to={`/user/${req.username}`}
+                              className={classes.noti_user_link}
+                              onClick={closeHeaderDropdown}
+                            >
+                              {req.nickname || req.username}
                             </NavLink>
                             подал заявку в друзья
                           </span>
@@ -246,15 +256,16 @@ const isProfileActive = () => {
                   </DropdownWrapper>
                 </div>
 
-                <DropdownWrapper right profile>
-                  <div className={classes.profile}>
+                <DropdownWrapper
+                  right
+                  profile
+                  isOpen={isProfileOpen}       // <- правильно
+                  onClose={closeHeaderDropdown}
+                >
+                  <div className={classes.profile} onClick={() => toggleHeaderDropdown('profile')}>
                     {user?.avatar ? (
                       <img
-                        src={
-                          user.avatar.startsWith('/uploads/')
-                            ? `${API_URL}${user.avatar}`
-                            : `${API_URL}/uploads/${user.avatar}`
-                        }
+                        src={user.avatar.startsWith('/uploads/') ? `${API_URL}${user.avatar}` : `${API_URL}/uploads/${user.avatar}`}
                         alt="Аватар"
                         className={classes.avatar}
                       />
@@ -266,15 +277,11 @@ const isProfileActive = () => {
                     </span>
                   </div>
                   <div>
-                    <NavLink to="/profile">
+                    <NavLink to="/profile" onClick={closeHeaderDropdown}>
                       <div className={classes.profile_button}>
                         {user?.avatar ? (
                           <img
-                            src={
-                              user.avatar.startsWith('/uploads/')
-                                ? `${API_URL}${user.avatar}`
-                                : `${API_URL}/uploads/${user.avatar}`
-                            }
+                            src={user.avatar.startsWith('/uploads/') ? `${API_URL}${user.avatar}` : `${API_URL}/uploads/${user.avatar}`}
                             alt="Аватар"
                             className={classes.avatar}
                           />
@@ -282,19 +289,15 @@ const isProfileActive = () => {
                           <Default />
                         )}
                         <div className={classes.profile_name_drop_con}>
-                          <span className={classes.name_drop}>
-                            {user?.username || 'Загрузка...'}
-                          </span>
+                          <span className={classes.name_drop}>{user?.username || 'Загрузка...'}</span>
                           <div className={classes.email_drop}>
-                            <span className={classes.email_drop_item}>
-                              {user?.email}
-                            </span>
-                            <Arrow/>
+                            <span className={classes.email_drop_item}>{user?.email}</span>
+                            <Arrow />
                           </div>
                         </div>
                       </div>
                     </NavLink>
-                    <LogoutButton/>
+                    <LogoutButton />
                   </div>
                 </DropdownWrapper>
             </div>
