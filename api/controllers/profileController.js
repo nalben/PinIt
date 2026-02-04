@@ -147,3 +147,30 @@ exports.getFriendsCount = async (req, res) => {
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 };
+exports.getFriendsByUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const [userRows] = await db.execute(
+      'SELECT id FROM users WHERE username = ?',
+      [username]
+    );
+
+    if (!userRows.length) return res.status(404).json({ message: 'Пользователь не найден' });
+
+    const userId = userRows[0].id;
+
+    const [friends] = await db.execute(
+      `SELECT u.id, u.username, u.nickname, u.avatar, f.created_at
+       FROM friends f
+       JOIN users u ON u.id = f.friend_id
+       WHERE f.user_id = ?`,
+      [userId]
+    );
+
+    res.json(friends);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+};

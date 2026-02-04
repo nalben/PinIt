@@ -35,6 +35,7 @@ const upload = multer({
 router.put('/me', upload.single('avatar'), profileController.updateMe);
 router.get('/me', profileController.getMe);
 router.get('/:username/friends-count', optionalAuth, profileController.getFriendsCount);
+router.get('/:username/friends', optionalAuth, profileController.getFriendsByUsername);
 router.get('/:username', optionalAuth, profileController.getByUsername);
 
 module.exports = router;

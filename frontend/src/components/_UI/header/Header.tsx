@@ -14,8 +14,9 @@ import LogoutButton from '@/components/__general/logoutbutton/LogoutButton';
 import Arrow from '@/assets/icons/monochrome/back.svg'
 import Accept from '@/assets/icons/monochrome/accept.svg'
 import Deny from '@/assets/icons/monochrome/deny.svg'
-import { connectNotificationsSocket, disconnectNotificationsSocket } from '@/services/notificationsSocket';
 import { useAuthStore } from '@/store/authStore';
+import { useNotificationsStore } from '@/store/notificationsStore';
+
 interface UserProfile {
   username: string;
   avatar?: string | null;
@@ -35,8 +36,9 @@ const Header = () => {
   const { user, login, logout } = useAuthStore();
   const menuRef = useRef<HTMLElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
-  const [requests, setRequests] = useState<FriendRequestNoti[]>([]);
   const [notiOpen, setNotiOpen] = useState(false);
+  const { requests, fetchRequests, initSocket, disconnectSocket, acceptRequest, rejectRequest } = useNotificationsStore();
+
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
@@ -60,48 +62,10 @@ const Header = () => {
   }, []);
 
 useEffect(() => {
-  const fetchRequests = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setRequests([]);
-        return;
-      }
-
-      const { data } = await axiosInstance.get<FriendRequestNoti[]>('/api/friends/requests/incoming');
-      setRequests(data);
-    } catch (e: any) {
-      if (e.response?.status === 401) setRequests([]);
-      else console.error(e);
-    }
-  };
-
-  fetchRequests();
-
-  connectNotificationsSocket(
-  (newReq) => {
-    setRequests(prev => prev.some(r => r.id === newReq.id) ? prev : [newReq, ...prev]);
-  },
-  (removed) => {
-    const removedId = Number(removed.requestId);
-    setRequests(prev => prev.filter(r => r.id !== removedId));
-  }
-);
-
-
-  return () => disconnectNotificationsSocket();
+  fetchRequests();      // загружаем текущие заявки
+  initSocket();         // подключаем веб-сокет
+  return () => disconnectSocket();  // отключаем при размонтировании
 }, []);
-
-
-  const acceptRequest = async (requestId: number) => {
-    await axiosInstance.put(`/api/friends/accept/${requestId}`);
-    setRequests(prev => prev.filter(r => r.id !== requestId));
-  };
-
-  const rejectRequest = async (requestId: number) => {
-    await axiosInstance.put(`/api/friends/reject/${requestId}`);
-    setRequests(prev => prev.filter(r => r.id !== requestId));
-  };
 
   useEffect(() => {
     if (menuOpen) {

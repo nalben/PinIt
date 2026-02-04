@@ -67,6 +67,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
         });
 
         onClose?.();
+        window.location.reload();
       }
 
     } catch (err: any) {

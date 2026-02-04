@@ -46,6 +46,7 @@ exports.sendFriendRequest = async (req, res) => {
     );
     const sender = senderRows[0];
 
+    // уведомляем получателя
     io.to(`user:${friend_id}`).emit('friend_request:new', {
       id: result.insertId,
       user_id: sender.id,
@@ -54,6 +55,14 @@ exports.sendFriendRequest = async (req, res) => {
       avatar: sender.avatar,
       created_at: new Date().toISOString(),
     });
+
+    // уведомляем отправителя, чтобы обновить статус кнопки (если нужно)
+    io.to(`user:${user_id}`).emit('friends:status', {
+      userId: friend_id,
+      status: 'sent',
+      requestId: result.insertId
+    });
+
 
     return res.status(201).json({
       id: result.insertId,
@@ -68,59 +77,111 @@ exports.sendFriendRequest = async (req, res) => {
   }
 };
 
-
 exports.acceptFriendRequest = async (req, res) => {
   try {
     const { request_id } = req.params;
     const user_id = req.user.id;
 
-    const [requests] = await db.execute(
-      `SELECT * FROM friend_requests WHERE id = ? AND status = 'sent' AND friend_id = ?`,
+    const [rows] = await db.execute(
+      `SELECT * FROM friend_requests 
+       WHERE id = ? AND status = 'sent' AND friend_id = ?`,
       [request_id, user_id]
     );
 
-    if (requests.length === 0) return res.status(404).json({ message: 'Запрос не найден' });
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Запрос не найден' });
+    }
 
-    const request = requests[0];
+    const request = rows[0];
 
+    // создаём дружбу
     await db.execute(
       `INSERT INTO friends (user_id, friend_id) VALUES (?, ?), (?, ?)`,
       [request.user_id, request.friend_id, request.friend_id, request.user_id]
     );
 
+    // удаляем заявку
     await db.execute(`DELETE FROM friend_requests WHERE id = ?`, [request_id]);
 
+    const io = req.app.get('io');
+
+    // убираем уведомление у обоих
+    io.to(`user:${request.user_id}`).emit('friend_request:removed', {
+      id: request_id
+    });
+    io.to(`user:${request.friend_id}`).emit('friend_request:removed', {
+      id: request_id
+    });
+
+    // обновляем статус кнопок у обоих
+    io.to(`user:${request.user_id}`).emit('friends:status', {
+      userId: request.friend_id,
+      status: 'friend'
+    });
+    io.to(`user:${request.friend_id}`).emit('friends:status', {
+      userId: request.user_id,
+      status: 'friend'
+    });
+
     return res.status(200).json({ message: 'Запрос принят' });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: 'Ошибка при принятии запроса' });
   }
 };
-
-
 
 exports.rejectFriendRequest = async (req, res) => {
   try {
     const { request_id } = req.params;
     const user_id = req.user.id;
 
-    const [requests] = await db.execute(
-      `SELECT * FROM friend_requests WHERE id = ? AND status = 'sent' AND friend_id = ?`,
+    const [rows] = await db.execute(
+      `SELECT * FROM friend_requests 
+       WHERE id = ? AND status = 'sent' AND friend_id = ?`,
       [request_id, user_id]
     );
-    if (requests.length === 0) return res.status(404).json({ message: 'Запрос не найден' });
 
-    await db.execute(`UPDATE friend_requests SET status = 'rejected' WHERE id = ?`, [request_id]);
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Запрос не найден' });
+    }
+
+    const request = rows[0];
+
+    // ❗ НЕ удаляем, а помечаем rejected
+    await db.execute(
+      `UPDATE friend_requests SET status = 'rejected' WHERE id = ?`,
+      [request_id]
+    );
 
     const io = req.app.get('io');
-    io.to(`user:${requests[0].user_id}`).emit('friend_request:removed', { requestId: request_id });
+
+    // отправителю — rejected (блок кнопки)
+    io.to(`user:${request.user_id}`).emit('friends:status', {
+      userId: request.friend_id,
+      status: 'rejected',
+      requestId: request_id
+    });
+
+    // получателю — none (кнопка "добавить в друзья")
+    io.to(`user:${request.friend_id}`).emit('friends:status', {
+      userId: request.user_id,
+      status: 'none',
+      requestId: request_id
+    });
+
+    // убираем уведомление из dropdown
+    io.to(`user:${request.friend_id}`).emit('friend_request:removed', {
+      id: request_id
+    });
 
     return res.status(200).json({ message: 'Запрос отклонён' });
-  } catch (error) {
-    console.error(error);
+  } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: 'Ошибка при отклонении запроса' });
   }
 };
+
+
 
 
 exports.getFriends = async (req, res) => {
@@ -171,7 +232,14 @@ exports.removeFriend = async (req, res) => {
       [user_id, friend_id, friend_id, user_id]
     );
 
-    if (result.affectedRows === 0) return res.status(404).json({ message: 'Друг не найден' });
+    if (result.affectedRows === 0) 
+      return res.status(404).json({ message: 'Друг не найден' });
+
+    const io = req.app.get('io');
+
+    // уведомляем обоих пользователей, что дружба удалена
+    io.to(`user:${user_id}`).emit('friends:status', { userId: friend_id, status: 'none' });
+    io.to(`user:${friend_id}`).emit('friends:status', { userId: user_id, status: 'none' });
 
     return res.status(200).json({ message: 'Друг удалён' });
   } catch (error) {
@@ -180,13 +248,14 @@ exports.removeFriend = async (req, res) => {
   }
 };
 
+
 exports.removeFriendRequest = async (req, res) => {
   try {
     const { request_id } = req.params;
     const user_id = req.user.id;
 
     const [requests] = await db.execute(
-      `SELECT friend_id FROM friend_requests WHERE id = ? AND (user_id = ? OR friend_id = ?) AND status = 'sent'`,
+      `SELECT friend_id, user_id FROM friend_requests WHERE id = ? AND (user_id = ? OR friend_id = ?) AND status = 'sent'`,
       [request_id, user_id, user_id]
     );
 
@@ -199,7 +268,22 @@ exports.removeFriendRequest = async (req, res) => {
 
     const io = req.app.get('io');
 
-    io.to(`user:${requests[0].friend_id}`).emit('friend_request:removed', { requestId: request_id });
+    // уведомляем обоих пользователей, что заявка удалена
+    io.to(`user:${requests[0].friend_id}`).emit('friend_request:removed', { id: request_id });
+io.to(`user:${requests[0].user_id}`).emit('friend_request:removed', { id: request_id });
+
+
+    // можно оставить обновление статуса дружбы, если нужно
+    io.to(`user:${requests[0].friend_id}`).emit('friends:status', {
+      userId: user_id,
+      status: 'none',
+      requestId: request_id
+    });
+    io.to(`user:${requests[0].user_id}`).emit('friends:status', {
+      userId: requests[0].friend_id,
+      status: 'none',
+      requestId: request_id
+    });
 
     return res.status(200).json({ message: 'Запрос отменён' });
   } catch (error) {
@@ -207,6 +291,7 @@ exports.removeFriendRequest = async (req, res) => {
     return res.status(500).json({ message: 'Ошибка' });
   }
 };
+
 
 
 exports.getFriendRequests = async (req, res) => {

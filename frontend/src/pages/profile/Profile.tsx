@@ -12,6 +12,7 @@ import ResetPasswordForm from "@/components/auth/reset/ResetPasswordForm";
 import AuthOnly from "@/components/__general/authonly/Authonly";
 import Edit from '@/assets/icons/monochrome/edit.svg'
 import { useAuthStore } from "@/store/authStore";
+import { connectSocket, disconnectSocket } from "@/services/socketManager";
 // Интерфейсы
 interface ProfileData {
   id: number;
@@ -154,7 +155,6 @@ const Profile = () => {
         );
       setFriendCount(countData.friend_count);
 
-      // ❗ ТОЛЬКО если пользователь авторизован
       if (!data.isOwner && isAuth) {
         const { data: statusData } =
           await axiosInstance.get<{ status: FriendStatus; requestId?: number }>(
@@ -183,48 +183,92 @@ const Profile = () => {
 
   if (username) fetchProfileData();
 }, [username, isAuth]);
+useEffect(() => {
+  if (!profile?.id || !profile.isOwner) return;
 
+  const fetchFriends = async () => {
+    try {
+      const { data } = await axiosInstance.get<FriendItem[]>(`/api/profile/${profile.username}/friends`);
+      setFriends(data);
+      // заполняем статусы друзей
+      const statuses: Record<number, { status: FriendStatus }> = {};
+      data.forEach(f => {
+        statuses[f.id] = { status: 'friend' };
+      });
+      setFriendStatusById(prev => ({ ...prev, ...statuses }));
+    } catch (err) {
+      console.error('Ошибка при загрузке друзей', err);
+    }
+  };
 
-  // Загрузка друзей владельца
-  useEffect(() => {
-    if (!profile || !profile.isOwner) return;
-    const fetchFriends = async () => {
-      try {
-        const { data } = await axiosInstance.get<ProfileData[]>(`/api/friends/all/${profile.id}`);
-        const mapped: FriendItem[] = data.map(f => ({ ...f, friendStatus: 'friend' }));
-        setFriends(mapped);
-        const statusMap: Record<number, { status: FriendStatus }> = {};
-        data.forEach(f => (statusMap[f.id] = { status: 'friend' }));
-        setFriendStatusById(prev => ({ ...prev, ...statusMap }));
-      } catch (err) {
-        console.error(err);
+  fetchFriends();
+}, [profile?.id, profile?.isOwner]);
+
+useEffect(() => {
+  if (!profile?.id) return;
+  const handleFriendStatusChange = (data: { userId: number; status: FriendStatus; requestId?: number }) => {
+    // обновляем статус текущего профиля и друзей
+    setFriendStatusById(prev => ({
+      ...prev,
+      [data.userId]: { status: data.status, requestId: data.requestId }
+    }));
+    setFriends(prev => prev.map(f => f.id === data.userId ? { ...f, friendStatus: data.status, requestId: data.requestId } : f));
+  };
+  const handleNewRequest = (data: any) => {
+    setFriendStatusById(prev => ({
+      ...prev,
+      [data.user_id]: { status: 'received', requestId: data.id }
+    }));
+  };
+  const handleRemoveRequest = (data: { id: number }) => {
+  setFriendStatusById(prev => {
+    const updated = {...prev};
+    for (const key in updated) {
+      if (updated[key].requestId === data.id) {
+        updated[key] = { status: 'none' };
       }
-    };
-    fetchFriends();
-  }, [profile]);
+    }
+    return updated;
+  });
+  setFriends(prev => prev.map(f => 
+    f.requestId === data.id ? { ...f, friendStatus: 'none', requestId: undefined } : f
+  ));
+};
+
+  connectSocket({
+    onFriendStatusChange: handleFriendStatusChange,
+    onNewRequest: handleNewRequest,
+    onRemoveRequest: handleRemoveRequest
+  });
+  return () => disconnectSocket();
+}, [profile?.id]);
+
+
 
   const profileFriendStatus = profile ? friendStatusById[profile.id]?.status ?? 'none' : 'none';
 
-  const handleFriendAction = async (userId: number) => {
-    const current = friendStatusById[userId]?.status ?? 'none';
-    const requestId = friendStatusById[userId]?.requestId;
+const handleFriendAction = async (userId: number) => {
+  const current = friendStatusById[userId]?.status ?? 'none';
+  const requestId = friendStatusById[userId]?.requestId;
 
-    try {
-      if (current === 'friend') {
-        await axiosInstance.delete(`/api/friends/${userId}`);
-        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-        setFriends(prev => prev.map(f => f.id === userId ? { ...f, friendStatus: 'none' } : f));
-      } else if (current === 'none') {
-        const { data } = await axiosInstance.post<{ id: number }>(`/api/friends/send`, { friend_id: userId });
-        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'sent', requestId: data.id } }));
-      } else if (current === 'sent' && requestId) {
-        await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
-        setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-      }
-    } catch (e) {
-      console.error(e);
+  try {
+    if (current === 'friend') {
+      await axiosInstance.delete(`/api/friends/${userId}`);
+      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
+    } else if (current === 'none') {
+      if (friendStatusById[userId]?.status === 'sent' || friendStatusById[userId]?.status === 'rejected') return;
+      const { data } = await axiosInstance.post<{ id: number }>(`/api/friends/send`, { friend_id: userId });
+      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'sent', requestId: data.id } }));
+    } else if (current === 'sent' && requestId) {
+      await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
+      setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
     }
-  };
+  } catch (e) {
+    console.error(e);
+  }
+};
+
+
 
   const getButtonText = (status: FriendStatus) => {
     if (status === 'friend') return 'удалить';
