@@ -111,7 +111,13 @@ const authController = {
         { expiresIn: "7d" }
       );
 
-      res.json({ token, username: user.username, id: user.id });
+      res.json({
+        token,
+        id: user.id,
+        username: user.username,
+        avatar: user.avatar || null,
+        email: user.email || null
+      });
     } catch (err) {
       console.error(err);
       res.status(500).json({ message: "Ошибка сервера" });

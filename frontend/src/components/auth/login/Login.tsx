@@ -19,6 +19,8 @@ interface ApiResponse {
   token?: string;
   username?: string;
   id?: number;
+  avatar?: string;
+  email?: string;
 }
 
 interface LoginFormProps {
@@ -60,15 +62,11 @@ const LoginForm: React.FC<LoginFormProps> = ({
 
       if (token && id && username) {
         localStorage.setItem("token", token);
-
-        login({
-          id,
-          username,
-        });
-
-        onClose?.();
+        localStorage.setItem("userId", String(id)); // сохраняем только id
+        login({ id, username, avatar: res.data.avatar, email: res.data.email });
         window.location.reload();
       }
+
 
     } catch (err: any) {
       setServerMessage(err?.response?.data?.message || "Ошибка при логине");

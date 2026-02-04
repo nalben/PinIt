@@ -57,12 +57,17 @@
         grid-area: time;
         font-size: fluid-prop(18,16,1920,320);
     }
-    & button{
+    & a{
         margin-left: auto;
         grid-area: button;
         align-self: center;
         width: 100%;
+    }
+    & a:nth-child(4){
         margin-top: 1rem;
+        @media (min-width:540px) {
+            margin-top: 0;
+        }
     }
     grid-template-areas:
     "img username username"

@@ -19,6 +19,7 @@ import { useNotificationsStore } from '@/store/notificationsStore';
 import { useUIStore } from '@/store/uiStore';
 
 interface UserProfile {
+  id: number;
   username: string;
   avatar?: string | null;
   email?: string;
@@ -96,7 +97,7 @@ useEffect(() => {
       });
 
       login({
-        id: 0, // API не возвращает id, можно заглушку
+        id: res.data.id,
         username: res.data.username,
         avatar: res.data.avatar,
         email: res.data.email

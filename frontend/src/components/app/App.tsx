@@ -7,6 +7,7 @@ import "@/styles/variables.scss";
 import Header from '../_UI/header/Header';
 import { useNotificationsStore } from '@/store/notificationsStore';
 import { connectSocket, disconnectSocket } from '@/services/socketManager';
+import Appitit from './AppInit'
 
 const Root = () => {
   const { addRequest, removeRequest, updateRequestStatus } = useNotificationsStore();
@@ -41,6 +42,7 @@ useEffect(() => {
 
   return (
     <div className={classes.sitecon}>
+      <Appitit />
       <main className={classes.pagecontent}>
         <Header />
         <Outlet />

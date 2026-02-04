@@ -1,22 +1,11 @@
-import React, { useEffect, useRef, useState } from "react";
-import axiosInstance, { API_URL } from "../../../axiosInstance";
+import React, { useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import classes from './Friendlist.module.scss';
-import { Link } from "react-router-dom";
 import { useFriendsStore } from "@/store/friendsStore";
-
-interface Friend {
-  id: number;
-  username: string;
-  nickname?: string | null;
-  avatar?: string | null;
-  created_at: string;
-}
-
-interface Props {
-  userId: number;
-}
+import { useAuthStore } from "@/store/authStore";
+import { API_URL } from "../../../axiosInstance";
 
 const declension = (number: number, titles: [string, string, string]) => {
   const n = Math.abs(number) % 100;
@@ -45,72 +34,52 @@ const timeAgo = (dateString: string) => {
   return 'только что';
 };
 
-const FriendsList: React.FC<Props> = ({ userId }) => {
-
+const FriendsList: React.FC = () => {
   const friendsListRef = useRef<HTMLDivElement | null>(null);
+  const { user, isAuth } = useAuthStore();
+  const { friends, isLoading, fetchFriends } = useFriendsStore();
 
-  const recalcMaxHeight = () => {
+useEffect(() => {
+  if (user && user.id >= 0) {
+    fetchFriends(user.id);
+  }
+}, [user, fetchFriends]);
+
+
+  useEffect(() => {
     if (!friendsListRef.current) return;
 
-    const items = friendsListRef.current.querySelectorAll<HTMLElement>(
-      `.${classes.friends_list_item}`
-    );
+    const recalcMaxHeight = () => {
+      if (!friendsListRef.current) return;
+      const items = friendsListRef.current.querySelectorAll<HTMLElement>(
+        `.${classes.friends_list_item}`
+      );
+      if (!items.length) return;
 
-    if (items.length === 0) return;
+      const count = Math.min(3, items.length);
+      const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize);
+      const gap = rootFontSize;
 
-    const count = Math.min(3, items.length);
+      let height = 0;
+      for (let i = 0; i < count; i++) height += items[i].offsetHeight;
+      height += gap * (count - 1) + 1;
 
-    const rootFontSize = parseFloat(
-      getComputedStyle(document.documentElement).fontSize
-    );
-    const gap = rootFontSize;
-
-    let height = 0;
-
-    for (let i = 0; i < count; i++) {
-      height += items[i].offsetHeight;
-    }
-
-    height += gap * (count - 1) + 1;
-
-    friendsListRef.current.style.maxHeight = `${height}px`;
-  };
+      friendsListRef.current.style.maxHeight = `${height}px`;
+    };
 
 
-useEffect(() => {
-  fetchFriends(userId);
-}, [userId]);
+    recalcMaxHeight();
+    const observer = new ResizeObserver(() => requestAnimationFrame(recalcMaxHeight));
+    observer.observe(friendsListRef.current);
+    window.addEventListener('resize', recalcMaxHeight);
 
-const { friends, isLoading, fetchFriends } = useFriendsStore();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', recalcMaxHeight);
+    };
+  }, [friends]);
 
-
-
-useEffect(() => {
-  recalcMaxHeight();
-
-  if (!friendsListRef.current) return;
-
-  const firstItem = friendsListRef.current.querySelector<HTMLElement>(
-    `.${classes.friends_list_item}`
-  );
-
-  if (!firstItem) return;
-
-  const observer = new ResizeObserver(() => {
-    requestAnimationFrame(recalcMaxHeight);
-  });
-
-  observer.observe(firstItem);
-
-  window.addEventListener('resize', recalcMaxHeight);
-
-  return () => {
-    observer.disconnect();
-    window.removeEventListener('resize', recalcMaxHeight);
-  };
-}, [friends]);
-
-  if (userId <= 0) {
+  if (!isAuth) {
     return (
       <section className={classes.friends_container}>
         <h2>Друзья:</h2>
@@ -122,37 +91,28 @@ useEffect(() => {
     );
   }
 
-  if (isLoading) {
-    return <p>Загрузка друзей...</p>;
-  }
-
+  if (isLoading) return <p>Загрузка друзей...</p>;
 
   return (
     <section className={classes.friends_container}>
       <h2>Друзья:</h2>
-
-      {friends.length > 0 ? (
+      {friends.length ? (
         <div className={classes.friends_list} ref={friendsListRef}>
           {friends.map(friend => {
             const avatarSrc = friend.avatar
-              ? friend.avatar.startsWith('/uploads/')
-                ? `${API_URL}${friend.avatar}`
-                : `${API_URL}/uploads/${friend.avatar}`
+              ? `${API_URL}/uploads/${friend.avatar.replace(/^\/uploads\//, '')}`
               : null;
 
             return (
               <div key={friend.id} className={classes.friends_list_item}>
                 <Link to={`/user/${friend.username}`} className={classes.friend_list_img_con}>
-                    {avatarSrc
-                    ? <img src={avatarSrc} alt={friend.nickname || friend.username} />
-                    : <Default />
-                    }
+                  {avatarSrc ? <img src={avatarSrc} alt={friend.nickname || friend.username} /> : <Default />}
                 </Link>
-                    <span>
-                        <Link to={`/user/${friend.username}`} className={classes.friend_list_username_con}>
-                            {friend.nickname || friend.username}
-                        </Link>
-                    </span>
+                <span>
+                  <Link to={`/user/${friend.username}`} className={classes.friend_list_username_con}>
+                    {friend.nickname || friend.username}
+                  </Link>
+                </span>
                 <p>в друзьях: {timeAgo(friend.created_at)}</p>
                 <Mainbtn
                   variant="mini"

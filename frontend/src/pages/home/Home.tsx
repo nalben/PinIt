@@ -3,10 +3,14 @@ import classes from './Home.module.scss';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import Lastdesks from '@/components/lastdesks/Lastdesks';
 import FriendsList from '@/components/friendlist/Friendlist';
+import { useAuthStore } from '@/store/authStore';
 
 const Home = () => {
-    const userId = Number(localStorage.getItem('userId')); // получаем текущего пользователя
+    
+const { user, isAuth } = useAuthStore();
 
+  console.log('user:', user);
+  console.log('isAuth:', isAuth);
     return (
         <div className={classes.home}>
             <main className={classes.home_container}>
@@ -18,13 +22,10 @@ const Home = () => {
                         text='Создать доску'
                     />
                 </section>
+
                 <div className={classes.left}>
                     <Lastdesks />
-                    {userId > 0 ? (
-                        <FriendsList userId={userId} />
-                        ) : (
-                        <FriendsList userId={0} />
-                    )}
+                    <FriendsList />
                 </div>
                 <div className={classes.right}>
                     <section className={classes.friends_invites_container}>
