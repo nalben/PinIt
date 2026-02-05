@@ -16,11 +16,13 @@ interface FriendRequestNoti {
 interface NotificationsState {
   requests: FriendRequestNoti[];
   isLoading: boolean;
+  highlightRequestId: number | null;
 
   fetchRequests: () => Promise<void>;
   addRequest: (req: FriendRequestNoti) => void;
   removeRequest: (id: number) => void;
   updateRequestStatus: (requestId: number, status: FriendStatus) => void;
+  setHighlightRequestId: (id: number | null) => void;
   acceptRequest: (id: number) => Promise<void>;
   rejectRequest: (id: number) => Promise<void>;
 }
@@ -28,6 +30,7 @@ interface NotificationsState {
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   requests: [],
   isLoading: true,
+  highlightRequestId: null,
 
   fetchRequests: async () => {
     const token = localStorage.getItem('token');
@@ -38,7 +41,23 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     set({ isLoading: true });
     try {
       const { data } = await axiosInstance.get<FriendRequestNoti[]>('/api/friends/requests/incoming');
-      set({ requests: data });
+      let requests = data;
+
+      // debug: add dummy notifications if enabled
+      if (localStorage.getItem('debugNoti') === '1') {
+        const now = new Date().toISOString();
+        const dummies: FriendRequestNoti[] = Array.from({ length: 20 }).map((_, i) => ({
+          id: 900000 + i,
+          user_id: 1000 + i,
+          username: `dummy_user_${i + 1}`,
+          nickname: `Dummy ${i + 1}`,
+          avatar: null,
+          created_at: now
+        }));
+        requests = [...dummies, ...requests];
+      }
+
+      set({ requests });
     } catch {
       set({ requests: [] });
     } finally {
@@ -72,6 +91,7 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       )
     }));
   },
+  setHighlightRequestId: (id) => set({ highlightRequestId: id }),
 
   acceptRequest: async (id) => {
   try {

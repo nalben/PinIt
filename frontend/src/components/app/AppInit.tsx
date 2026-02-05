@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
-import axios from "axios";
-import { API_URL } from "@/../axiosInstance";
+import axiosInstance from "@/../axiosInstance";
 
 interface User {
   id: number;
@@ -12,28 +11,32 @@ interface User {
 
 const AppInit: React.FC = () => {
   const login = useAuthStore(state => state.login);
+  const logout = useAuthStore(state => state.logout);
 
   useEffect(() => {
-    const storedId = localStorage.getItem("userId");
-    if (!storedId) return;
-
     const fetchUser = async () => {
       try {
-        const res = await axios.get<User>(`${API_URL}/api/users/${storedId}`);
+        const token = localStorage.getItem("token");
+        if (!token) {
+          logout();
+          return;
+        }
+
+        const res = await axiosInstance.get<User>("/api/profile/me");
         const user = res.data;
 
-        if (user && user.id > 0) { // ✅ id должен быть больше 0
+        if (user && user.id > 0) {
           login(user);
         } else {
-          localStorage.removeItem("userId");
+          logout();
         }
       } catch {
-        localStorage.removeItem("userId");
+        logout();
       }
     };
 
     fetchUser();
-  }, [login]);
+  }, [login, logout]);
 
   return null;
 };

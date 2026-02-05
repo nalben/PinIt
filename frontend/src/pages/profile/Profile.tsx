@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import classes from "./Profile.module.scss";
 import axiosInstance, { API_URL } from "../../../axiosInstance";
@@ -12,8 +12,10 @@ import ResetPasswordForm from "@/components/auth/reset/ResetPasswordForm";
 import AuthOnly from "@/components/__general/authonly/Authonly";
 import Edit from '@/assets/icons/monochrome/edit.svg'
 import { useAuthStore } from "@/store/authStore";
-import { connectSocket, disconnectSocket } from "@/services/socketManager";
-// Интерфейсы
+import { connectSocket } from "@/services/socketManager";
+import { useUIStore } from "@/store/uiStore";
+import { useNotificationsStore } from "@/store/notificationsStore";
+// РРЅС‚РµСЂС„РµР№СЃС‹
 interface ProfileData {
   id: number;
   avatar?: string | null;
@@ -37,7 +39,7 @@ interface FriendItem extends ProfileData {
 
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
-// Тип состояния модалки
+// РўРёРї СЃРѕСЃС‚РѕСЏРЅРёСЏ РјРѕРґР°Р»РєРё
 type OpenModal = "edit" | "reset" | null;
 
 const Profile = () => {
@@ -57,8 +59,10 @@ const Profile = () => {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const { user } = useAuthStore();
   const isAuth = Boolean(user);
+  const { openHeaderDropdown } = useUIStore();
+  const { setHighlightRequestId } = useNotificationsStore();
 
-  // Склонение
+  // РЎРєР»РѕРЅРµРЅРёРµ
   const declension = (number: number, titles: [string, string, string]) => {
     const n = Math.abs(number) % 100;
     const n1 = n % 10;
@@ -70,14 +74,14 @@ const Profile = () => {
 
   const safeCopyToClipboard = (text: string) => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      // стандартный способ на HTTPS или localhost
+      // СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№ СЃРїРѕСЃРѕР± РЅР° HTTPS РёР»Рё localhost
       return navigator.clipboard.writeText(text);
     } else {
-      // fallback для HTTP или старых браузеров
+      // fallback РґР»СЏ HTTP РёР»Рё СЃС‚Р°СЂС‹С… Р±СЂР°СѓР·РµСЂРѕРІ
       return new Promise<void>((resolve, reject) => {
         const textarea = document.createElement('textarea');
         textarea.value = text;
-        textarea.style.position = 'fixed'; // чтобы не скроллило страницу
+        textarea.style.position = 'fixed'; // С‡С‚РѕР±С‹ РЅРµ СЃРєСЂРѕР»Р»РёР»Рѕ СЃС‚СЂР°РЅРёС†Сѓ
         textarea.style.top = '-9999px';
         document.body.appendChild(textarea);
         textarea.focus();
@@ -87,7 +91,7 @@ const Profile = () => {
           const successful = document.execCommand('copy');
           document.body.removeChild(textarea);
           if (successful) resolve();
-          else reject(new Error('Не удалось скопировать'));
+          else reject(new Error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ'));
         } catch (err) {
           document.body.removeChild(textarea);
           reject(err);
@@ -97,7 +101,7 @@ const Profile = () => {
   };
 
   const handleShare = (userId: number, username: string) => {
-    // собираем ссылку на текущий сайт
+    // СЃРѕР±РёСЂР°РµРј СЃСЃС‹Р»РєСѓ РЅР° С‚РµРєСѓС‰РёР№ СЃР°Р№С‚
     const profileUrl = `${window.location.origin}/user/${username}`;
     safeCopyToClipboard(profileUrl)
       .then(() => {
@@ -106,7 +110,7 @@ const Profile = () => {
           setShareTextById(prev => ({ ...prev, [userId]: 'Поделиться' }));
         }, 2000);
       })
-      .catch(err => console.error('Ошибка копирования в буфер:', err));
+      .catch(err => console.error('РћС€РёР±РєР° РєРѕРїРёСЂРѕРІР°РЅРёСЏ РІ Р±СѓС„РµСЂ:', err));
   };
 
 
@@ -140,7 +144,7 @@ const Profile = () => {
     }
   }, [profile]);
 
-  // Загрузка профиля
+  // Р—Р°РіСЂСѓР·РєР° РїСЂРѕС„РёР»СЏ
   useEffect(() => {
   const fetchProfileData = async () => {
     try {
@@ -189,14 +193,14 @@ useEffect(() => {
     try {
       const { data } = await axiosInstance.get<FriendItem[]>(`/api/profile/${profile.username}/friends`);
       setFriends(data);
-      // заполняем статусы друзей
+      // Р·Р°РїРѕР»РЅСЏРµРј СЃС‚Р°С‚СѓСЃС‹ РґСЂСѓР·РµР№
       const statuses: Record<number, { status: FriendStatus }> = {};
       data.forEach(f => {
         statuses[f.id] = { status: 'friend' };
       });
       setFriendStatusById(prev => ({ ...prev, ...statuses }));
     } catch (err) {
-      console.error('Ошибка при загрузке друзей', err);
+      console.error('РћС€РёР±РєР° РїСЂРё Р·Р°РіСЂСѓР·РєРµ РґСЂСѓР·РµР№', err);
     }
   };
 
@@ -233,33 +237,36 @@ useEffect(() => {
     }));
   };
   const handleRemoveRequest = (data: { id: number }) => {
-  setFriendStatusById(prev => {
-    const updated = {...prev};
-    for (const key in updated) {
-      if (updated[key].requestId === data.id) {
-        updated[key] = {
-          status: updated[key].status === 'friend' ? 'friend' : 'none'
-        };
+    setFriendStatusById(prev => {
+      const updated = { ...prev };
+      for (const key in updated) {
+        if (updated[key].requestId === data.id) {
+          updated[key] = {
+            status: updated[key].status === 'friend' ? 'friend' : 'none'
+          };
+        }
       }
-    }
-    return updated;
-  });
-  setFriends(prev => prev.map(f => 
-    f.requestId === data.id ? { ...f, friendStatus: 'none', requestId: undefined } : f
-  ));
-};
+      return updated;
+    });
+    setFriends(prev => prev.map(f =>
+      f.requestId === data.id ? { ...f, friendStatus: 'none', requestId: undefined } : f
+    ));
+  };
 
-  connectSocket({
+  const unsubscribe = connectSocket({
     onFriendStatusChange: handleFriendStatusChange,
     onNewRequest: handleNewRequest,
     onRemoveRequest: handleRemoveRequest
   });
-  return () => disconnectSocket();
+  return () => {
+    unsubscribe?.();
+  };
 }, [profile?.id]);
 
 
 
   const profileFriendStatus = profile ? friendStatusById[profile.id]?.status ?? 'none' : 'none';
+  const profileFriendRequestId = profile ? friendStatusById[profile.id]?.requestId : undefined;
 
 const handleFriendAction = async (userId: number) => {
   const current = friendStatusById[userId]?.status ?? 'none';
@@ -381,7 +388,15 @@ const handleFriendAction = async (userId: number) => {
                             text={getButtonText(status)}
                             variant="auth"
                             kind="button"
-                            onClick={() => handleFriendAction(friend.id)}
+                            onClick={() => {
+                              if (status === 'received') {
+                                setIsFriendsOpen(false);
+                                openHeaderDropdown('notifications');
+                                if (friend.requestId) setHighlightRequestId(friend.requestId);
+                                return;
+                              }
+                              handleFriendAction(friend.id);
+                            }}
                           />
                         </div>
                       </div>
@@ -467,7 +482,7 @@ const handleFriendAction = async (userId: number) => {
                           if (!file) return;
 
                           if (!file.type.startsWith('image/')) {
-                            alert('Можно загружать только изображения');
+                            alert('РњРѕР¶РЅРѕ Р·Р°РіСЂСѓР¶Р°С‚СЊ С‚РѕР»СЊРєРѕ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ');
                             e.target.value = '';
                             return;
                           }
@@ -538,8 +553,15 @@ const handleFriendAction = async (userId: number) => {
                   text={getButtonText(profileFriendStatus)}
                   variant="auth"
                   kind="button"
-                  disabled={profileFriendStatus === 'rejected' || profileFriendStatus === 'received'}
-                  onClick={() => handleFriendAction(profile.id)}
+                  disabled={profileFriendStatus === 'rejected'}
+                  onClick={() => {
+                    if (profileFriendStatus === 'received') {
+                      openHeaderDropdown('notifications');
+                      if (profileFriendRequestId) setHighlightRequestId(profileFriendRequestId);
+                      return;
+                    }
+                    handleFriendAction(profile.id);
+                  }}
                 />
               </div>
             </AuthOnly>
@@ -551,3 +573,8 @@ const handleFriendAction = async (userId: number) => {
 };
 
 export default Profile;
+
+
+
+
+

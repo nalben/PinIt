@@ -11,6 +11,7 @@ interface User {
 interface AuthState {
   isAuth: boolean;
   user: User | null;
+  isInitialized: boolean;
   login: (user: User) => void;
   logout: () => void;
 }
@@ -18,8 +19,18 @@ interface AuthState {
 export const useAuthStore = create<AuthState>(set => ({
   isAuth: false,
   user: null,
-  login: user => set({ isAuth: true, user }),
-  logout: () => set({ isAuth: false, user: null }),
+  isInitialized: false,
+  login: user => {
+    localStorage.setItem("userId", String(user.id));
+    localStorage.setItem("username", user.username);
+    set({ isAuth: true, user, isInitialized: true });
+  },
+  logout: () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("userId");
+    localStorage.removeItem("username");
+    set({ isAuth: false, user: null, isInitialized: true });
+  },
 }));
 
 

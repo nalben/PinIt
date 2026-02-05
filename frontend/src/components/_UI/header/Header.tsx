@@ -4,7 +4,6 @@ import { NavLink, useLocation } from 'react-router-dom';
 import Noti from '@/assets/icons/monochrome/noti.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Burger from '@/assets/icons/monochrome/burger.svg';
-import axios from 'axios';
 import axiosInstance, { API_URL } from "@/../axiosInstance";
 import AuthOnly from '@/components/__general/authonly/Authonly';
 import GuestOnly from '@/components/__general/guestonly/Guestonly';
@@ -35,11 +34,13 @@ interface FriendRequestNoti {
 
 const Header = () => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { user, login, logout } = useAuthStore();
+  const { user, login } = useAuthStore();
+  const isAuth = useAuthStore(state => state.isAuth);
+  const isInitialized = useAuthStore(state => state.isInitialized);
   const menuRef = useRef<HTMLElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
   const [notiOpen, setNotiOpen] = useState(false);
-  const { requests, fetchRequests, acceptRequest, rejectRequest } = useNotificationsStore();
+  const { requests, fetchRequests, acceptRequest, rejectRequest, highlightRequestId, setHighlightRequestId } = useNotificationsStore();
   const {
     headerDropdown,
     toggleHeaderDropdown,
@@ -71,8 +72,18 @@ const Header = () => {
   }, []);
 
 useEffect(() => {
-  fetchRequests();      // загружаем текущие заявки
-}, []);
+  if (!isInitialized) return;
+  fetchRequests();
+}, [fetchRequests, isAuth, isInitialized]);
+
+  useEffect(() => {
+    if (!isNotiOpen || !highlightRequestId) return;
+    const el = document.getElementById(`noti-${highlightRequestId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => setHighlightRequestId(null), 600);
+    }
+  }, [isNotiOpen, highlightRequestId, setHighlightRequestId, requests]);
 
   useEffect(() => {
     if (menuOpen) {
@@ -86,37 +97,14 @@ useEffect(() => {
     };
   }, [menuOpen]);
 
-  useEffect(() => {
-  const fetchProfile = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const res = await axios.get<UserProfile>(`${API_URL}/api/profile/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      login({
-        id: res.data.id,
-        username: res.data.username,
-        avatar: res.data.avatar,
-        email: res.data.email
-      });
-    } catch (err) {
-      console.error('Ошибка при получении профиля:', err);
-    }
-  };
-
-  fetchProfile();
-}, [login]);
-
+  
   
 useEffect(() => {
   const updateProfile = async () => {
     try {
       const { data } = await axiosInstance.get<UserProfile>('/api/profile/me');
       login({
-        id: 0, // API не возвращает id, можно заглушку
+        id: data.id,
         username: data.username,
         avatar: data.avatar,
         email: data.email
@@ -201,8 +189,8 @@ const isProfileActive = () => {
                   <DropdownWrapper
                     right
                     noti
-                    isOpen={isNotiOpen}          // <- правильно
-                    onClose={closeHeaderDropdown} // закроется через store
+                    isOpen={isNotiOpen}
+                    onClose={closeHeaderDropdown}
                     closeOnClick={false}
                   >
                     <div className={classes.noti_icon_con} onClick={() => toggleHeaderDropdown('notifications')}>
@@ -214,8 +202,19 @@ const isProfileActive = () => {
                       <span className={classes.empty}>
                         {requests.length === 0 ? 'Нет уведомлений' : 'Уведомления'}
                       </span>
-                      {requests.map(req => (
-                        <div key={req.id} className={classes.noti_item}>
+                      {[...requests]
+                        .sort((a, b) => {
+                          const da = new Date(a.created_at).getTime();
+                          const db = new Date(b.created_at).getTime();
+                          return db - da;
+                        })
+                        .map(req => (
+                        <div
+                          key={req.id}
+                          id={`noti-${req.id}`}
+                          className={classes.noti_item}
+                          data-dropdown-class={highlightRequestId === req.id ? classes.noti_item_active : ''}
+                        >
                           <NavLink
                             to={`/user/${req.username}`}
                             className={classes.noti_user_link}
@@ -318,3 +317,8 @@ const isProfileActive = () => {
 };
 
 export default Header;
+
+
+
+
+

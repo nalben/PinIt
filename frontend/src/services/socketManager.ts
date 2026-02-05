@@ -12,7 +12,7 @@ type Callbacks = {
 
 export const connectSocket = (callbacks?: Callbacks) => {
   const token = localStorage.getItem('token');
-  if (!token) return;
+  if (!token) return () => {};
 
   // создаём сокет ТОЛЬКО если его нет
   if (!socket) {
@@ -21,19 +21,34 @@ export const connectSocket = (callbacks?: Callbacks) => {
   }
 
   // ⚠️ ВАЖНО: подписки добавляем ВСЕГДА
-  if (!callbacks) return;
+  if (!callbacks) return () => {};
+
+  const listeners: Array<[string, (...args: any[]) => void]> = [];
 
   if (callbacks.onFriendsUpdate)
     socket.on('friends:list', callbacks.onFriendsUpdate);
+  if (callbacks.onFriendsUpdate)
+    listeners.push(['friends:list', callbacks.onFriendsUpdate]);
 
   if (callbacks.onFriendStatusChange)
     socket.on('friends:status', callbacks.onFriendStatusChange);
+  if (callbacks.onFriendStatusChange)
+    listeners.push(['friends:status', callbacks.onFriendStatusChange]);
 
   if (callbacks.onNewRequest)
     socket.on('friend_request:new', callbacks.onNewRequest);
+  if (callbacks.onNewRequest)
+    listeners.push(['friend_request:new', callbacks.onNewRequest]);
 
   if (callbacks.onRemoveRequest)
     socket.on('friend_request:removed', callbacks.onRemoveRequest);
+  if (callbacks.onRemoveRequest)
+    listeners.push(['friend_request:removed', callbacks.onRemoveRequest]);
+
+  return () => {
+    if (!socket) return;
+    listeners.forEach(([event, handler]) => socket?.off(event, handler));
+  };
 };
 
 export const disconnectSocket = () => {

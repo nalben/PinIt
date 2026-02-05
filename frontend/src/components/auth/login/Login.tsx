@@ -62,7 +62,8 @@ const LoginForm: React.FC<LoginFormProps> = ({
 
       if (token && id && username) {
         localStorage.setItem("token", token);
-        localStorage.setItem("userId", String(id)); // сохраняем только id
+        localStorage.setItem("userId", String(id));
+        localStorage.setItem("username", username);
         login({ id, username, avatar: res.data.avatar, email: res.data.email });
         window.location.reload();
       }
@@ -138,3 +139,6 @@ const LoginForm: React.FC<LoginFormProps> = ({
 };
 
 export default LoginForm;
+
+
+

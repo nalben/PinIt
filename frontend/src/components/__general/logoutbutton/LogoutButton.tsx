@@ -1,12 +1,13 @@
 import React from 'react';
 import classes from './LogoutButton.module.scss'
 import Arrow from '@/assets/icons/monochrome/back.svg'
+import { useAuthStore } from '@/store/authStore';
 
 const LogoutButton: React.FC = () => {
+  const logout = useAuthStore(state => state.logout);
+
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('userId');
+    logout();
     window.location.href = '/welcome';
   };
 

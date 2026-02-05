@@ -7,7 +7,9 @@ interface Props {
 
 const GuestOnly: React.FC<Props> = ({ children }) => {
   const isAuth = useAuthStore(state => state.isAuth);
+  const isInitialized = useAuthStore(state => state.isInitialized);
 
+  if (!isInitialized) return null;
   if (isAuth) return null;
 
   return children;

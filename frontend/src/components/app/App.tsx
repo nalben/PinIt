@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import classes from './App.module.scss';
 import "@/styles/general.scss";
 import "@/styles/fonts.scss";
@@ -7,38 +7,48 @@ import "@/styles/variables.scss";
 import Header from '../_UI/header/Header';
 import { useNotificationsStore } from '@/store/notificationsStore';
 import { connectSocket, disconnectSocket } from '@/services/socketManager';
+import { useAuthStore } from '@/store/authStore';
 import Appitit from './AppInit'
 
 const Root = () => {
   const { addRequest, removeRequest, updateRequestStatus } = useNotificationsStore();
+  const isAuth = useAuthStore(state => state.isAuth);
+  const isInitialized = useAuthStore(state => state.isInitialized);
 
-useEffect(() => {
-  connectSocket({
-    onNewRequest: addRequest,
-
-    onRemoveRequest: (data) => {
-      const id = Number(data.id ?? data.requestId);
-      if (!isNaN(id)) removeRequest(id);
-    },
-
-    onFriendStatusChange: (data) => {
-      const { requestId, status: rawStatus } = data;
-      if (!requestId) return;
-
-      const validStatuses = ['friend', 'none', 'sent', 'received', 'rejected'] as const;
-      if (!validStatuses.includes(rawStatus as typeof validStatuses[number])) {
-        console.warn('ÐŸÐ¾Ð»ÑƒÑ‡ÐµÐ½ Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ñ‹Ð¹ ÑÑ‚Ð°Ñ‚ÑƒÑ Ð´Ñ€ÑƒÐ¶Ð±Ñ‹:', rawStatus);
-        return;
-      }
-
-      const status = rawStatus as typeof validStatuses[number];
-      updateRequestStatus(requestId, status); // âœ… Ð’ÐžÐ¢ Ð¢Ð£Ð¢
+  useEffect(() => {
+    if (!isInitialized) return;
+    if (!isAuth) {
+      disconnectSocket();
+      return;
     }
-  });
 
-  return () => disconnectSocket();
-}, []);
+    const unsubscribe = connectSocket({
+      onNewRequest: addRequest,
 
+      onRemoveRequest: (data) => {
+        const id = Number(data.id ?? data.requestId);
+        if (!isNaN(id)) removeRequest(id);
+      },
+
+      onFriendStatusChange: (data) => {
+        const { requestId, status: rawStatus } = data;
+        if (!requestId) return;
+
+        const validStatuses = ['friend', 'none', 'sent', 'received', 'rejected'] as const;
+        if (!validStatuses.includes(rawStatus as typeof validStatuses[number])) {
+          console.warn('Ïîëó÷åí íåèçâåñòíûé ñòàòóñ äðóæáû:', rawStatus);
+          return;
+        }
+
+        const status = rawStatus as typeof validStatuses[number];
+        updateRequestStatus(requestId, status);
+      }
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [addRequest, removeRequest, updateRequestStatus, isAuth, isInitialized]);
 
   return (
     <div className={classes.sitecon}>
@@ -52,3 +62,4 @@ useEffect(() => {
 };
 
 export default Root;
+

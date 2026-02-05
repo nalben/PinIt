@@ -114,6 +114,8 @@ const RegisterForm: React.FC = () => {
       });
 
       localStorage.setItem("token", res.data.token);
+      localStorage.setItem("userId", res.data.id.toString());
+      localStorage.setItem("username", res.data.username);
 
       login({
         id: res.data.id,
@@ -236,3 +238,5 @@ const RegisterForm: React.FC = () => {
 };
 
 export default RegisterForm;
+
+

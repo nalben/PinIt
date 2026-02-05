@@ -28,6 +28,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [positionClass, setPositionClass] = useState("");
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const [internalOpen, setInternalOpen] = useState(false);
 
   // используем управляемое состояние, если оно передано
@@ -58,25 +59,52 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     if (!wrapper || !menu) return;
 
     const classes: string[] = [];
-    if (left) classes.push(styles.left);
-    if (right) classes.push(styles.right);
     if (profile) classes.push(styles.profile);
     if (noti) classes.push(styles.noti);
-    if (middle) classes.push(styles.middle);
-    if (!left && !right && !profile && !middle && !noti) classes.push(styles.middle);
+    if (!profile && !noti) {
+      if (left) classes.push(styles.left);
+      if (right) classes.push(styles.right);
+      if (middle) classes.push(styles.middle);
+      if (!left && !right && !middle) classes.push(styles.middle);
+    }
 
     setPositionClass(classes.join(" "));
 
+    if (profile) {
+      // Profile dropdown: always pinned to the right edge of the screen.
+      // Tweak the offset in DevTools via the --dropdown-profile-right-offset custom property.
+      setMenuStyle({
+        right: "calc(0px - var(--dropdown-profile-right-offset, 31px))",
+        left: "auto",
+        transform: "none"
+      });
+      return;
+    }
+
+    if (!noti) {
+      setMenuStyle({});
+      return;
+    }
+
+    // Notifications dropdown: right-aligned to the parent button,
+    // but when the screen is narrow it shifts toward center.
     const wrapperRect = wrapper.getBoundingClientRect();
     const menuWidth = menu.offsetWidth;
-    const menuLeft = wrapperRect.left + menu.offsetLeft;
-    const menuRight = menuLeft + menuWidth;
     const viewportWidth = window.innerWidth;
+    const margin = 8;
 
-    if (menuRight > viewportWidth && !classes.includes(styles.right))
-      setPositionClass(prev => `${prev} ${styles.right}`);
-    if (menuLeft < 0 && !classes.includes(styles.left))
-      setPositionClass(prev => `${prev} ${styles.left}`);
+    let desiredLeft = wrapperRect.right - menuWidth;
+    if (menuWidth + margin * 2 > viewportWidth) {
+      desiredLeft = (viewportWidth - menuWidth) / 2;
+    }
+
+    desiredLeft = Math.min(Math.max(desiredLeft, margin), viewportWidth - menuWidth - margin);
+    const leftWithinWrapper = desiredLeft - wrapperRect.left;
+    setMenuStyle({
+      left: `${Math.round(leftWithinWrapper)}px`,
+      right: "auto",
+      transform: "none"
+    });
   };
 
   const handleClickOutside = (event: MouseEvent) => {
@@ -112,14 +140,24 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
         <div
           ref={dropdownRef}
           className={`${styles.menu} ${positionClass}`}
+          style={menuStyle}
           onClick={handleDropdownClick}
         >
           {React.isValidElement(dropdown) &&
-            React.Children.map(dropdown.props.children, (child, index) => (
-              <div key={index} className={styles.item} onClick={handleItemClick}>
-                {child}
-              </div>
-            ))}
+            React.Children.map(dropdown.props.children, (child, index) => {
+              const extraClass =
+                React.isValidElement(child) &&
+                (child.props as { [key: string]: string })["data-dropdown-class"];
+              return (
+                <div
+                  key={index}
+                  className={`${styles.item} ${extraClass || ""}`}
+                  onClick={handleItemClick}
+                >
+                  {child}
+                </div>
+              );
+            })}
         </div>
       )}
     </div>
