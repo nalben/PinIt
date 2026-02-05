@@ -399,7 +399,7 @@ const handleFriendAction = async (userId: number) => {
                 onClick={() => handleShare(profile.id, profile.username)}
               />
               <Mainbtn
-                text="Редактировать профиль"
+                text="Редактировать"
                 variant="auth"
                 kind="button"
                 onClick={() => setOpenModal("edit")}
