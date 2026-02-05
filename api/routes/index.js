@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 
-const cardsRoutes = require('./cards');
-const authRoutes = require('./auth');
+const cardsRoutes = require('./cardsRouter');
+const authRoutes = require('./authRouter');
 const authMiddleware = require('../middleware/authMiddleware');
-const profileRoutes = require('./profileRoutes');
-const friendsRoutes = require('./friendsRoutes');
-const boardsRoutes = require('./boards');
+const profileRoutes = require('./profileRouter');
+const friendsRoutes = require('./friendsRouter');
+const boardsRoutes = require('./boardsRouter');
 
 router.use('/boards', authMiddleware, boardsRoutes);
 
