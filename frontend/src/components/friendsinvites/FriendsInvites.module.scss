@@ -1,0 +1,83 @@
+.item {
+  font-size: fluid-prop(18, 14, 1920, 320);
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  padding: 10px;
+  transition: all 0.3s;
+  border-top: var(--border);
+}
+
+.userLink {
+  display: flex;
+  align-items: center;
+}
+
+.userLink img,
+.userLink svg {
+  border-radius: 50%;
+  object-fit: cover;
+  color: var(--pink);
+  max-height: fluid-prop(50, 30, 500, 320);
+  min-height: fluid-prop(50, 30, 500, 320);
+  max-width: fluid-prop(50, 30, 500, 320);
+  min-width: fluid-prop(50, 30, 500, 320);
+}
+
+.text {
+  text-wrap: balance;
+}
+
+.name {
+  display: block;
+  cursor: pointer;
+  color: var(--pink);
+  max-width: fluid-prop(140, 90, 1920, 320);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+  align-self: center;
+  margin-left: auto;
+}
+
+.actions button {
+  background: transparent;
+  border: none;
+  display: flex;
+  align-items: center;
+}
+
+.actions button:nth-child(1) {
+  color: rgb(216, 255, 158);
+}
+
+.actions button:nth-child(2) {
+  color: rgb(255, 100, 100);
+}
+
+.actions svg {
+  cursor: pointer;
+  transition: all 0.6s;
+  width: 50px;
+  height: 50px;
+  max-width: 30px;
+  fill: currentColor;
+}
+
+.actions svg:hover {
+  opacity: 0.5;
+}
+
+.item:first-child {
+  border-bottom: none;
+}
+
+.item:hover {
+  background-color: var(--grey10);
+}

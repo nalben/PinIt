@@ -115,3 +115,22 @@ rejectRequest: async (id) => {
   }
 },
 }));
+
+// Dev helper: allow adding fake requests from the browser console.
+// Usage: window.addFakeFriendRequests(3)
+if (typeof window !== 'undefined') {
+  (window as unknown as { addFakeFriendRequests?: (count?: number) => void }).addFakeFriendRequests = (count = 1) => {
+    const now = new Date().toISOString();
+    for (let i = 0; i < count; i += 1) {
+      const id = Date.now() + i;
+      useNotificationsStore.getState().addRequest({
+        id,
+        user_id: 100000 + i,
+        username: `debug_user_${i + 1}`,
+        nickname: `Debug ${i + 1}`,
+        avatar: null,
+        created_at: now
+      });
+    }
+  };
+}

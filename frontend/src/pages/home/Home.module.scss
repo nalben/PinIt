@@ -59,6 +59,27 @@
         grid-template-columns: 1fr 1fr;
     }
 }
+.friends_invites_container{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 0 !important;
+    & h2{
+        padding-top: fluid-prop(20, 10, 1920, 320);
+        padding-left: fluid-prop(20, 10, 1920, 320);
+    }
+}
+.friends_invites_list{
+    display: flex;
+    flex-direction: column;
+}
+
+.friends_invites_list_epmty{
+    display: flex;
+    flex-direction: column;
+    padding: fluid-prop(20, 10, 1920, 320);
+    gap: 1rem;
+}
 .todo_container{
     grid-column: auto;
     @media (min-width:850px) {
