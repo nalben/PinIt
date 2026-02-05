@@ -261,6 +261,74 @@
     }
 }
 
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--skeleton-base);
+}
+
+.skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: var(--skeleton-shimmer);
+    animation: profile-shimmer 1.2s infinite;
+}
+
+.skeleton_avatar {
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+}
+
+.skeleton_line {
+    width: min(250px, 70vw);
+    height: fluid-prop(34, 26, 1920, 320);
+    border-radius: 999px;
+}
+
+.skeleton_line_sm {
+    width: min(205px, 80vw);
+    margin-top: 1rem;
+    height: fluid-prop(22, 18, 1920, 320);
+    border-radius: 999px;
+}
+
+.skeleton_line_xs {
+    width: min(100px, 60vw);
+    height: fluid-prop(22, 18, 1920, 320);
+    border-radius: 999px;
+}
+
+.skeleton_icon {
+    width: fluid-prop(30, 25, 1920, 320);
+    height: fluid-prop(30, 25, 1920, 320);
+    border-radius: 6px;
+}
+
+.skeleton_row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.skeleton_btn {
+    width: 100%;
+    max-width: min(70%, 200px);
+    height: fluid-prop(50, 40, 1920, 320);
+    border-radius: 10px;
+}
+
+@keyframes profile-shimmer {
+    0% {
+        transform: translateX(-150%);
+    }
+    100% {
+        transform: translateX(150%);
+    }
+}
+
 .edit_modal{
     max-width: 400px;
     display: flex;

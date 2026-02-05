@@ -1,2 +1,1 @@
-import React from 'react';
-export {LazyWelcome as Welcome} from './Welcome.lazy'
+export { default as Welcome } from './Welcome';

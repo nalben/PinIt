@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useLayoutEffect, useState } from "react";
 import styles from "./DropdownWrapper.module.scss";
 
 type DropdownWrapperProps = {
@@ -120,6 +120,10 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       else setInternalOpen(false);
     }
   };
+
+  useLayoutEffect(() => {
+    if (open) updatePosition();
+  }, [left, right, middle, profile, noti, open]);
 
   useEffect(() => {
     updatePosition();

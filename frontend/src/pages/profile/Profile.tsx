@@ -15,6 +15,7 @@ import { useAuthStore } from "@/store/authStore";
 import { connectSocket } from "@/services/socketManager";
 import { useUIStore } from "@/store/uiStore";
 import { useNotificationsStore } from "@/store/notificationsStore";
+import ProfileSkeleton from "./ProfileSkeleton";
 // РРЅС‚РµСЂС„РµР№СЃС‹
 interface ProfileData {
   id: number;
@@ -316,7 +317,7 @@ const handleFriendAction = async (userId: number) => {
     return '';
   };
 
-  if (isLoading) return <div className={classes.profile_loading}><p>Загрузка...</p></div>;
+  if (isLoading) return <ProfileSkeleton />;
   if (error === "NOT_FOUND") return (
     <div className={classes.profile_not_found}>
       <h1>Пользователь <span>{username}</span> не найден</h1>

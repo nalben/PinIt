@@ -1,2 +1,1 @@
-import React from 'react';
-export {LazyProfile as Home} from './Profile.lazy'
+export { default as Profile } from './Profile';

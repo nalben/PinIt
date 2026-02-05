@@ -8,6 +8,13 @@
     --blue20: #1c284c;
     --cyan: #CDF8FF;
     --pink: #ffb6ed;
+    --skeleton-base: #e7cddf;
+    --skeleton-shimmer: linear-gradient(
+        90deg,
+        rgba(255, 182, 237, 0) 0%,
+        rgba(255, 182, 237, 0.8) 50%,
+        rgba(255, 182, 237, 0) 100%
+    );
     --error: rgb(255, 82, 82);
     --border: 1px solid var(--grey10);
 }

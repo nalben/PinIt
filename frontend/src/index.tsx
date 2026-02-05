@@ -1,20 +1,14 @@
 import { createRoot } from "react-dom/client";
 import App from './components/app/App';
 import { createBrowserRouter, matchPath, Navigate, RouterProvider, useLocation } from "react-router-dom";
-import { Suspense, useEffect } from "react";
-import { LazyHome } from "@/pages/home/Home.lazy";
-import HomeSkeleton from "./pages/home/HomeSkeleton";
-import WelcomeSkeleton from "./pages/welcome/WelcomeSkeleton";
-import { LazyWelcome } from "./pages/welcome/Welcome.lazy";
+import { useEffect } from "react";
+import Home from "@/pages/home/Home";
+import Welcome from "./pages/welcome/Welcome";
 import PublicRoute from "./components/__general/publicroute/PublicRoute";
-import { LazyProfile } from "./pages/profile/Profile.lazy";
-import ProfileSkeleton from "./pages/profile/ProfileSkeleton";
-import ProtectedRoute from "./components/__general/protectedroute/ProtectedRoute";
+import Profile from "./pages/profile/Profile";
 import ProfileRedirect from "./components/__general/profileredirect/ProfileRedirect";
-import { LazyTodo } from "./pages/todo/Todo.Lazy";
-import TodoSkeleton from "./pages/todo/TodoSkeleton";
-import { LazySpaces } from "./pages/spaces/Spaces.Lazy";
-import SpacesSkeleton from "./pages/spaces/SpacesSkeleton";
+import Todo from "./pages/todo/Todo";
+import Spaces from "./pages/spaces/Spaces";
 
 const useDocumentTitle = (defaultTitle = "PinIt") => {
   const location = useLocation();
@@ -62,7 +56,7 @@ const router = createBrowserRouter([
         index: true,
         element: (
           <PublicRoute>
-            <Suspense fallback={<WelcomeSkeleton />}><LazyWelcome /></Suspense>
+            <Welcome />
           </PublicRoute>
         )
       },
@@ -70,7 +64,7 @@ const router = createBrowserRouter([
         path: "/welcome",
         element: (
           <PublicRoute>
-            <Suspense fallback={<WelcomeSkeleton />}><LazyWelcome /></Suspense>
+            <Welcome />
           </PublicRoute>
         )
       },
@@ -84,35 +78,19 @@ const router = createBrowserRouter([
       },
       {
         path: "/user/:username",
-        element: (
-          <Suspense fallback={<ProfileSkeleton />}>
-            <LazyProfile />
-          </Suspense>
-        )
+        element: <Profile />
       },
       {
         path: "/home",
-        element: (
-          <Suspense fallback={<HomeSkeleton />}>
-            <LazyHome />
-          </Suspense>
-        )
+        element: <Home />
       },
       {
         path: "/todo",
-        element: (
-          <Suspense fallback={<TodoSkeleton />}>
-            <LazyTodo />
-          </Suspense>
-        )
+        element: <Todo />
       },
       {
         path: "/spaces",
-        element: (
-          <Suspense fallback={<SpacesSkeleton />}>
-            <LazySpaces />
-          </Suspense>
-        )
+        element: <Spaces />
       },
       {
         path: "*",

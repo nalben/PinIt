@@ -1,2 +1,1 @@
-import React from 'react';
-export {LazyTodo as Todo} from './Todo.Lazy'
+export { default as Todo } from './Todo';

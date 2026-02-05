@@ -40,6 +40,7 @@ const Header = () => {
   const menuRef = useRef<HTMLElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
   const [notiOpen, setNotiOpen] = useState(false);
+  const [isAvatarLoaded, setIsAvatarLoaded] = useState(false);
   const { requests, fetchRequests, acceptRequest, rejectRequest, highlightRequestId, setHighlightRequestId } = useNotificationsStore();
   const {
     headerDropdown,
@@ -49,6 +50,8 @@ const Header = () => {
 
   const isProfileOpen = headerDropdown === 'profile';
   const isNotiOpen = headerDropdown === 'notifications';
+  const isProfileLoading = !isInitialized;
+  const showAvatarSkeleton = isProfileLoading || (!!user?.avatar && !isAvatarLoaded);
     
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
@@ -120,6 +123,10 @@ useEffect(() => {
     window.removeEventListener('profile-updated', updateProfile);
   };
 }, [login]);
+
+  useEffect(() => {
+    setIsAvatarLoaded(false);
+  }, [user?.avatar]);
 
   const location = useLocation();
 const isProfileActive = () => {
@@ -263,14 +270,19 @@ const isProfileActive = () => {
                   onClose={closeHeaderDropdown}
                 >
                   <div className={classes.profile} onClick={() => toggleHeaderDropdown('profile')}>
+                    {showAvatarSkeleton ? (
+                      <div className={`${classes.skeleton} ${classes.skeleton_avatar_sm}`} />
+                    ) : null}
                     {user?.avatar ? (
                       <img
                         src={user.avatar.startsWith('/uploads/') ? `${API_URL}${user.avatar}` : `${API_URL}/uploads/${user.avatar}`}
                         alt="Аватар"
-                        className={classes.avatar}
+                        className={`${classes.avatar} ${showAvatarSkeleton ? classes.avatar_preload : ''}`}
+                        onLoad={() => setIsAvatarLoaded(true)}
+                        onError={() => setIsAvatarLoaded(true)}
                       />
                     ) : (
-                      <Default />
+                      !isProfileLoading && <Default />
                     )}
                     <span className={classes.profile_header_top}>
                       {user?.username || 'Загрузка...'}
@@ -279,19 +291,28 @@ const isProfileActive = () => {
                   <div>
                     <NavLink to="/profile" onClick={closeHeaderDropdown}>
                       <div className={classes.profile_button}>
+                        {showAvatarSkeleton ? (
+                          <div className={`${classes.skeleton} ${classes.skeleton_avatar_md}`} />
+                        ) : null}
                         {user?.avatar ? (
                           <img
                             src={user.avatar.startsWith('/uploads/') ? `${API_URL}${user.avatar}` : `${API_URL}/uploads/${user.avatar}`}
                             alt="Аватар"
-                            className={classes.avatar}
+                            className={`${classes.avatar} ${showAvatarSkeleton ? classes.avatar_preload : ''}`}
+                            onLoad={() => setIsAvatarLoaded(true)}
+                            onError={() => setIsAvatarLoaded(true)}
                           />
                         ) : (
-                          <Default />
+                          !isProfileLoading && <Default />
                         )}
                         <div className={classes.profile_name_drop_con}>
                           <span className={classes.name_drop}>{user?.username || 'Загрузка...'}</span>
                           <div className={classes.email_drop}>
-                            <span className={classes.email_drop_item}>{user?.email}</span>
+                            {user?.email ? (
+                              <span className={classes.email_drop_item}>{user.email}</span>
+                            ) : (
+                              <span className={`${classes.skeleton} ${classes.skeleton_line_xs}`} />
+                            )}
                             <Arrow />
                           </div>
                         </div>
@@ -317,6 +338,11 @@ const isProfileActive = () => {
 };
 
 export default Header;
+
+
+
+
+
 
 
 

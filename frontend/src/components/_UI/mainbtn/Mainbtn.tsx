@@ -6,7 +6,7 @@ export type ButtonType = 'button' | 'submit' | 'reset';
 export type Variant = 'auth' | 'none' | 'mini';             // можно добавлять другие варианты
 export type Type = 'button' | 'link' | 'navlink';
 
-interface MainbtnProps {
+export interface MainbtnProps {
   text: string;
   variant?: Variant;
   kind?: Type;
