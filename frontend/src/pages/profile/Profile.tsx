@@ -145,6 +145,34 @@ const Profile = () => {
     }
   }, [profile]);
 
+  const refreshFriendCount = async () => {
+    if (!username) return;
+    try {
+      const { data } =
+        await axiosInstance.get<{ friend_count: number }>(`/api/profile/${username}/friends-count`);
+      setFriendCount(data.friend_count);
+    } catch (err) {
+      console.error('Ошибка при обновлении количества друзей', err);
+    }
+  };
+
+  const refreshFriendsList = async () => {
+    if (!profile?.isOwner) return;
+    try {
+      const { data } =
+        await axiosInstance.get<FriendItem[]>(`/api/profile/${profile.username}/friends`);
+      setFriends(data);
+      // заполняем статусы друзей
+      const statuses: Record<number, { status: FriendStatus }> = {};
+      data.forEach(f => {
+        statuses[f.id] = { status: 'friend' };
+      });
+      setFriendStatusById(prev => ({ ...prev, ...statuses }));
+    } catch (err) {
+      console.error('Ошибка при обновлении списка друзей', err);
+    }
+  };
+
   // Р—Р°РіСЂСѓР·РєР° РїСЂРѕС„РёР»СЏ
   useEffect(() => {
   const fetchProfileData = async () => {
@@ -153,11 +181,7 @@ const Profile = () => {
         await axiosInstance.get<ProfileData>(`/api/profile/${username}`);
       setProfile(data);
 
-      const { data: countData } =
-        await axiosInstance.get<{ friend_count: number }>(
-          `/api/profile/${username}/friends-count`
-        );
-      setFriendCount(countData.friend_count);
+      await refreshFriendCount();
 
       if (!data.isOwner && isAuth) {
         const { data: statusData } =
@@ -190,22 +214,7 @@ const Profile = () => {
 useEffect(() => {
   if (!profile?.id || !profile.isOwner) return;
 
-  const fetchFriends = async () => {
-    try {
-      const { data } = await axiosInstance.get<FriendItem[]>(`/api/profile/${profile.username}/friends`);
-      setFriends(data);
-      // Р·Р°РїРѕР»РЅСЏРµРј СЃС‚Р°С‚СѓСЃС‹ РґСЂСѓР·РµР№
-      const statuses: Record<number, { status: FriendStatus }> = {};
-      data.forEach(f => {
-        statuses[f.id] = { status: 'friend' };
-      });
-      setFriendStatusById(prev => ({ ...prev, ...statuses }));
-    } catch (err) {
-      console.error('РћС€РёР±РєР° РїСЂРё Р·Р°РіСЂСѓР·РєРµ РґСЂСѓР·РµР№', err);
-    }
-  };
-
-  fetchFriends();
+  refreshFriendsList();
 }, [profile?.id, profile?.isOwner]);
 
 useEffect(() => {
@@ -230,6 +239,16 @@ useEffect(() => {
           : f
       )
     );
+
+    const shouldUpdateCounts = profile?.isOwner || profile?.id === data.userId;
+    if (shouldUpdateCounts) {
+      refreshFriendCount();
+      if (profile?.isOwner && data.status === 'friend') {
+        // только при подтверждении дружбы подтягиваем новый список,
+        // чтобы при удалении друг оставался в списке с кнопкой "добавить"
+        refreshFriendsList();
+      }
+    }
   };
   const handleNewRequest = (data: any) => {
     setFriendStatusById(prev => ({

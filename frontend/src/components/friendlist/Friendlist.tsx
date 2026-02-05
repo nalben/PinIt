@@ -6,6 +6,7 @@ import classes from './Friendlist.module.scss';
 import { useFriendsStore } from "@/store/friendsStore";
 import { useAuthStore } from "@/store/authStore";
 import { API_URL } from "../../../axiosInstance";
+import { connectSocket } from "@/services/socketManager";
 
 const declension = (number: number, titles: [string, string, string]) => {
   const n = Math.abs(number) % 100;
@@ -44,6 +45,18 @@ useEffect(() => {
     fetchFriends(user.id);
   }
 }, [user, fetchFriends]);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = connectSocket({
+      onFriendStatusChange: () => {
+        fetchFriends(user.id);
+      }
+    });
+    return () => {
+      unsubscribe?.();
+    };
+  }, [user, fetchFriends]);
 
 
   useEffect(() => {
