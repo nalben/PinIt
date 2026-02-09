@@ -3,12 +3,15 @@ import classes from "./Profile.module.scss";
 
 type ProfileSkeletonProps = {
   isOwner: boolean;
+  isHeart?: boolean;
 };
 
-const ProfileSkeleton = ({ isOwner }: ProfileSkeletonProps) => {
+const ProfileSkeleton = ({ isOwner, isHeart = false }: ProfileSkeletonProps) => {
   return isOwner ? (
     <div className={classes.profile}>
-      <div className={`${classes.avatar_con} ${classes.skeleton} ${classes.skeleton_avatar}`} />
+      <div
+        className={`${classes.avatar_con} ${isHeart ? classes.heart : ''} ${classes.skeleton} ${classes.skeleton_avatar}`}
+      />
       <div className={classes.profile_username}>
         <div className={`${classes.skeleton} ${classes.skeleton_line}`} />
         <div className={`${classes.skeleton} ${classes.skeleton_line_sm}`} />
@@ -27,7 +30,9 @@ const ProfileSkeleton = ({ isOwner }: ProfileSkeletonProps) => {
     </div>
   ) : (
     <div className={classes.profile}>
-      <div className={`${classes.avatar_con} ${classes.skeleton} ${classes.skeleton_avatar}`} />
+      <div
+        className={`${classes.avatar_con} ${isHeart ? classes.heart : ''} ${classes.skeleton} ${classes.skeleton_avatar}`}
+      />
       <div className={classes.profile_username}>
         <div className={`${classes.skeleton} ${classes.skeleton_line}`} />
         <div className={`${classes.skeleton} ${classes.skeleton_line_sm}`} />
