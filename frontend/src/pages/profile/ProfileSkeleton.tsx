@@ -10,7 +10,7 @@ const ProfileSkeleton = ({ isOwner, isHeart = false }: ProfileSkeletonProps) => 
   return isOwner ? (
     <div className={classes.profile}>
       <div
-        className={`${classes.avatar_con} ${isHeart ? classes.heart : ''} ${classes.skeleton} ${classes.skeleton_avatar}`}
+        className={`${classes.avatar_con} ${classes.skeleton} ${classes.skeleton_avatar} ${isHeart ? classes.heart : ''}`}
       />
       <div className={classes.profile_username}>
         <div className={`${classes.skeleton} ${classes.skeleton_line}`} />
@@ -31,7 +31,7 @@ const ProfileSkeleton = ({ isOwner, isHeart = false }: ProfileSkeletonProps) => 
   ) : (
     <div className={classes.profile}>
       <div
-        className={`${classes.avatar_con} ${isHeart ? classes.heart : ''} ${classes.skeleton} ${classes.skeleton_avatar}`}
+        className={`${classes.avatar_con} ${classes.skeleton} ${classes.skeleton_avatar} ${isHeart ? classes.heart : ''}`}
       />
       <div className={classes.profile_username}>
         <div className={`${classes.skeleton} ${classes.skeleton_line}`} />

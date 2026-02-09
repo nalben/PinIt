@@ -49,7 +49,6 @@ const Profile = () => {
   const [error, setError] = useState<ProfileError | null>(null);
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [skeletonProfileId, setSkeletonProfileId] = useState<number | null>(null);
   const [isFriendsOpen, setIsFriendsOpen] = useState(false);
   const [friends, setFriends] = useState<FriendItem[]>([]);
   const [friendStatusById, setFriendStatusById] = useState<Record<number, { status: FriendStatus; requestId?: number }>>({});
@@ -183,7 +182,6 @@ const Profile = () => {
       setError(null);
       setProfile(null);
       setFriendCount(null);
-      setSkeletonProfileId(null);
       setFriends([]);
       setFriendStatusById({});
       setShareTextById({});
@@ -191,7 +189,6 @@ const Profile = () => {
       const { data } =
         await axiosInstance.get<ProfileData>(`/api/profile/${username}`);
       setProfile(data);
-      setSkeletonProfileId(data.id);
 
       await refreshFriendCount();
 
@@ -350,7 +347,8 @@ const handleFriendAction = async (userId: number) => {
 
   const storedUsername = typeof window !== 'undefined' ? localStorage.getItem('username') : null;
   const isOwnerSkeleton = Boolean(username && (user?.username ?? storedUsername) === username);
-  if (isLoading) return <ProfileSkeleton isOwner={isOwnerSkeleton} isHeart={skeletonProfileId === 20} />;
+  const isHeartUser = username === 'phenomenon';
+  if (isLoading) return <ProfileSkeleton isOwner={isOwnerSkeleton} isHeart={isHeartUser} />;
   if (error === "NOT_FOUND") return (
     <div className={classes.profile_not_found}>
       <h1>Пользователь <span>{username}</span> не найден</h1>
@@ -370,10 +368,16 @@ const handleFriendAction = async (userId: number) => {
   return (
     <div className={classes.profile}>
       <div 
-        className={`${classes.avatar_con} ${profile.id === 20 ? classes.heart : ''}`}
+        className={`${classes.avatar_con} ${profile.username === 'phenomenon' ? classes.heart : ''}`}
       >
       {avatarSrc ? (
-        <img src={avatarSrc} alt="avatar" width={200} height={200} />
+        <img
+          src={avatarSrc}
+          alt="avatar"
+          width={200}
+          height={200}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }}
+        />
       ) : (
         <Default />
       )}
