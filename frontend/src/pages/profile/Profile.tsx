@@ -58,8 +58,7 @@ const Profile = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [openModal, setOpenModal] = useState<OpenModal>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const { user } = useAuthStore();
-  const isAuth = Boolean(user);
+  const { user, isAuth, isInitialized } = useAuthStore();
   const { openHeaderDropdown } = useUIStore();
   const { setHighlightRequestId } = useNotificationsStore();
 
@@ -175,8 +174,18 @@ const Profile = () => {
 
   // Р—Р°РіСЂСѓР·РєР° РїСЂРѕС„РёР»СЏ
   useEffect(() => {
+  if (!isInitialized) return;
+
   const fetchProfileData = async () => {
     try {
+      setIsLoading(true);
+      setError(null);
+      setProfile(null);
+      setFriendCount(null);
+      setFriends([]);
+      setFriendStatusById({});
+      setShareTextById({});
+
       const { data } =
         await axiosInstance.get<ProfileData>(`/api/profile/${username}`);
       setProfile(data);
@@ -210,7 +219,7 @@ const Profile = () => {
   };
 
   if (username) fetchProfileData();
-}, [username, isAuth]);
+}, [username, isAuth, isInitialized]);
 useEffect(() => {
   if (!profile?.id || !profile.isOwner) return;
 
@@ -336,7 +345,8 @@ const handleFriendAction = async (userId: number) => {
     return '';
   };
 
-  const isOwnerSkeleton = Boolean(user && username && user.username === username);
+  const storedUsername = typeof window !== 'undefined' ? localStorage.getItem('username') : null;
+  const isOwnerSkeleton = Boolean(username && (user?.username ?? storedUsername) === username);
   if (isLoading) return <ProfileSkeleton isOwner={isOwnerSkeleton} />;
   if (error === "NOT_FOUND") return (
     <div className={classes.profile_not_found}>
@@ -360,7 +370,7 @@ const handleFriendAction = async (userId: number) => {
         className={`${classes.avatar_con} ${profile.id === 20 ? classes.heart : ''}`}
       >
       {avatarSrc ? (
-        <img src={avatarSrc} alt="avatar" />
+        <img src={avatarSrc} alt="avatar" width={200} height={200} />
       ) : (
         <Default />
       )}

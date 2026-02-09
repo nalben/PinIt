@@ -32,12 +32,15 @@
     border-radius: 50%;
     overflow: hidden;
     display: flex;
+    width: 200px;
+    height: 200px;
+    flex: 0 0 auto;
     & img, svg, g{
         object-fit: cover;
         object-position: center;
-        max-height: 200px;
-        min-height: 200px;
-        aspect-ratio: 1 / 1;
+        width: 100%;
+        height: 100%;
+        display: block;
     }
 }
 .profile_username{
