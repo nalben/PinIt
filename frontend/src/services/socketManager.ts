@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { API_URL } from '@/../axiosInstance';
+import { API_URL } from '@/api/axiosInstance';
 
 let socket: Socket | null = null;
 

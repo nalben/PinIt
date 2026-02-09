@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { LoginScheme } from "@/schemas/LoginScheme";
 import { InferType } from "yup";
-import { API_URL } from '@/../axiosInstance';
+import { API_URL } from '@/api/axiosInstance';
 import classes from './Login.module.scss';
 import Close from '@/assets/icons/monochrome/close.svg';
 import Open from '@/assets/icons/monochrome/open.svg';

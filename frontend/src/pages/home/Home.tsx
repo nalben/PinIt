@@ -4,12 +4,11 @@ import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import Lastdesks from '@/components/lastdesks/Lastdesks';
 import FriendsList from '@/components/friendlist/Friendlist';
 import FriendsInvites from '@/components/friendsinvites/FriendsInvites';
-import { useAuthStore } from '@/store/authStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
 
 const Home = () => {
-    const isAuth = useAuthStore(state => state.isAuth);
     const { requests, isLoading } = useNotificationsStore();
+    const requestsCount = Array.isArray(requests) ? requests.length : 0;
 
     return (
         <div className={classes.home}>
@@ -22,60 +21,61 @@ const Home = () => {
                         text='Создать доску'
                     />
                 </section>
-
-                <div className={classes.left}>
+                <div className={classes.lastdesks_container}>
                     <Lastdesks />
+                </div>
+                <div className={classes.friends_container}>
                     <FriendsList />
                 </div>
-                <div className={classes.right}>
-                    <section className={classes.friends_invites_container}>
-                        <h2>Приглашения в друзья:</h2>
+                <section className={classes.friends_invites_container}>
+                    <h2>Приглашения в друзья:</h2>
+                    {(isLoading || requestsCount > 0) && (
                         <div className={classes.friends_invites_list}>
                             <FriendsInvites />
                         </div>
-                        {isAuth && !isLoading && requests.length === 0 && (
-                            <div className={classes.friends_invites_list_epmty}>
-                                <h3>Заявок в друзья не найдено</h3>
-                                <Mainbtn
-                                    variant='mini'
-                                    text='пригласить в друзья'
-                                />
-                            </div>
-                        )}
-                    </section>
-                    <section className={classes.desks_invites_container}>
-                        <h2>Приглашения в друзья:</h2>
-                        <div className={classes.desks_invites_list}>
-                            <div className={classes.desks_invites_item}>
-                                img name time
-                            </div>
-                        </div>
-                        of if epmty
-                        <div className={classes.desks_invites_list_epmty}>
-                            <h3>Пришлашений в доски не найдено</h3>
+                    )}
+                    {!isLoading && requestsCount === 0 && (
+                        <div className={classes.friends_invites_list_epmty}>
+                            <h3>Заявок в друзья не найдено</h3>
                             <Mainbtn
                                 variant='mini'
-                                text='Создать свою доску'
+                                text='пригласить в друзья'
                             />
                         </div>
-                    </section>
-                    <section className={classes.todo_container}>
-                        <h2>Ваши ToDo листы:</h2>
-                        <div className={classes.todo_items}>
-                            name open
+                    )}
+                </section>
+                <section className={classes.desks_invites_container}>
+                    <h2>Приглашения в доски:</h2>
+                    <div className={classes.desks_invites_list}>
+                        <div className={classes.desks_invites_item}>
+                            img name time
                         </div>
-                        or if empty
-                        <div className={classes.todo_items_empty}>
-                            <h3>
-                                ToDo листов не найдено
-                            </h3>
-                            <Mainbtn
-                                text='Создать лист'
-                                variant='mini'
-                            />
-                        </div>
-                    </section>
-                </div>
+                    </div>
+                    of if epmty
+                    <div className={classes.desks_invites_list_epmty}>
+                        <h3>Пришлашений в доски не найдено</h3>
+                        <Mainbtn
+                            variant='mini'
+                            text='Создать свою доску'
+                        />
+                    </div>
+                </section>
+                <section className={classes.todo_container}>
+                    <h2>Ваши ToDo листы:</h2>
+                    <div className={classes.todo_items}>
+                        name open
+                    </div>
+                    or if empty
+                    <div className={classes.todo_items_empty}>
+                        <h3>
+                            ToDo листов не найдено
+                        </h3>
+                        <Mainbtn
+                            text='Создать лист'
+                            variant='mini'
+                        />
+                    </div>
+                </section>
             </main>
         </div>
         

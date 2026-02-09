@@ -4,7 +4,7 @@ import { useForm, SubmitHandler } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import axios from "axios";
-import { API_URL } from '@/../axiosInstance';
+import { API_URL } from '@/api/axiosInstance';
 import classes from "./ResetPasswordForm.module.scss";
 import { useLocation, useNavigate } from "react-router-dom";
 

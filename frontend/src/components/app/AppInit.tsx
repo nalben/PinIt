@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useAuthStore } from "@/store/authStore";
-import axiosInstance from "@/../axiosInstance";
+import axiosInstance from "@/api/axiosInstance";
 
 interface User {
   id: number;

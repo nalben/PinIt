@@ -2,6 +2,7 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    height: 100%;
 }
 .friends_list{
     display: flex;
@@ -62,6 +63,7 @@
         grid-area: button;
         align-self: center;
         width: 100%;
+        justify-content: center;
     }
     & a:nth-child(4){
         margin-top: 1rem;

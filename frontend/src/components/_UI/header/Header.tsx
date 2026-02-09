@@ -4,7 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import Noti from '@/assets/icons/monochrome/noti.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Burger from '@/assets/icons/monochrome/burger.svg';
-import axiosInstance, { API_URL } from "@/../axiosInstance";
+import axiosInstance, { API_URL } from "@/api/axiosInstance";
 import AuthOnly from '@/components/__general/authonly/Authonly';
 import GuestOnly from '@/components/__general/guestonly/Guestonly';
 import AuthTrigger from '@/components/auth/AuthTrigger';
@@ -42,6 +42,7 @@ const Header = () => {
   const [notiOpen, setNotiOpen] = useState(false);
   const [isAvatarLoaded, setIsAvatarLoaded] = useState(false);
   const { requests, fetchRequests, acceptRequest, rejectRequest, highlightRequestId, setHighlightRequestId } = useNotificationsStore();
+  const requestsCount = requests.length;
   const {
     headerDropdown,
     toggleHeaderDropdown,
@@ -76,6 +77,7 @@ const Header = () => {
 
 useEffect(() => {
   if (!isInitialized) return;
+  if (requestsCount > 0) return;
   fetchRequests();
 }, [fetchRequests, isAuth, isInitialized]);
 

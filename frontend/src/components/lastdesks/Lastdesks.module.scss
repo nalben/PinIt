@@ -1,0 +1,73 @@
+.desks_container{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    height: 100%;
+}
+.desks_list{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    overflow-y: auto;
+}
+.desks_item{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    & img, svg{
+        max-width: 100%;
+        max-height: 90px;
+        min-width: 100%;
+        min-height: 90px;
+        object-fit: cover;
+        object-position: center;
+    }
+    & svg{
+        background-color: var(--grey10);
+        padding-block: 3px;
+    }
+    & h2{
+        max-width: fluid-prop(300,200,1920,320);
+    }
+    & p{
+        max-width: 500px;
+        text-wrap: balance;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
+    }
+}
+.board_info_con{
+    width: 100%;
+    & h3{
+        color: var(--pink);
+        font-size: fluid-prop(24,18,1920,320);
+    }
+    & p{
+        font-size: fluid-prop(28,14,1920,320);
+    }
+}
+.desks_empty{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+@media (min-width:540px) {
+    .desks_item{
+        flex-direction: row;
+        & img, svg{
+            max-width: 80px;
+            max-height: 80px;
+            min-width: 80px;
+            min-height: 80px;
+        }
+        & svg{
+            background-color: transparent;
+            padding: 0;
+        }
+    }
+}

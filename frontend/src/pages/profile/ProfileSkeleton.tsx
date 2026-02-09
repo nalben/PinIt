@@ -1,8 +1,11 @@
 import React from "react";
 import classes from "./Profile.module.scss";
-import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 
-const ProfileSkeleton = () => {
+type ProfileSkeletonProps = {
+  isOwner: boolean;
+};
+
+const ProfileSkeleton = ({ isOwner }: ProfileSkeletonProps) => {
   return (
     <div className={classes.profile}>
       <div className={`${classes.avatar_con} ${classes.skeleton} ${classes.skeleton_avatar}`} />
@@ -13,7 +16,9 @@ const ProfileSkeleton = () => {
           <div className={`${classes.skeleton} ${classes.skeleton_icon}`} />
           <div className={`${classes.skeleton} ${classes.skeleton_line_xs}`} />
         </div>
+        {isOwner && (
           <div className={`${classes.skeleton} ${classes.skeleton_line_xs}`} />
+        )}
       </div>
       <div className={classes.friends}>
         <div className={classes.interact_btns}>

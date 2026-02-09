@@ -1,45 +1,15 @@
 import React, { useEffect } from 'react';
-import axiosInstance, { API_URL } from '@/../axiosInstance';
+import { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '../_UI/mainbtn/Mainbtn';
-import classes from '../../pages/home/Home.module.scss';
+import classes from './Lastdesks.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
-import { create } from 'zustand';
+import { useBoardsStore } from '@/store/boardsStore';
 
 // Zustand store для последних досок
-interface Board {
-  id: number;
-  title: string;
-  description?: string | null;
-  created_at: string;
-  last_visited_at?: string | null;
-  image?: string | null;
-}
-
-interface BoardsState {
-  recentBoards: Board[];
-  isLoading: boolean;
-  loadBoards: () => Promise<void>;
-}
-
-export const useBoardsStore = create<BoardsState>((set) => ({
-  recentBoards: [],
-  isLoading: false,
-  loadBoards: async () => {
-    set({ isLoading: true });
-    try {
-      const { data } = await axiosInstance.get<Board[]>('/api/boards/recent');
-      set({ recentBoards: Array.isArray(data) ? data : [] });
-    } catch (err) {
-      console.error(err);
-      set({ recentBoards: [] });
-    } finally {
-      set({ isLoading: false });
-    }
-  },
-}));
-
 const Lastdesks: React.FC = () => {
-  const { recentBoards, isLoading, loadBoards } = useBoardsStore();
+  const recentBoards = useBoardsStore(state => state.recentBoards);
+  const isLoading = useBoardsStore(state => state.isLoading);
+  const loadBoards = useBoardsStore(state => state.loadBoards);
 
   useEffect(() => {
     loadBoards();

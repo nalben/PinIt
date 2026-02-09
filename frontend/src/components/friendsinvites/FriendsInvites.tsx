@@ -4,18 +4,20 @@ import classes from './FriendsInvites.module.scss';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Accept from '@/assets/icons/monochrome/accept.svg';
 import Deny from '@/assets/icons/monochrome/deny.svg';
-import { API_URL } from '@/../axiosInstance';
+import { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
 
 const FriendsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
   const { requests, isLoading, fetchRequests, acceptRequest, rejectRequest } = useNotificationsStore();
+  const requestsCount = requests.length;
 
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized || !isAuth) return;
+    if (requestsCount > 0) return;
     fetchRequests();
-  }, [fetchRequests, isInitialized, isAuth]);
+  }, [fetchRequests, isInitialized, isAuth, requestsCount]);
 
   const sortedRequests = useMemo(
     () =>

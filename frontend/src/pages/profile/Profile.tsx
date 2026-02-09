@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import classes from "./Profile.module.scss";
-import axiosInstance, { API_URL } from "../../../axiosInstance";
+import axiosInstance, { API_URL } from "@/api/axiosInstance";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 import Logo from '@/assets/icons/colored/Logo.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
@@ -336,7 +336,8 @@ const handleFriendAction = async (userId: number) => {
     return '';
   };
 
-  if (isLoading) return <ProfileSkeleton />;
+  const isOwnerSkeleton = Boolean(user && username && user.username === username);
+  if (isLoading) return <ProfileSkeleton isOwner={isOwnerSkeleton} />;
   if (error === "NOT_FOUND") return (
     <div className={classes.profile_not_found}>
       <h1>Пользователь <span>{username}</span> не найден</h1>

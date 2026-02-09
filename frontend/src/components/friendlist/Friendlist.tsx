@@ -5,7 +5,7 @@ import Default from '@/assets/icons/monochrome/default-user.svg';
 import classes from './Friendlist.module.scss';
 import { useFriendsStore } from "@/store/friendsStore";
 import { useAuthStore } from "@/store/authStore";
-import { API_URL } from "../../../axiosInstance";
+import { API_URL } from "@/api/axiosInstance";
 import { connectSocket } from "@/services/socketManager";
 
 const declension = (number: number, titles: [string, string, string]) => {
@@ -41,6 +41,7 @@ const FriendsList: React.FC = () => {
   const { friends, isLoading, fetchFriends } = useFriendsStore();
 
 useEffect(() => {
+  if (localStorage.getItem('debugFriends') === '1') return;
   if (user && user.id >= 0) {
     fetchFriends(user.id);
   }
@@ -50,6 +51,7 @@ useEffect(() => {
     if (!user) return;
     const unsubscribe = connectSocket({
       onFriendStatusChange: () => {
+        if (localStorage.getItem('debugFriends') === '1') return;
         fetchFriends(user.id);
       }
     });

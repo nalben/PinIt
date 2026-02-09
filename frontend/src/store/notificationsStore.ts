@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import axiosInstance from '@/../axiosInstance';
+import axiosInstance from '@/api/axiosInstance';
 
 export type FriendStatus = 'friend' | 'none' | 'sent' | 'received' | 'rejected';
 
@@ -51,7 +51,6 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
           user_id: 1000 + i,
           username: `dummy_user_${i + 1}`,
           nickname: `Dummy ${i + 1}`,
-          avatar: null,
           created_at: now
         }));
         requests = [...dummies, ...requests];

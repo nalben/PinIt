@@ -6,7 +6,7 @@
   width: 100%;
   padding: 10px;
   transition: all 0.3s;
-  border-top: var(--border);
+  // border-top: var(--border);
 }
 
 .userLink {
@@ -27,6 +27,7 @@
 
 .text {
   text-wrap: balance;
+  font-size: fluid-prop(18, 16, 1920, 320);
 }
 
 .name {

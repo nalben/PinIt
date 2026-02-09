@@ -1,5 +1,5 @@
 import axios from "axios";
-import isLocal from "./isLocal";
+import isLocal from "../../isLocal";
 
 export const API_URL: string = isLocal
   ? "http://localhost:3001"
