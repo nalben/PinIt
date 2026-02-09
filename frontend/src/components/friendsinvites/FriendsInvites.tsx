@@ -4,6 +4,7 @@ import classes from './FriendsInvites.module.scss';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Accept from '@/assets/icons/monochrome/accept.svg';
 import Deny from '@/assets/icons/monochrome/deny.svg';
+import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
@@ -29,46 +30,84 @@ const FriendsInvites: React.FC = () => {
     [requests]
   );
 
-  if (!isAuth || isLoading || sortedRequests.length === 0) return null;
+  if (!isAuth) {
+    return (
+      <div className={classes.root}>
+        <h2>Приглашения в друзья:</h2>
+        <div className={classes.empty}>
+          <h3>Войдите чтобы увидеть заявки в друзья</h3>
+          <Mainbtn
+            variant='mini'
+            text='Войти'
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading && requestsCount === 0) {
+    return (
+      <div className={classes.root}>
+        <h2>Приглашения в друзья:</h2>
+        <p>Загрузка заявок...</p>
+      </div>
+    );
+  }
 
   return (
-    <>
-      {sortedRequests.map(req => {
-        const avatarSrc = req.avatar
-          ? req.avatar.startsWith('/uploads/')
-            ? `${API_URL}${req.avatar}`
-            : `${API_URL}/uploads/${req.avatar}`
-          : null;
+    <div className={classes.root}>
+      <h2>Приглашения в друзья:</h2>
 
-        return (
-          <div key={req.id} className={classes.item}>
-            <NavLink to={`/user/${req.username}`} className={classes.userLink}>
-              {avatarSrc ? (
-                <img src={avatarSrc} alt="Аватар" />
-              ) : (
-                <Default />
-              )}
-            </NavLink>
+      {(isLoading || requestsCount > 0) && (
+        <div className={classes.list}>
+          {sortedRequests.map(req => {
+            const avatarSrc = req.avatar
+              ? req.avatar.startsWith('/uploads/')
+                ? `${API_URL}${req.avatar}`
+                : `${API_URL}/uploads/${req.avatar}`
+              : null;
 
-            <span className={classes.text}>
-              <NavLink to={`/user/${req.username}`} className={classes.name}>
-                {req.nickname || req.username}
-              </NavLink>
-              подал заявку в друзья
-            </span>
+            return (
+              <div key={req.id} className={classes.item}>
+                <NavLink to={`/user/${req.username}`} className={classes.userLink}>
+                  {avatarSrc ? (
+                    <img src={avatarSrc} alt="Аватар" />
+                  ) : (
+                    <Default />
+                  )}
+                </NavLink>
 
-            <div className={classes.actions}>
-              <button type="button" onClick={() => acceptRequest(req.id)}>
-                <Accept />
-              </button>
-              <button type="button" onClick={() => rejectRequest(req.id)}>
-                <Deny />
-              </button>
-            </div>
-          </div>
-        );
-      })}
-    </>
+                <span className={classes.text}>
+                  <NavLink to={`/user/${req.username}`} className={classes.name}>
+                    {req.nickname || req.username}
+                  </NavLink>
+                  подал заявку в друзья
+                </span>
+
+                <div className={classes.actions}>
+                  <button type="button" onClick={() => acceptRequest(req.id)}>
+                    <Accept />
+                  </button>
+                  <button type="button" onClick={() => rejectRequest(req.id)}>
+                    <Deny />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!isLoading && requestsCount === 0 && (
+        <div className={classes.empty}>
+          <h3>Друзей не найдено</h3>
+          <Mainbtn
+            variant='mini'
+            text='пригласить в друзья'
+          />
+        </div>
+      )}
+    </div>
   );
 };
 

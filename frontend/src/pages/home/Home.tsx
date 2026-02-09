@@ -4,12 +4,8 @@ import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import Lastdesks from '@/components/lastdesks/Lastdesks';
 import FriendsList from '@/components/friendlist/Friendlist';
 import FriendsInvites from '@/components/friendsinvites/FriendsInvites';
-import { useNotificationsStore } from '@/store/notificationsStore';
 
 const Home = () => {
-    const { requests, isLoading } = useNotificationsStore();
-    const requestsCount = Array.isArray(requests) ? requests.length : 0;
-
     return (
         <div className={classes.home}>
             <main className={classes.home_container}>
@@ -28,21 +24,7 @@ const Home = () => {
                     <FriendsList />
                 </div>
                 <section className={classes.friends_invites_container}>
-                    <h2>Приглашения в друзья:</h2>
-                    {(isLoading || requestsCount > 0) && (
-                        <div className={classes.friends_invites_list}>
-                            <FriendsInvites />
-                        </div>
-                    )}
-                    {!isLoading && requestsCount === 0 && (
-                        <div className={classes.friends_invites_list_epmty}>
-                            <h3>Заявок в друзья не найдено</h3>
-                            <Mainbtn
-                                variant='mini'
-                                text='пригласить в друзья'
-                            />
-                        </div>
-                    )}
+                    <FriendsInvites />
                 </section>
                 <section className={classes.desks_invites_container}>
                     <h2>Приглашения в доски:</h2>

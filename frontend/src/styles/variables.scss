@@ -1,19 +1,22 @@
 :root {
     --white: #FFF;
     --grey10: #595E63;
-    --grey20: #343332;
+    // --grey20: #343332;
+    --grey20: #371414;
     --grey30: #67665f;
     --light-grey: #7E8993;
     --blue10: #233C55;
     --blue20: #1c284c;
-    --cyan: #CDF8FF;
-    --pink: #ffb6ed;
-    --skeleton-base: #e7cddf;
+    // --cyan: #CDF8FF;
+    // --pink: #ffb6ed;
+    --cyan: #fefde3;
+    --pink: #e7cd73;
+    --skeleton-base: #e06f6f;
     --skeleton-shimmer: linear-gradient(
         90deg,
         rgba(255, 182, 237, 0) 0%,
-        rgba(255, 182, 237, 0.8) 50%,
-        rgba(255, 182, 237, 0) 100%
+        rgba(230, 205, 115, 0.8) 50%,
+        rgba(92, 24, 19, 0) 100%
     );
     --error: rgb(255, 82, 82);
     --border: 1px solid var(--grey10);
