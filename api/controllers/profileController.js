@@ -2,6 +2,7 @@ const db = require('../db');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
+const sharp = require('sharp');
 
 /* ============================
    PUT /api/profile/me
@@ -20,6 +21,25 @@ exports.updateMe = async (req, res) => {
     if (req.file) {
       newAvatarPath = `/uploads/${req.file.filename}`;
 
+      const absoluteAvatarPath = path.join(__dirname, '..', 'uploads', req.file.filename);
+      const tmpPath = `${absoluteAvatarPath}.tmp`;
+
+      try {
+        await sharp(absoluteAvatarPath)
+          .rotate()
+          .resize(512, 512, { fit: 'cover', position: 'center' })
+          .toFile(tmpPath);
+
+        await fs.promises.rename(tmpPath, absoluteAvatarPath);
+      } catch (e) {
+        try {
+          await fs.promises.unlink(tmpPath);
+        } catch {
+          // ignore
+        }
+        console.warn('Failed to crop avatar:', e);
+      }
+
       const [oldRows] = await db.execute(
         'SELECT avatar FROM users WHERE id = ?',
         [userId]
@@ -27,7 +47,7 @@ exports.updateMe = async (req, res) => {
 
       const oldAvatar = oldRows[0]?.avatar;
       if (oldAvatar) {
-        const oldFilePath = path.join(__dirname, '..', oldAvatar);
+        const oldFilePath = path.join(__dirname, '..', oldAvatar.replace(/^\/+/, ''));
         fs.unlink(oldFilePath, () => {});
       }
     }

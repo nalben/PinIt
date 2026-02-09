@@ -376,7 +376,6 @@ const handleFriendAction = async (userId: number) => {
           alt="avatar"
           width={200}
           height={200}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block' }}
         />
       ) : (
         <Default />
