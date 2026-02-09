@@ -2,7 +2,6 @@ const db = require('../db');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
-const sharp = require('sharp');
 
 /* ============================
    PUT /api/profile/me
@@ -25,6 +24,11 @@ exports.updateMe = async (req, res) => {
       const tmpPath = `${absoluteAvatarPath}.tmp`;
 
       try {
+        // Lazy-require so the server doesn't crash on boot if `sharp` isn't installed on the host.
+        // If sharp is missing, avatar will be stored as-is (no crop).
+        // eslint-disable-next-line global-require, import/no-extraneous-dependencies
+        const sharp = require('sharp');
+
         await sharp(absoluteAvatarPath)
           .rotate()
           .resize(512, 512, { fit: 'cover', position: 'center' })
@@ -37,7 +41,7 @@ exports.updateMe = async (req, res) => {
         } catch {
           // ignore
         }
-        console.warn('Failed to crop avatar:', e);
+        console.warn('Failed to crop avatar (sharp missing or processing error):', e);
       }
 
       const [oldRows] = await db.execute(
