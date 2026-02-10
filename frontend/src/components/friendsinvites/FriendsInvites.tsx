@@ -14,12 +14,17 @@ const FriendsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
   const { requests, isLoading, fetchRequests, acceptRequest, rejectRequest } = useNotificationsStore();
   const requestsCount = requests.length;
+  const forceSkeleton =
+    __ENV__ === 'development' &&
+    typeof window !== 'undefined' &&
+    localStorage.getItem('debugSkeleton') === '1';
 
   useEffect(() => {
+    if (forceSkeleton) return;
     if (!isInitialized || !isAuth) return;
     if (requestsCount > 0) return;
     fetchRequests();
-  }, [fetchRequests, isInitialized, isAuth, requestsCount]);
+  }, [fetchRequests, isInitialized, isAuth, requestsCount, forceSkeleton]);
 
   const sortedRequests = useMemo(
     () =>
@@ -30,6 +35,29 @@ const FriendsInvites: React.FC = () => {
       }),
     [requests]
   );
+
+  const skeleton = (
+    <div className={classes.root} aria-busy="true">
+      <h2>Приглашения в друзья:</h2>
+      <div className={classes.list}>
+        {Array.from({ length: 4 }).map((_, idx) => (
+          <div key={idx} className={classes.item}>
+            <div className={`${classes.skeleton} ${classes.skeleton_avatar}`} />
+            <div className={`${classes.text} ${classes.skeleton_text}`}>
+              <div className={`${classes.skeleton} ${classes.skeleton_name}`} />
+              <div className={`${classes.skeleton} ${classes.skeleton_line}`} />
+            </div>
+            <div className={classes.actions}>
+              <div className={`${classes.skeleton} ${classes.skeleton_icon}`} />
+              <div className={`${classes.skeleton} ${classes.skeleton_icon}`} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (forceSkeleton || !isInitialized) return skeleton;
 
   if (!isAuth) {
     return (
@@ -48,14 +76,7 @@ const FriendsInvites: React.FC = () => {
     );
   }
 
-  if (isLoading && requestsCount === 0) {
-    return (
-      <div className={classes.root}>
-        <h2>Приглашения в друзья:</h2>
-        <p>Загрузка заявок...</p>
-      </div>
-    );
-  }
+  if (isLoading && requestsCount === 0) return skeleton;
 
   return (
     <div className={classes.root}>
@@ -115,4 +136,3 @@ const FriendsInvites: React.FC = () => {
 };
 
 export default FriendsInvites;
-

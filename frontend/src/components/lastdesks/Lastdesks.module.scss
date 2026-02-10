@@ -78,3 +78,67 @@
         }
     }
 }
+
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--skeleton-base);
+}
+
+.skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: var(--skeleton-shimmer);
+    animation: lastdesks-shimmer 1.2s infinite;
+}
+
+.skeleton_img{
+    width: 100%;
+    height: 90px;
+    border-radius: 6px;
+    flex-shrink: 0;
+}
+
+.skeleton_line{
+    width: min(170px, 90%);
+    height: fluid-prop(24, 18, 1920, 320);
+    border-radius: 999px;
+}
+
+.skeleton_line_sm{
+    width: 200px;
+    height: fluid-prop(18, 14, 1920, 320);
+    border-radius: 999px;
+    margin-top: 0.5rem;
+}
+
+.skeleton_btn{
+    width: 100%;
+    height: fluid-prop(50, 40, 1920, 320);
+    border-radius: 10px;
+}
+
+@media (min-width:540px) {
+    .skeleton_img{
+        width: 80px;
+        height: 80px;
+    }
+    .skeleton_btn{
+        align-self: center;
+        width: min(150px, 100%);
+    }
+    .skeleton_line_sm{
+        width: min(300px, 100%);
+    }
+}
+
+@keyframes lastdesks-shimmer {
+    0% {
+        transform: translateX(-150%);
+    }
+    100% {
+        transform: translateX(150%);
+    }
+}

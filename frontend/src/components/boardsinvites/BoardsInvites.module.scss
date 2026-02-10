@@ -14,7 +14,6 @@
     max-height: 341px;
     overflow: auto;
     padding-right: 5px;
-
     &::-webkit-scrollbar {
         width: 10px;
     }
@@ -27,6 +26,16 @@
         cursor: pointer;
         background: var(--pink);
         border-radius: 5px;
+    }
+    @media (min-width:1800px) {
+        .root[aria-busy="true"] & .item:nth-child(n + 3) {
+            display: none;
+        }
+    }
+    @media (min-width:1150px) and (max-width:1400px) {
+        .root[aria-busy="true"] & .item:nth-child(n + 3) {
+            display: none;
+        }
     }
 }
 
@@ -92,5 +101,56 @@
         "avatar text buttons"
         "avatar text buttons"
         ;
+    }
+}
+
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--skeleton-base);
+    pointer-events: none;
+}
+
+.skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: var(--skeleton-shimmer);
+    animation: boards-invites-shimmer 1.2s infinite;
+}
+
+.skeleton_avatar{
+    width: 50px;
+    height: 50px;
+    border-radius: 100%;
+}
+
+.skeleton_line{
+    width: min(320px, 90%);
+    height: fluid-prop(18, 16, 1920, 320);
+    border-radius: 999px;
+}
+
+.skeleton_line_sm{
+    width: min(260px, 80%);
+    height: fluid-prop(16, 14, 1920, 320);
+    border-radius: 999px;
+    margin-top: 0.4rem;
+}
+
+.skeleton_btn{
+    width: 100%;
+    height: fluid-prop(44, 38, 1920, 320);
+    border-radius: 10px;
+    flex: 1 1 0;
+}
+
+@keyframes boards-invites-shimmer {
+    0% {
+        transform: translateX(-150%);
+    }
+    100% {
+        transform: translateX(150%);
     }
 }

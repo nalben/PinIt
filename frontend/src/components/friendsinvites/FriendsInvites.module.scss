@@ -125,3 +125,60 @@
 .item:hover {
   background-color: var(--grey10);
 }
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--skeleton-base);
+  pointer-events: none;
+}
+
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-150%);
+  background: var(--skeleton-shimmer);
+  animation: friends-invites-shimmer 1.2s infinite;
+}
+
+.skeleton_avatar {
+  width: fluid-prop(50, 30, 500, 320);
+  height: fluid-prop(50, 30, 500, 320);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton_text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.skeleton_name {
+  width: min(120px, 70%);
+  height: fluid-prop(18, 16, 1920, 320);
+  border-radius: 999px;
+}
+
+.skeleton_line {
+  width: min(200px, 90%);
+  height: fluid-prop(16, 14, 1920, 320);
+  border-radius: 999px;
+}
+
+.skeleton_icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+@keyframes friends-invites-shimmer {
+  0% {
+    transform: translateX(-150%);
+  }
+  100% {
+    transform: translateX(150%);
+  }
+}

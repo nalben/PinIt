@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import classes from './BoardsInvites.module.scss';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
@@ -14,12 +14,28 @@ const BoardsInvites: React.FC = () => {
   const fetchInvites = useBoardsInvitesStore(state => state.fetchInvites);
   const acceptInvite = useBoardsInvitesStore(state => state.acceptInvite);
   const rejectInvite = useBoardsInvitesStore(state => state.rejectInvite);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const forceSkeleton =
+    __ENV__ === 'development' &&
+    typeof window !== 'undefined' &&
+    localStorage.getItem('debugSkeleton') === '1';
 
   useEffect(() => {
+    if (forceSkeleton) return;
     if (!isInitialized) return;
     if (!isAuth) return;
-    fetchInvites();
-  }, [fetchInvites, isInitialized, isAuth]);
+
+    let mounted = true;
+    setHasLoadedOnce(false);
+    fetchInvites().finally(() => {
+      if (!mounted) return;
+      setHasLoadedOnce(true);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [fetchInvites, isInitialized, isAuth, forceSkeleton]);
 
   const sortedInvites = useMemo(
     () =>
@@ -31,19 +47,45 @@ const BoardsInvites: React.FC = () => {
     [invites]
   );
 
+  const skeleton = (
+    <div className={classes.root} aria-busy="true">
+      <h2>Приглашения в доски:</h2>
+      <div className={classes.list}>
+        {Array.from({ length: 4 }).map((_, idx) => (
+          <div key={idx} className={classes.item}>
+            <div className={classes.avatar}>
+              <div className={`${classes.skeleton} ${classes.skeleton_avatar}`} />
+            </div>
+
+            <div className={classes.text}>
+              <div className={`${classes.skeleton} ${classes.skeleton_line}`} />
+              <div className={`${classes.skeleton} ${classes.skeleton_line_sm}`} />
+            </div>
+
+            <div className={classes.actions}>
+              <div className={`${classes.skeleton} ${classes.skeleton_btn}`} />
+              <div className={`${classes.skeleton} ${classes.skeleton_btn}`} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (forceSkeleton || !isInitialized) return skeleton;
+  if (isAuth && (isLoading || !hasLoadedOnce) && sortedInvites.length === 0) return skeleton;
+
   return (
     <div className={classes.root}>
       <h2>Приглашения в доски:</h2>
 
-      {!isInitialized ? null : !isAuth ? (
+      {!isAuth ? (
         <div className={classes.empty}>
           <h3>Войдите чтобы увидеть приглашения в доски</h3>
           <AuthTrigger type='login'>
             <Mainbtn variant="mini" text="Войти" />
           </AuthTrigger>
         </div>
-      ) : isLoading ? (
-        <p>Загрузка приглашений...</p>
       ) : sortedInvites.length === 0 ? (
         <div className={classes.empty}>
           <h3>Приглашений в доски не найдено</h3>

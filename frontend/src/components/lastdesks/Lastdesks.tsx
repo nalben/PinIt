@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '../_UI/mainbtn/Mainbtn';
 import classes from './Lastdesks.module.scss';
@@ -11,12 +11,47 @@ const Lastdesks: React.FC = () => {
   const recentBoards = useBoardsStore(state => state.recentBoards);
   const isLoading = useBoardsStore(state => state.isLoading);
   const loadBoards = useBoardsStore(state => state.loadBoards);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const forceSkeleton =
+    __ENV__ === 'development' &&
+    typeof window !== 'undefined' &&
+    localStorage.getItem('debugSkeleton') === '1';
 
   useEffect(() => {
-    loadBoards();
-  }, [loadBoards]);
+    if (forceSkeleton) {
+      setHasLoadedOnce(false);
+      return;
+    }
+    let mounted = true;
+    loadBoards().finally(() => {
+      if (!mounted) return;
+      setHasLoadedOnce(true);
+    });
 
-  if (isLoading) return <p>Загрузка досок...</p>;
+    return () => {
+      mounted = false;
+    };
+  }, [loadBoards, forceSkeleton]);
+
+  if (forceSkeleton || ((isLoading || !hasLoadedOnce) && recentBoards.length === 0)) {
+    return (
+      <section className={classes.desks_container} aria-busy="true">
+        <h2>Последние открытые доски:</h2>
+        <div className={classes.desks_list}>
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className={classes.desks_item}>
+              <div className={`${classes.skeleton} ${classes.skeleton_img}`} />
+              <div className={classes.board_info_con}>
+                <div className={`${classes.skeleton} ${classes.skeleton_line}`} />
+                <div className={`${classes.skeleton} ${classes.skeleton_line_sm}`} />
+              </div>
+              <div className={`${classes.skeleton} ${classes.skeleton_btn}`} />
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className={classes.desks_container}>

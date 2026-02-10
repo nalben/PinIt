@@ -6,6 +6,23 @@ import { useAuthStore } from '@/store/authStore';
 
 const HomeWelcome: React.FC = () => {
   const isAuth = useAuthStore(state => state.isAuth);
+  const isInitialized = useAuthStore(state => state.isInitialized);
+
+  const forceSkeleton =
+    __ENV__ === 'development' &&
+    typeof window !== 'undefined' &&
+    localStorage.getItem('debugSkeleton') === '1';
+
+  const skeleton = (
+    <section className={classes.welcome_container} aria-busy="true">
+      <div className={`${classes.skeleton} ${classes.skeleton_title}`} />
+      <div className={`${classes.skeleton} ${classes.skeleton_subtitle}`} />
+      <div className={`${classes.skeleton} ${classes.skeleton_subtitle_2}`} />
+      <div className={`${classes.skeleton} ${classes.skeleton_btn}`} />
+    </section>
+  );
+
+  if (forceSkeleton || !isInitialized) return skeleton;
 
   return (
     <section className={classes.welcome_container}>

@@ -100,3 +100,67 @@
         }
     }
 }
+
+.skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: var(--skeleton-base);
+    pointer-events: none;
+}
+
+.skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: var(--skeleton-shimmer);
+    animation: friendlist-shimmer 1.2s infinite;
+}
+
+.skeleton_avatar{
+    grid-area: img;
+    width: fluid-prop(80, 60,1920,320);
+    height: fluid-prop(80, 60, 1920, 320);
+    border-radius: 100%;
+}
+
+.skeleton_username{
+    grid-area: username;
+    display: block;
+    width: min(250px, 70%);
+    height: fluid-prop(22, 18, 1920, 320);
+    border-radius: 999px;
+    align-self: center;
+}
+
+.skeleton_time{
+    grid-area: time;
+    display: block;
+    width: min(200px, 60%);
+    height: fluid-prop(18, 16, 1920, 320);
+    border-radius: 999px;
+}
+
+.skeleton_btn{
+    grid-area: button;
+    width: 100%;
+    height: fluid-prop(55, 50, 1920, 320);
+    border-radius: 10px;
+    margin-top: 0.7rem;
+}
+
+@media (min-width:540px) {
+    .skeleton_btn{
+        width: fluid-prop(230, 140, 1920, 540);
+        justify-self: end;
+    }
+}
+
+@keyframes friendlist-shimmer {
+    0% {
+        transform: translateX(-150%);
+    }
+    100% {
+        transform: translateX(150%);
+    }
+}

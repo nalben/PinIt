@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 import Default from '@/assets/icons/monochrome/default-user.svg';
@@ -38,17 +38,45 @@ const timeAgo = (dateString: string) => {
 
 const FriendsList: React.FC = () => {
   const friendsListRef = useRef<HTMLDivElement | null>(null);
-  const { user, isAuth } = useAuthStore();
+  const { user, isAuth, isInitialized } = useAuthStore();
   const { friends, isLoading, fetchFriends } = useFriendsStore();
-
-useEffect(() => {
-  if (localStorage.getItem('debugFriends') === '1') return;
-  if (user && user.id >= 0) {
-    fetchFriends(user.id);
-  }
-}, [user, fetchFriends]);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const forceSkeleton =
+    __ENV__ === 'development' &&
+    typeof window !== 'undefined' &&
+    localStorage.getItem('debugSkeleton') === '1';
 
   useEffect(() => {
+    if (forceSkeleton) return;
+    if (!isInitialized) return;
+
+    if (!isAuth) {
+      setHasLoadedOnce(false);
+      return;
+    }
+
+    const userId = user?.id;
+    if (!userId || userId <= 0) return;
+
+    if (localStorage.getItem('debugFriends') === '1') {
+      setHasLoadedOnce(true);
+      return;
+    }
+
+    let mounted = true;
+    setHasLoadedOnce(false);
+    fetchFriends(userId).finally(() => {
+      if (!mounted) return;
+      setHasLoadedOnce(true);
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id, fetchFriends, isAuth, isInitialized, forceSkeleton]);
+
+  useEffect(() => {
+    if (forceSkeleton) return;
     if (!user) return;
     const unsubscribe = connectSocket({
       onFriendStatusChange: () => {
@@ -59,10 +87,11 @@ useEffect(() => {
     return () => {
       unsubscribe?.();
     };
-  }, [user, fetchFriends]);
+  }, [user, fetchFriends, forceSkeleton]);
 
 
   useEffect(() => {
+    if (forceSkeleton) return;
     if (!friendsListRef.current) return;
 
     const recalcMaxHeight = () => {
@@ -93,7 +122,25 @@ useEffect(() => {
       observer.disconnect();
       window.removeEventListener('resize', recalcMaxHeight);
     };
-  }, [friends]);
+  }, [friends, forceSkeleton]);
+
+  const skeleton = (
+    <section className={classes.friends_container} aria-busy="true">
+      <h2>Друзья:</h2>
+      <div className={classes.friends_list}>
+        {Array.from({ length: 3 }).map((_, idx) => (
+          <div key={idx} className={classes.friends_list_item}>
+            <div className={`${classes.skeleton} ${classes.skeleton_avatar}`} />
+            <span className={`${classes.skeleton} ${classes.skeleton_username}`} />
+            <p className={`${classes.skeleton} ${classes.skeleton_time}`} />
+            <div className={`${classes.skeleton} ${classes.skeleton_btn}`} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+
+  if (forceSkeleton || !isInitialized) return skeleton;
 
   if (!isAuth) {
     return (
@@ -109,7 +156,7 @@ useEffect(() => {
     );
   }
 
-  if (isLoading) return <p>Загрузка друзей...</p>;
+  if ((isLoading || !hasLoadedOnce) && friends.length === 0) return skeleton;
 
   return (
     <section className={classes.friends_container}>
