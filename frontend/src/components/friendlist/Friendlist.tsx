@@ -141,7 +141,7 @@ useEffect(() => {
         </div>
       ) : (
         <div className={classes.friends_list_epmty}>
-          <h3>Друзей не найдено</h3>
+          <h3>Вы пока не добавили своих друзей</h3>
           <Mainbtn variant="mini" text="Пригласить в друзья" />
         </div>
       )}

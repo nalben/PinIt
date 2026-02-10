@@ -5,8 +5,6 @@ import Noti from '@/assets/icons/monochrome/noti.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Burger from '@/assets/icons/monochrome/burger.svg';
 import axiosInstance, { API_URL } from "@/api/axiosInstance";
-import AuthOnly from '@/components/__general/authonly/Authonly';
-import GuestOnly from '@/components/__general/guestonly/Guestonly';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import DropdownWrapper from '../dropdownwrapper/DropdownWrapper';
 import LogoutButton from '@/components/__general/logoutbutton/LogoutButton';
@@ -166,12 +164,9 @@ const isProfileActive = () => {
         <NavLink to="/todo" className={linkClass} onClick={handleMenuItemClick}>
           TODO
         </NavLink>
-        <GuestOnly>
-            <AuthTrigger type='login'>
-                <div className={classes.item}>PROFILE</div>
-            </AuthTrigger>
-        </GuestOnly>
-        <AuthOnly>
+        {!isInitialized ? (
+          <div className={classes.item}>PROFILE</div>
+        ) : isAuth ? (
           <NavLink
             to="/profile"
             className={() =>
@@ -183,12 +178,23 @@ const isProfileActive = () => {
           >
             PROFILE
           </NavLink>
-        </AuthOnly>
+        ) : (
+          <AuthTrigger type='login'>
+            <div className={classes.item}>PROFILE</div>
+          </AuthTrigger>
+        )}
       </nav>
 
       <div className={classes.profile_container}>
-        <AuthOnly>
-            <div className={classes.user}>
+        {!isInitialized ? (
+          <div className={classes.user} aria-busy="true">
+            <div className={classes.profile}>
+              <div className={`${classes.skeleton} ${classes.skeleton_avatar_sm}`} />
+              <span className={`${classes.skeleton} ${classes.skeleton_line_sm}`} />
+            </div>
+          </div>
+        ) : isAuth ? (
+          <div className={classes.user}>
                 <div className={`${classes.noti} ${requests.length > 0 ? classes.noti_have : ''}`}>
                   <div className={`${classes.noti_lenght} ${requests.length <= 0 ? classes.noti_none : ''}`}>
                     <span>
@@ -268,7 +274,7 @@ const isProfileActive = () => {
                 <DropdownWrapper
                   right
                   profile
-                  isOpen={isProfileOpen}       // <- правильно
+                  isOpen={isProfileOpen}
                   onClose={closeHeaderDropdown}
                 >
                   <div className={classes.profile} onClick={() => toggleHeaderDropdown('profile')}>
@@ -324,8 +330,7 @@ const isProfileActive = () => {
                   </div>
                 </DropdownWrapper>
             </div>
-        </AuthOnly>
-        <GuestOnly>
+        ) : (
           <AuthTrigger type='login'>
             <div className={`${classes.user} ${classes.header_reg}`}>
               <span>
@@ -333,7 +338,7 @@ const isProfileActive = () => {
               </span>
             </div>
           </AuthTrigger>
-        </GuestOnly>
+        )}
       </div>
     </header>
   );

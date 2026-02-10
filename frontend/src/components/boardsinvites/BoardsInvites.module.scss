@@ -1,0 +1,82 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    container-type: inline-size;
+    height: 100%;
+}
+
+
+.list {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    max-height: 341px;
+    overflow: auto;
+    padding-right: 5px;
+
+    &::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        cursor: pointer;
+        background: var(--pink);
+        border-radius: 5px;
+    }
+}
+
+.avatar {
+    grid-area: avatar;
+    & img, svg{
+        width: 50px;
+        border-radius: 100%;
+    }
+}
+
+.text {
+    grid-area: text;
+    & span{
+        color: var(--pink);
+    }
+}
+
+.actions {
+    grid-area: buttons;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.5rem;
+    & a, button{
+        width: 100%;
+    }
+}
+
+.empty {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    justify-content: space-between;
+    text-wrap: balance;
+}
+
+.item {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.8rem;
+    grid-template-areas:
+    "avatar text text"
+    "avatar text text"
+    "buttons buttons buttons"
+    ;
+}
+
+@container (min-width: 310px) {
+    .actions{
+        flex-direction: row;
+    }
+}

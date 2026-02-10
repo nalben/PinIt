@@ -4,6 +4,9 @@ const boardsController = require('../controllers/boardsController');
 
 router.get('/', boardsController.getMyBoards);
 router.get('/recent', boardsController.getRecentBoards);
+router.get('/invites/incoming', boardsController.getIncomingBoardInvites);
+router.put('/invites/accept/:invite_id', boardsController.acceptBoardInvite);
+router.put('/invites/reject/:invite_id', boardsController.rejectBoardInvite);
 
 router.post('/', boardsController.createBoard);
 

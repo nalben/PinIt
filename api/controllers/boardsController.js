@@ -6,7 +6,7 @@ exports.getMyBoards = async (req, res) => {
     const user_id = req.user.id;
 
     const [boards] = await db.execute(
-      `SELECT id, title, description, created_at
+      `SELECT id, title, description, image, created_at
        FROM boards
        WHERE owner_id = ?
        ORDER BY created_at DESC`,
@@ -178,7 +178,7 @@ exports.getBoardById = async (req, res) => {
     const { board_id } = req.params;
 
     const [rows] = await db.execute(
-      `SELECT id, title, description, created_at
+      `SELECT id, title, description, image, created_at
        FROM boards
        WHERE id = ? AND owner_id = ?`,
       [board_id, user_id]
@@ -192,5 +192,119 @@ exports.getBoardById = async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ message: 'Ошибка получения доски' });
+  }
+};
+
+
+/* РџСЂРёРіР»Р°С€РµРЅРёСЏ РІ РґРѕСЃРєРё (РІС…РѕРґСЏС‰РёРµ) */
+exports.getIncomingBoardInvites = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+
+    const [invites] = await db.execute(
+      `SELECT bi.id, bi.created_at,
+              b.id as board_id, b.title, b.description, b.image,
+              u.id as user_id, u.username, u.nickname, u.avatar
+       FROM board_invites bi
+       JOIN boards b ON b.id = bi.board_id
+       JOIN users u ON u.id = bi.user_id
+       WHERE bi.invited_id = ? AND bi.status = 'sent'
+       ORDER BY bi.created_at DESC`,
+      [user_id]
+    );
+
+    return res.status(200).json(invites);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ РїСЂРёРіР»Р°С€РµРЅРёР№' });
+  }
+};
+
+
+exports.acceptBoardInvite = async (req, res) => {
+  const invited_id = req.user.id;
+  const { invite_id } = req.params;
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [rows] = await connection.execute(
+      `SELECT board_id FROM board_invites
+       WHERE id = ? AND invited_id = ? AND status = 'sent'`,
+      [invite_id, invited_id]
+    );
+
+    if (!rows.length) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Приглашение не найдено' });
+    }
+
+    const board_id = rows[0].board_id;
+
+    await connection.execute(
+      `UPDATE board_invites
+       SET status = 'accepted'
+       WHERE id = ?`,
+      [invite_id]
+    );
+
+    const [existing] = await connection.execute(
+      `SELECT 1 FROM Boardguests
+       WHERE board_id = ? AND user_id = ?
+       LIMIT 1`,
+      [board_id, invited_id]
+    );
+
+    if (!existing.length) {
+      await connection.execute(
+        `INSERT INTO Boardguests (board_id, user_id, role)
+         VALUES (?, ?, 'guest')`,
+        [board_id, invited_id]
+      );
+    }
+
+    await connection.commit();
+    return res.status(200).json({ message: 'Приглашение принято' });
+  } catch (e) {
+    try {
+      await connection.rollback();
+    } catch {
+      // ignore
+    }
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка принятия приглашения' });
+  } finally {
+    connection.release();
+  }
+};
+
+
+exports.rejectBoardInvite = async (req, res) => {
+  try {
+    const invited_id = req.user.id;
+    const { invite_id } = req.params;
+
+    const [rows] = await db.execute(
+      `SELECT id FROM board_invites
+       WHERE id = ? AND invited_id = ? AND status = 'sent'`,
+      [invite_id, invited_id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Приглашение не найдено' });
+    }
+
+    await db.execute(
+      `UPDATE board_invites
+       SET status = 'rejected'
+       WHERE id = ?`,
+      [invite_id]
+    );
+
+    return res.status(200).json({ message: 'Приглашение отклонено' });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка отклонения приглашения' });
   }
 };

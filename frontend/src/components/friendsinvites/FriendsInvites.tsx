@@ -100,10 +100,10 @@ const FriendsInvites: React.FC = () => {
 
       {!isLoading && requestsCount === 0 && (
         <div className={classes.empty}>
-          <h3>Друзей не найдено</h3>
+          <h3>У вас пока что нет заявок в друзья</h3>
           <Mainbtn
             variant='mini'
-            text='пригласить в друзья'
+            text='Пригласить в друзья'
           />
         </div>
       )}

@@ -34,6 +34,7 @@
         max-height: fluid-prop(80, 60, 1920, 320);
         min-width: fluid-prop(80, 60, 1920, 320);
         min-height: fluid-prop(80, 60, 1920, 320);
+        border-radius: 100%;
         object-fit: cover;
         object-position: center;
     }
