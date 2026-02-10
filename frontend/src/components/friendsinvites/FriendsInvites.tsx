@@ -8,6 +8,7 @@ import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
+import AuthTrigger from '../auth/AuthTrigger';
 
 const FriendsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
@@ -36,10 +37,12 @@ const FriendsInvites: React.FC = () => {
         <h2>Приглашения в друзья:</h2>
         <div className={classes.empty}>
           <h3>Войдите чтобы увидеть заявки в друзья</h3>
-          <Mainbtn
-            variant='mini'
-            text='Войти'
-          />
+          <AuthTrigger type='login'>
+            <Mainbtn
+              variant='mini'
+              text='Войти'
+            />
+          </AuthTrigger>
         </div>
       </div>
     );

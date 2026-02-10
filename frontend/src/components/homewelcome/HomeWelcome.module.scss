@@ -1,0 +1,29 @@
+.welcome_container{
+    grid-column: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    & button, span{
+        width: 100%;
+    }
+    & h1{
+        font-size: fluid-prop(32,20,1920,320);
+    }
+}
+
+@media (min-width:1150px) {
+    .welcome_container{
+        grid-column: span 2;
+    }
+}
+
+@media (min-width:1800px) {
+    .welcome_container {
+        grid-column: span 4;
+        order: 1;
+        & button, span {
+            width: fit-content;
+        }
+    }
+}
+

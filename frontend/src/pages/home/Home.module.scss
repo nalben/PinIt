@@ -25,18 +25,6 @@
         color: var(--cyan);
     }
 }
-.welcome_container{
-    grid-column: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 0.8rem;
-    & button{
-        width: 100%;
-    }
-    & h1{
-        font-size: fluid-prop(32,20,1920,320);
-    }
-}
 .friends_invites_container{
     display: flex;
     flex-direction: column;
@@ -62,9 +50,6 @@
     .home_container{
         grid-template-columns: 1fr 1fr;
     }
-    .welcome_container{
-        grid-column: span 2;
-    }
     .lastdesks_container{
         grid-column: span 2;
     }
@@ -75,23 +60,26 @@
         grid-column: span 2;
     }
 }
+@media (min-width:1400px) {
+    .lastdesks_container {
+        grid-column: span 1;
+    }
 
-@media (min-width:1440px) {
+    .friends_container {
+        grid-column: span 1;
+    }
+}
+@media (min-width:1800px) {
     .home_container{
         grid-template-columns: 1fr 1fr 1fr 1fr;
     }
-    .welcome_container {
-        grid-column: span 4;
-        order: 1;
-        & button {
-            width: fit-content;
-        }
-    }
     .lastdesks_container {
         order: 2;
+        grid-column: span 2;
     }
     .friends_container {
         order: 5;
+        grid-column: span 2;
     }
     .desks_invites_container{
         order: 4;

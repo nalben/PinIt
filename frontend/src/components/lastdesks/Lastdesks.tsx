@@ -4,6 +4,7 @@ import Mainbtn from '../_UI/mainbtn/Mainbtn';
 import classes from './Lastdesks.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import { useBoardsStore } from '@/store/boardsStore';
+import AuthTrigger from '../auth/AuthTrigger';
 
 // Zustand store для последних досок
 const Lastdesks: React.FC = () => {
@@ -44,7 +45,9 @@ const Lastdesks: React.FC = () => {
       ) : (
         <div className={classes.desks_empty}>
           <h3>Досок не найдено</h3>
-          <Mainbtn variant="mini" text="Создать доску" />
+          <AuthTrigger type='login'>
+            <Mainbtn variant="mini" text="Создать доску" />
+          </AuthTrigger>
         </div>
       )}
     </section>

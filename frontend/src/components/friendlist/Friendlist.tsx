@@ -7,6 +7,7 @@ import { useFriendsStore } from "@/store/friendsStore";
 import { useAuthStore } from "@/store/authStore";
 import { API_URL } from "@/api/axiosInstance";
 import { connectSocket } from "@/services/socketManager";
+import AuthTrigger from "../auth/AuthTrigger";
 
 const declension = (number: number, titles: [string, string, string]) => {
   const n = Math.abs(number) % 100;
@@ -100,7 +101,9 @@ useEffect(() => {
         <h2>Друзья:</h2>
         <div className={classes.friends_list_epmty}>
           <h3>Войдите, чтобы увидеть друзей</h3>
-          <Mainbtn variant="mini" text="Войти" />
+          <AuthTrigger type='login'>
+            <Mainbtn variant="mini" text="Войти" />
+          </AuthTrigger>
         </div>
       </section>
     );

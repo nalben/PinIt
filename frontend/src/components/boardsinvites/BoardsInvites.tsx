@@ -5,6 +5,7 @@ import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
+import AuthTrigger from '../auth/AuthTrigger';
 
 const BoardsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
@@ -37,7 +38,9 @@ const BoardsInvites: React.FC = () => {
       {!isInitialized ? null : !isAuth ? (
         <div className={classes.empty}>
           <h3>Войдите чтобы увидеть приглашения в доски</h3>
-          <Mainbtn variant="mini" text="Войти" />
+          <AuthTrigger type='login'>
+            <Mainbtn variant="mini" text="Войти" />
+          </AuthTrigger>
         </div>
       ) : isLoading ? (
         <p>Загрузка приглашений...</p>

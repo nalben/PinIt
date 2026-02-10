@@ -1,23 +1,16 @@
 import React from 'react';
 import classes from './Home.module.scss';
-import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import Lastdesks from '@/components/lastdesks/Lastdesks';
 import FriendsList from '@/components/friendlist/Friendlist';
 import FriendsInvites from '@/components/friendsinvites/FriendsInvites';
 import BoardsInvites from '@/components/boardsinvites/BoardsInvites';
+import HomeWelcome from '@/components/homewelcome/HomeWelcome';
 
 const Home = () => {
     return (
         <div className={classes.home}>
             <main className={classes.home_container}>
-                <section className={classes.welcome_container}>
-                    <h1>Добро пожаловать в&nbsp;PinIt</h1>
-                    <h2>Создайте свою доску или присоединяйтесь к доскам своих друзей</h2>
-                    <Mainbtn
-                        variant='mini'
-                        text='Создать доску'
-                    />
-                </section>
+                <HomeWelcome />
                 <div className={classes.lastdesks_container}>
                     <Lastdesks />
                 </div>
@@ -45,7 +38,7 @@ const Home = () => {
                             variant='mini'
                         />
                     </div> */}
-                    В разработке...
+                    ToDo в разработке...
                 </section>
             </main>
         </div>
