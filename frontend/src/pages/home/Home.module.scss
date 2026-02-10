@@ -14,14 +14,15 @@
         border-color: var(--pink);
     }
     & h1{
-        color: var(--pink);
+        color: var(--cyan);
     }
     & h2{
         font-size: fluid-prop(20,16,1920,320);
         text-wrap: balance;
+        color: var(--pink);
     }
     & h3{
-        color: var(--pink);
+        color: var(--cyan);
     }
 }
 .welcome_container{

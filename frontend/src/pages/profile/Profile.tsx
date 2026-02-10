@@ -44,6 +44,9 @@ type ProfileError = "NOT_FOUND" | "UNKNOWN";
 type OpenModal = "edit" | "reset" | null;
 
 const Profile = () => {
+  const MAX_AVATAR_SIZE_MB = 5;
+  const MAX_AVATAR_SIZE_BYTES = MAX_AVATAR_SIZE_MB * 1024 * 1024;
+
   const { username } = useParams<{ username: string }>();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [error, setError] = useState<ProfileError | null>(null);
@@ -521,6 +524,14 @@ const handleFriendAction = async (userId: number) => {
                           if (!file.type.startsWith('image/')) {
                             alert('РњРѕР¶РЅРѕ Р·Р°РіСЂСѓР¶Р°С‚СЊ С‚РѕР»СЊРєРѕ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ');
                             e.target.value = '';
+                            return;
+                          }
+
+                          if (file.size > MAX_AVATAR_SIZE_BYTES) {
+                            alert(`Максимальный размер аватара: ${MAX_AVATAR_SIZE_MB}MB`);
+                            e.target.value = '';
+                            setAvatarFile(null);
+                            setAvatarPreview(null);
                             return;
                           }
 
