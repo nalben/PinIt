@@ -88,6 +88,72 @@
         }
     }
 }
+.friends_toggleButtons{
+    display: flex;
+    width: 100%;
+    margin-top: 1rem;
+    & button{
+        width: 100%;
+        background-color: transparent;
+        color: var(--pink);
+        padding-block: fluid-prop(10, 8, 1920, 320);
+        padding-inline: fluid-prop(18, 12, 1920, 320);
+        border: var(--border);
+        cursor: pointer;
+        &:nth-child(1){
+            border-right: none;
+        }
+    }
+}
+.friends_toggleActive{
+    background-color: var(--grey20) !important;
+}
+.findFriendContainer{
+    width: 100%;
+    gap: 0.4rem;
+    display: flex;
+    flex-direction: column;
+    & span{
+        font-size: fluid-prop(20,18,1920,320);
+        margin-right: auto;
+        align-self: center;
+        grid-column: span 3;
+    }
+    & button:nth-child(1) {
+        width: 100%;
+    }
+    @media (min-width:700px) {
+        flex-direction: row;
+        & button:nth-child(1){
+            width: 170px;
+        }
+    }
+}
+.code_btns{
+    display: flex;
+    gap: 0.4rem;
+    & button{
+        height: 100%;
+    }
+}
+.friend_code_reload_btn{
+    border: var(--border);
+    background-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: fluid-prop(15, 10, 1920, 320);
+    cursor: pointer;
+    & svg{
+        width: fluid-prop(24, 18, 1920, 320);
+        height: fluid-prop(24, 18, 1920, 320);
+        fill: var(--pink);
+    }
+    &:disabled{
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+}
 .interact_btns{
     display: flex;
     gap: 0.5rem;

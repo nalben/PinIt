@@ -16,7 +16,8 @@ import { connectSocket } from "@/services/socketManager";
 import { useUIStore } from "@/store/uiStore";
 import { useNotificationsStore } from "@/store/notificationsStore";
 import ProfileSkeleton from "./ProfileSkeleton";
-// РРЅС‚РµСЂС„РµР№СЃС‹
+import Reload from '@/assets/icons/monochrome/reload.svg'
+
 interface ProfileData {
   id: number;
   avatar?: string | null;
@@ -26,6 +27,7 @@ interface ProfileData {
   created_at: string;
   nickname?: string | null;
   status?: string | null;
+  friend_code?: string | null;
 }
 interface UpdateProfileResponse {
   message: string;
@@ -40,8 +42,8 @@ interface FriendItem extends ProfileData {
 
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
-// РўРёРї СЃРѕСЃС‚РѕСЏРЅРёСЏ РјРѕРґР°Р»РєРё
 type OpenModal = "edit" | "reset" | null;
+type FriendsView = "list" | "search";
 
 const Profile = () => {
   const MAX_AVATAR_SIZE_MB = 5;
@@ -53,9 +55,13 @@ const Profile = () => {
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isFriendsOpen, setIsFriendsOpen] = useState(false);
+  const [friendsView, setFriendsView] = useState<FriendsView>("list");
   const [friends, setFriends] = useState<FriendItem[]>([]);
   const [friendStatusById, setFriendStatusById] = useState<Record<number, { status: FriendStatus; requestId?: number }>>({});
   const [shareTextById, setShareTextById] = useState<Record<number, string>>({});
+  const [friendCodeCopyText, setFriendCodeCopyText] = useState<string | null>(null);
+  const [isFriendCodeGenerating, setIsFriendCodeGenerating] = useState<boolean>(false);
+  const [isFriendCodeRegenerating, setIsFriendCodeRegenerating] = useState<boolean>(false);
   const [nicknameInput, setNicknameInput] = useState<string>('');
   const [statusInput, setStatusInput] = useState<string>('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -65,7 +71,6 @@ const Profile = () => {
   const { openHeaderDropdown } = useUIStore();
   const { setHighlightRequestId } = useNotificationsStore();
 
-  // РЎРєР»РѕРЅРµРЅРёРµ
   const declension = (number: number, titles: [string, string, string]) => {
     const n = Math.abs(number) % 100;
     const n1 = n % 10;
@@ -77,14 +82,12 @@ const Profile = () => {
 
   const safeCopyToClipboard = (text: string) => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      // СЃС‚Р°РЅРґР°СЂС‚РЅС‹Р№ СЃРїРѕСЃРѕР± РЅР° HTTPS РёР»Рё localhost
       return navigator.clipboard.writeText(text);
     } else {
-      // fallback РґР»СЏ HTTP РёР»Рё СЃС‚Р°СЂС‹С… Р±СЂР°СѓР·РµСЂРѕРІ
       return new Promise<void>((resolve, reject) => {
         const textarea = document.createElement('textarea');
         textarea.value = text;
-        textarea.style.position = 'fixed'; // С‡С‚РѕР±С‹ РЅРµ СЃРєСЂРѕР»Р»РёР»Рѕ СЃС‚СЂР°РЅРёС†Сѓ
+        textarea.style.position = 'fixed';
         textarea.style.top = '-9999px';
         document.body.appendChild(textarea);
         textarea.focus();
@@ -104,7 +107,6 @@ const Profile = () => {
   };
 
   const handleShare = (userId: number, username: string) => {
-    // СЃРѕР±РёСЂР°РµРј СЃСЃС‹Р»РєСѓ РЅР° С‚РµРєСѓС‰РёР№ СЃР°Р№С‚
     const profileUrl = `${window.location.origin}/user/${username}`;
     safeCopyToClipboard(profileUrl)
       .then(() => {
@@ -114,6 +116,42 @@ const Profile = () => {
         }, 2000);
       })
       .catch(err => console.error('РћС€РёР±РєР° РєРѕРїРёСЂРѕРІР°РЅРёСЏ РІ Р±СѓС„РµСЂ:', err));
+  };
+
+  const handleGenerateFriendCode = async () => {
+    if (isFriendCodeGenerating) return;
+    try {
+      setIsFriendCodeGenerating(true);
+      const { data } = await axiosInstance.post<{ friend_code: string }>(`/api/profile/me/friend-code`);
+      setProfile(prev => prev ? { ...prev, friend_code: data.friend_code } : prev);
+    } catch (err) {
+      console.error('Ошибка при генерации кода дружбы', err);
+    } finally {
+      setIsFriendCodeGenerating(false);
+    }
+  };
+
+  const handleRegenerateFriendCode = async () => {
+    if (isFriendCodeRegenerating) return;
+    try {
+      setIsFriendCodeRegenerating(true);
+      setFriendCodeCopyText(null);
+      const { data } = await axiosInstance.post<{ friend_code: string }>(`/api/profile/me/friend-code/regenerate`);
+      setProfile(prev => prev ? { ...prev, friend_code: data.friend_code } : prev);
+    } catch (err) {
+      console.error('Ошибка при перегенерации кода дружбы', err);
+    } finally {
+      setIsFriendCodeRegenerating(false);
+    }
+  };
+
+  const handleCopyFriendCode = (code: string) => {
+    safeCopyToClipboard(code)
+      .then(() => {
+        setFriendCodeCopyText('скопировано');
+        setTimeout(() => setFriendCodeCopyText(null), 1000);
+      })
+      .catch(err => console.error('Ошибка при копировании кода дружбы:', err));
   };
 
 
@@ -164,7 +202,6 @@ const Profile = () => {
       const { data } =
         await axiosInstance.get<FriendItem[]>(`/api/profile/${profile.username}/friends`);
       setFriends(data);
-      // заполняем статусы друзей
       const statuses: Record<number, { status: FriendStatus }> = {};
       data.forEach(f => {
         statuses[f.id] = { status: 'friend' };
@@ -175,7 +212,6 @@ const Profile = () => {
     }
   };
 
-  // Р—Р°РіСЂСѓР·РєР° РїСЂРѕС„РёР»СЏ
   useEffect(() => {
   if (!isInitialized) return;
 
@@ -232,7 +268,6 @@ useEffect(() => {
 useEffect(() => {
   if (!profile?.id) return;
   const handleFriendStatusChange = (data: { userId: number; status: FriendStatus; requestId?: number }) => {
-    // обновляем статус текущего профиля и друзей
     setFriendStatusById(prev => ({
       ...prev,
       [data.userId]: {
@@ -256,8 +291,6 @@ useEffect(() => {
     if (shouldUpdateCounts) {
       refreshFriendCount();
       if (profile?.isOwner && data.status === 'friend') {
-        // только при подтверждении дружбы подтягиваем новый список,
-        // чтобы при удалении друг оставался в списке с кнопкой "добавить"
         refreshFriendsList();
       }
     }
@@ -395,54 +428,106 @@ const handleFriendAction = async (userId: number) => {
             <button
               type="button"
               className={classes.friends_btn}
-              onClick={() => friendCount && friendCount > 0 && setIsFriendsOpen(true)}
-              disabled={!friendCount || friendCount === 0}
+              onClick={() => setIsFriendsOpen(true)}
             >
               Друзей: {friendCount ?? 'нет'}
             </button>
             <AuthModal isOpen={isFriendsOpen} onClose={() => setIsFriendsOpen(false)}>
               <div className={classes.friends_modal}>
-                <strong>Друзья</strong>
-                <div className={classes.friends_item_con}>
-                    {friends.map(friend => {
-                      const status = friendStatusById[friend.id]?.status ?? 'friend';
-                      const avatarSrc = friend.avatar
-                        ? friend.avatar.startsWith('/uploads/')
-                          ? `${API_URL}${friend.avatar}`
-                          : `${API_URL}/uploads/${friend.avatar}`
-                        : null;
-
-                      return (
-                        <div key={friend.id} className={classes.friend_item}>
-                          <Link to={`/user/${friend.username}`} className={classes.friend_info}>
-                            <div className={classes.friend_info_wrap}>
-                              {avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />}
-                              <div className={classes.friend_info_text}>
-                                <span>{friend.nickname || friend.username}</span>
-                                <p>в друзьях: {timeAgo(friend.created_at)}</p>
-                              </div>
-                            </div>
-                          </Link>
-                        <div className={getButtonClass(status)}>
-                          <Mainbtn
-                            text={getButtonText(status)}
-                            variant="auth"
-                            kind="button"
-                            onClick={() => {
-                              if (status === 'received') {
-                                setIsFriendsOpen(false);
-                                openHeaderDropdown('notifications');
-                                if (friend.requestId) setHighlightRequestId(friend.requestId);
-                                return;
-                              }
-                              handleFriendAction(friend.id);
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className={classes.friends_toggleButtons}>
+                  <button
+                    type="button"
+                    className={friendsView === "list" ? classes.friends_toggleActive : ""}
+                    onClick={() => setFriendsView("list")}
+                  >
+                    Мои друзья
+                  </button>
+                  <button
+                    type="button"
+                    className={friendsView === "search" ? classes.friends_toggleActive : ""}
+                    onClick={() => setFriendsView("search")}
+                  >
+                    Найти друга
+                  </button>
                 </div>
+                {friendsView === "list" ? (
+                  <div className={classes.friends_item_con}>
+                      {friendCount === 0 ? (
+                        <p>у вас пока нет друзей</p>
+                      ) : friends.map(friend => {
+                        const status = friendStatusById[friend.id]?.status ?? 'friend';
+                        const avatarSrc = friend.avatar
+                          ? friend.avatar.startsWith('/uploads/')
+                            ? `${API_URL}${friend.avatar}`
+                            : `${API_URL}/uploads/${friend.avatar}`
+                          : null;
+
+                        return (
+                          <div key={friend.id} className={classes.friend_item}>
+                            <Link to={`/user/${friend.username}`} className={classes.friend_info}>
+                              <div className={classes.friend_info_wrap}>
+                                {avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />}
+                                <div className={classes.friend_info_text}>
+                                  <span>{friend.nickname || friend.username}</span>
+                                  <p>в друзьях: {timeAgo(friend.created_at)}</p>
+                                </div>
+                              </div>
+                            </Link>
+                          <div className={getButtonClass(status)}>
+                            <Mainbtn
+                              text={getButtonText(status)}
+                              variant="auth"
+                              kind="button"
+                              onClick={() => {
+                                if (status === 'received') {
+                                  setIsFriendsOpen(false);
+                                  openHeaderDropdown('notifications');
+                                  if (friend.requestId) setHighlightRequestId(friend.requestId);
+                                  return;
+                                }
+                                handleFriendAction(friend.id);
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className={classes.findFriendContainer}>
+                    <span>Ваш код дружбы:</span>
+                    {!profile.friend_code ? (
+                      <Mainbtn
+                        text={isFriendCodeGenerating ? 'генерируем...' : 'сгенерировать'}
+                        variant="mini"
+                        kind="button"
+                        disabled={isFriendCodeGenerating}
+                        onClick={handleGenerateFriendCode}
+                      />
+                    ) : (
+                      <>
+                      <div className={classes.code_btns}>
+                        <Mainbtn
+                          text={friendCodeCopyText ?? profile.friend_code}
+                          variant="mini"
+                          kind="button"
+                          onClick={() => handleCopyFriendCode(profile.friend_code!)}
+                        />
+                        <button
+                          type="button"
+                          className={classes.friend_code_reload_btn}
+                          onClick={handleRegenerateFriendCode}
+                          disabled={isFriendCodeRegenerating}
+                          aria-label="Перегенерировать код дружбы"
+                          title="Перегенерировать"
+                        >
+                          <Reload />
+                        </button>
+                      </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </AuthModal>
 

@@ -1,5 +1,6 @@
 const db = require('../db');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 
@@ -92,7 +93,7 @@ exports.getMe = async (req, res) => {
     const userId = decoded.id;
 
     const [rows] = await db.execute(
-      'SELECT id, username, nickname, avatar, role, email FROM users WHERE id = ?',
+      'SELECT id, username, nickname, avatar, role, email, friend_code FROM users WHERE id = ?',
       [userId]
     );
 
@@ -110,6 +111,111 @@ exports.getMe = async (req, res) => {
 };
 
 /* ============================
+   POST /api/profile/me/friend-code
+============================ */
+exports.generateFriendCode = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'РќРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ' });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    const userId = decoded.id;
+
+    const [rows] = await db.execute(
+      'SELECT friend_code FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+    }
+
+    if (rows[0].friend_code) {
+      return res.json({ friend_code: rows[0].friend_code });
+    }
+
+    const generateCandidate = () => String(crypto.randomInt(0, 100000000)).padStart(8, '0');
+
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const candidate = generateCandidate();
+
+      try {
+        const [result] = await db.execute(
+          'UPDATE users SET friend_code = ? WHERE id = ? AND friend_code IS NULL',
+          [candidate, userId]
+        );
+
+        if (result.affectedRows === 0) {
+          const [updatedRows] = await db.execute(
+            'SELECT friend_code FROM users WHERE id = ?',
+            [userId]
+          );
+          return res.json({ friend_code: updatedRows[0]?.friend_code ?? null });
+        }
+
+        return res.json({ friend_code: candidate });
+      } catch (err) {
+        if (err?.code === 'ER_DUP_ENTRY' || err?.errno === 1062) continue;
+        console.error(err);
+        return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
+      }
+    }
+
+    return res.status(500).json({ message: 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РєРѕРґ' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
+  }
+};
+
+/* ============================
+   POST /api/profile/me/friend-code/regenerate
+============================ */
+exports.regenerateFriendCode = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'РќРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ' });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    const userId = decoded.id;
+
+    const [rows] = await db.execute(
+      'SELECT friend_code FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+    }
+
+    const currentCode = rows[0].friend_code;
+    const generateCandidate = () => String(crypto.randomInt(0, 100000000)).padStart(8, '0');
+
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+      const candidate = generateCandidate();
+      if (candidate === currentCode) continue;
+
+      try {
+        await db.execute(
+          'UPDATE users SET friend_code = ? WHERE id = ?',
+          [candidate, userId]
+        );
+        return res.json({ friend_code: candidate });
+      } catch (err) {
+        if (err?.code === 'ER_DUP_ENTRY' || err?.errno === 1062) continue;
+        console.error(err);
+        return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
+      }
+    }
+
+    return res.status(500).json({ message: 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РєРѕРґ' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
+  }
+};
+
+/* ============================
    GET /api/profile/:username
 ============================ */
 exports.getByUsername = async (req, res) => {
@@ -118,7 +224,7 @@ exports.getByUsername = async (req, res) => {
 
     const [rows] = await db.execute(
       `
-        SELECT id, username, nickname, role, avatar, created_at, email, status
+        SELECT id, username, nickname, role, avatar, created_at, email, status, friend_code
         FROM users
         WHERE username = ?
       `,
@@ -140,6 +246,7 @@ exports.getByUsername = async (req, res) => {
       created_at: rows[0].created_at,
       email: isOwner ? rows[0].email : undefined,
       status: rows[0].status,
+      friend_code: isOwner ? rows[0].friend_code : undefined,
       isOwner,
     });
   } catch {
