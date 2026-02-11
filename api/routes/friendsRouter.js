@@ -4,6 +4,7 @@ const friendsController = require('../controllers/friendsController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 router.post('/send', authMiddleware, friendsController.sendFriendRequest);
+router.post('/send-by-code', authMiddleware, friendsController.sendFriendRequestByCode);
 router.put('/accept/:request_id', authMiddleware, friendsController.acceptFriendRequest);
 router.put('/reject/:request_id', authMiddleware, friendsController.rejectFriendRequest);
 router.delete('/remove-request/:request_id', authMiddleware, friendsController.removeFriendRequest);

@@ -7,7 +7,7 @@ exports.sendFriendRequest = async (req, res) => {
     const user_id = req.user.id;
 
     if (user_id === friend_id) {
-      return res.status(400).json({ message: 'Нельзя отправить запрос на самого себя' });
+      return res.status(400).json({ message: 'Нельзя отправить запрос самому себе' });
     }
 
     const [friends] = await db.execute(
@@ -71,6 +71,45 @@ exports.sendFriendRequest = async (req, res) => {
       status: 'sent'
     });
 
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Ошибка при отправке запроса' });
+  }
+};
+
+// Отправка запроса в друзья по коду дружбы
+exports.sendFriendRequestByCode = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const code = String(req.body?.code ?? '').trim();
+
+    if (!code) {
+      return res.status(400).json({ message: 'Код дружбы не может быть пустым' });
+    }
+
+    const [userRows] = await db.execute(
+      'SELECT id FROM users WHERE friend_code = ?',
+      [code]
+    );
+
+    if (!userRows.length) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    const friend_id = userRows[0].id;
+
+    const [rejectedOutgoing] = await db.execute(
+      `SELECT 1 FROM friend_requests
+       WHERE user_id = ? AND friend_id = ? AND status = 'rejected'`,
+      [user_id, friend_id]
+    );
+
+    if (rejectedOutgoing.length > 0) {
+      return res.status(400).json({ message: 'Невозможно отправить' });
+    }
+
+    req.body.friend_id = friend_id;
+    return exports.sendFriendRequest(req, res);
   } catch (error) {
     console.error(error);
     return res.status(500).json({ message: 'Ошибка при отправке запроса' });

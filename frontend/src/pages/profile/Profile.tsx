@@ -44,6 +44,7 @@ type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
 type OpenModal = "edit" | "reset" | null;
 type FriendsView = "list" | "search";
+type FriendSearchMessage = { kind: "error" | "success"; text: string } | null;
 
 const Profile = () => {
   const MAX_AVATAR_SIZE_MB = 5;
@@ -62,6 +63,9 @@ const Profile = () => {
   const [friendCodeCopyText, setFriendCodeCopyText] = useState<string | null>(null);
   const [isFriendCodeGenerating, setIsFriendCodeGenerating] = useState<boolean>(false);
   const [isFriendCodeRegenerating, setIsFriendCodeRegenerating] = useState<boolean>(false);
+  const [friendSearchCode, setFriendSearchCode] = useState<string>("");
+  const [friendSearchMessage, setFriendSearchMessage] = useState<FriendSearchMessage>(null);
+  const [isFriendSearching, setIsFriendSearching] = useState<boolean>(false);
   const [nicknameInput, setNicknameInput] = useState<string>('');
   const [statusInput, setStatusInput] = useState<string>('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -79,6 +83,12 @@ const Profile = () => {
     if (n1 === 1) return titles[0];
     return titles[2];
   };
+
+  useEffect(() => {
+    if (!friendSearchMessage) return;
+    const timeoutId = window.setTimeout(() => setFriendSearchMessage(null), 2000);
+    return () => window.clearTimeout(timeoutId);
+  }, [friendSearchMessage]);
 
   const safeCopyToClipboard = (text: string) => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -142,6 +152,33 @@ const Profile = () => {
       console.error('Ошибка при перегенерации кода дружбы', err);
     } finally {
       setIsFriendCodeRegenerating(false);
+    }
+  };
+
+  const handleAddFriendByCode = async () => {
+    const code = friendSearchCode.trim();
+    if (!code || isFriendSearching) return;
+
+    try {
+      setIsFriendSearching(true);
+      setFriendSearchMessage(null);
+      await axiosInstance.post(`/api/friends/send-by-code`, { code });
+      setFriendSearchMessage({ kind: "success", text: "Запрос отправлен" });
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message;
+
+      if (status === 404) {
+        setFriendSearchMessage({ kind: "error", text: "пользователь не найден" });
+      } else if (typeof message === "string" && message.toLowerCase().includes("невозможно")) {
+        setFriendSearchMessage({ kind: "error", text: "Запрос отклонен" });
+      } else if (typeof message === "string") {
+        setFriendSearchMessage({ kind: "error", text: message });
+      } else {
+        setFriendSearchMessage({ kind: "error", text: "Запрос отклонен" });
+      }
+    } finally {
+      setIsFriendSearching(false);
     }
   };
 
@@ -410,8 +447,6 @@ const handleFriendAction = async (userId: number) => {
         <img
           src={avatarSrc}
           alt="avatar"
-          width={200}
-          height={200}
         />
       ) : (
         <Default />
@@ -452,7 +487,7 @@ const handleFriendAction = async (userId: number) => {
                 </div>
                 {friendsView === "list" ? (
                   <div className={classes.friends_item_con}>
-                      {friendCount === 0 ? (
+                      {friendCount === 0 && friends.length === 0 ? (
                         <p>у вас пока нет друзей</p>
                       ) : friends.map(friend => {
                         const status = friendStatusById[friend.id]?.status ?? 'friend';
@@ -495,37 +530,72 @@ const handleFriendAction = async (userId: number) => {
                   </div>
                 ) : (
                   <div className={classes.findFriendContainer}>
-                    <span>Ваш код дружбы:</span>
-                    {!profile.friend_code ? (
-                      <Mainbtn
-                        text={isFriendCodeGenerating ? 'генерируем...' : 'сгенерировать'}
-                        variant="mini"
-                        kind="button"
-                        disabled={isFriendCodeGenerating}
-                        onClick={handleGenerateFriendCode}
-                      />
-                    ) : (
-                      <>
-                      <div className={classes.code_btns}>
+                    <div className={classes.friend_code_block}>
+                      <span>Ваш код дружбы:</span>
+                      {!profile.friend_code ? (
                         <Mainbtn
-                          text={friendCodeCopyText ?? profile.friend_code}
+                          text={isFriendCodeGenerating ? 'генерируем...' : 'сгенерировать'}
                           variant="mini"
                           kind="button"
-                          onClick={() => handleCopyFriendCode(profile.friend_code!)}
+                          disabled={isFriendCodeGenerating}
+                          onClick={handleGenerateFriendCode}
                         />
-                        <button
-                          type="button"
-                          className={classes.friend_code_reload_btn}
-                          onClick={handleRegenerateFriendCode}
-                          disabled={isFriendCodeRegenerating}
-                          aria-label="Перегенерировать код дружбы"
-                          title="Перегенерировать"
-                        >
-                          <Reload />
-                        </button>
+                      ) : (
+                        <div className={classes.code_btns}>
+                          <Mainbtn
+                            text={friendCodeCopyText ?? profile.friend_code}
+                            variant="mini"
+                            kind="button"
+                            onClick={() => handleCopyFriendCode(profile.friend_code!)}
+                          />
+                          <button
+                            type="button"
+                            className={classes.friend_code_reload_btn}
+                            onClick={handleRegenerateFriendCode}
+                            disabled={isFriendCodeRegenerating}
+                            aria-label="Перегенерировать код дружбы"
+                            title="Перегенерировать"
+                          >
+                            <Reload />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={classes.friend_search_block}>
+                      <span>Найти друга</span>
+                      <div className={classes.friend_search_controls}>
+                        <input
+                          type="text"
+                          id="searchfriend"
+                          value={friendSearchCode}
+                          onChange={(e) => {
+                            setFriendSearchCode(e.target.value);
+                            setFriendSearchMessage(null);
+                          }}
+                          placeholder="введите код дружбы"
+                          autoComplete="off"
+                        />
+                        <Mainbtn
+                          text={isFriendSearching ? "..." : "добавить"}
+                          variant="mini"
+                          kind="button"
+                          disabled={!friendSearchCode.trim() || isFriendSearching}
+                          onClick={handleAddFriendByCode}
+                        />
                       </div>
-                      </>
-                    )}
+                      {friendSearchMessage && (
+                        <p
+                          className={
+                            friendSearchMessage.kind === "error"
+                              ? classes.friend_search_error
+                              : classes.friend_search_success
+                          }
+                        >
+                          {friendSearchMessage.text}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

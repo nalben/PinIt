@@ -110,11 +110,17 @@
 }
 .findFriendContainer{
     width: 100%;
-    gap: 0.4rem;
     display: flex;
     flex-direction: column;
-    & span{
-        font-size: fluid-prop(20,18,1920,320);
+    gap: 1rem;
+}
+.friend_code_block{
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    & span {
+        font-size: fluid-prop(20, 18, 1920, 320);
         margin-right: auto;
         align-self: center;
         grid-column: span 3;
@@ -124,10 +130,55 @@
     }
     @media (min-width:700px) {
         flex-direction: row;
-        & button:nth-child(1){
+        & button:nth-child(1) {
             width: 170px;
         }
     }
+}
+.friend_search_block{
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    & span{
+        font-size: fluid-prop(20, 18, 1920, 320);
+    }
+}
+.friend_search_controls{
+    display: flex;
+    gap: 0.6rem;
+    align-items: stretch;
+    height: fluid-prop(58,41,1920,320);
+    & input{
+        display: flex;
+        border: var(--border);
+        padding: 10px;
+        color: var(--pink);
+        height: 100%;
+        width: 100%;
+        transition: all 0.3s;
+        &::placeholder {
+            font-size: fluid-prop(16,14,1920,320);
+            transition: all 0.3s;
+        }
+        &:focus{
+            border-color: var(--pink);
+            transition: all 0.3s;
+            &::placeholder {
+                color: var(--pink);
+                transition: all 0.3s;
+            }
+        }
+    }
+    & button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+}
+.friend_search_error{
+    color: var(--cyan);
+}
+.friend_search_success{
+    color: var(--cyan);
 }
 .code_btns{
     display: flex;
@@ -202,6 +253,7 @@
 .friends_modal{
     display: flex;
     flex-direction: column;
+    max-width: 480px;
     gap: 1rem;
     & strong{
         font-size: fluid-prop(26,20,1920,320);
@@ -400,7 +452,7 @@
 }
 
 .edit_modal{
-    max-width: 400px;
+    max-width: 480px;
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
