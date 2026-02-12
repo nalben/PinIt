@@ -255,6 +255,45 @@ exports.getByUsername = async (req, res) => {
 };
 
 /* ============================
+   GET /api/profile/by-friend-code/:code
+============================ */
+exports.getByFriendCode = async (req, res) => {
+  try {
+    const code = String(req.params?.code ?? '').trim();
+
+    if (!/^\d{8}$/.test(code)) {
+      return res.status(400).json({ message: 'Неверный код дружбы' });
+    }
+
+    const [rows] = await db.execute(
+      `
+        SELECT id, username, nickname, role, avatar, created_at, status
+        FROM users
+        WHERE friend_code = ?
+      `,
+      [code]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    return res.json({
+      id: rows[0].id,
+      username: rows[0].username,
+      nickname: rows[0].nickname,
+      avatar: rows[0].avatar,
+      role: rows[0].role,
+      created_at: rows[0].created_at,
+      status: rows[0].status,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: 'Ошибка сервера' });
+  }
+};
+
+/* ============================
    GET /api/profile/:username/friends-count
 ============================ */
 exports.getFriendsCount = async (req, res) => {

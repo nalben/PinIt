@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import axiosInstance, { API_URL } from "@/api/axiosInstance";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
@@ -23,6 +23,15 @@ interface Friend {
 
 interface MeProfileResponse {
   friend_code?: string | null;
+}
+
+interface UserByFriendCodeResponse {
+  id: number;
+  username: string;
+  nickname?: string | null;
+  avatar?: string | null;
+  created_at: string;
+  status?: string | null;
 }
 
 type FriendSearchMessage = { kind: "error" | "success"; text: string } | null;
@@ -100,7 +109,9 @@ const FriendsModal = () => {
   const [friendSearchCode, setFriendSearchCode] = useState("");
   const [friendSearchMessage, setFriendSearchMessage] = useState<FriendSearchMessage>(null);
   const [isFriendSearching, setIsFriendSearching] = useState(false);
+  const [foundUserByCode, setFoundUserByCode] = useState<UserByFriendCodeResponse | null>(null);
   const [friendActionLoadingById, setFriendActionLoadingById] = useState<Record<number, boolean>>({});
+  const friendSearchSeqRef = useRef(0);
 
   const mergeFriends = (current: Friend[], incoming: Friend[]) => {
     if (!current.length) return incoming;
@@ -169,16 +180,13 @@ const FriendsModal = () => {
   };
 
   useEffect(() => {
-    if (!friendSearchMessage) return;
-    const timeoutId = window.setTimeout(() => setFriendSearchMessage(null), 2000);
-    return () => window.clearTimeout(timeoutId);
-  }, [friendSearchMessage]);
-
-  useEffect(() => {
     if (!friendsModalOpen) return;
 
     setFriendCodeCopyText(null);
+    setFriendSearchCode("");
+    setFoundUserByCode(null);
     setFriendSearchMessage(null);
+    setIsFriendSearching(false);
 
     if (!isInitialized) return;
     if (!isAuth || !user?.id) {
@@ -284,32 +292,90 @@ const FriendsModal = () => {
       .catch((err) => console.error("Ошибка при копировании кода дружбы:", err));
   };
 
-  const handleAddFriendByCode = async () => {
+  useEffect(() => {
+    if (!friendsModalOpen) return;
+    if (friendsModalView !== "search") return;
+    if (!isInitialized) return;
+
+    friendSearchSeqRef.current += 1;
+    const seq = friendSearchSeqRef.current;
+
     const code = friendSearchCode.trim();
-    if (!code || isFriendSearching) return;
+    setFriendSearchMessage(null);
 
-    try {
-      setIsFriendSearching(true);
-      setFriendSearchMessage(null);
-      await axiosInstance.post(`/api/friends/send-by-code`, { code });
-      setFriendSearchMessage({ kind: "success", text: "Запрос отправлен" });
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const message = err?.response?.data?.message;
-
-      if (status === 404) {
-        setFriendSearchMessage({ kind: "error", text: "пользователь не найден" });
-      } else if (typeof message === "string" && message.toLowerCase().includes("невозможно")) {
-        setFriendSearchMessage({ kind: "error", text: "Запрос отклонен" });
-      } else if (typeof message === "string") {
-        setFriendSearchMessage({ kind: "error", text: message });
-      } else {
-        setFriendSearchMessage({ kind: "error", text: "Запрос отклонен" });
-      }
-    } finally {
+    if (!code || code.length < 8) {
+      setFoundUserByCode(null);
       setIsFriendSearching(false);
+      return;
     }
-  };
+
+    const timeoutId = window.setTimeout(async () => {
+      if (seq !== friendSearchSeqRef.current) return;
+
+      try {
+        setIsFriendSearching(true);
+
+        const { data: foundUser } = await axiosInstance.get<UserByFriendCodeResponse>(
+          `/api/profile/by-friend-code/${code}`
+        );
+
+        if (seq !== friendSearchSeqRef.current) return;
+
+        if (foundUser.id === user?.id) {
+          setFoundUserByCode(null);
+          setFriendSearchMessage({ kind: "error", text: "Это ваш код" });
+          return;
+        }
+
+        setFoundUserByCode(foundUser);
+
+        if (!isAuth || !user?.id) return;
+        const { data: statusData } = await axiosInstance.get<{ status: FriendStatus; requestId?: number }>(
+          `/api/friends/status/${foundUser.id}`
+        );
+
+        if (seq !== friendSearchSeqRef.current) return;
+
+        const rawStatus = String(statusData?.status ?? "");
+        const validStatuses: FriendStatus[] = ["friend", "none", "sent", "received", "rejected"];
+        if (!validStatuses.includes(rawStatus as FriendStatus)) return;
+
+        setFriendStatusById((prev) => ({
+          ...prev,
+          [foundUser.id]: {
+            status: rawStatus as FriendStatus,
+            requestId: typeof statusData?.requestId === "number" ? statusData.requestId : undefined,
+          },
+        }));
+      } catch (err: any) {
+        if (seq !== friendSearchSeqRef.current) return;
+
+        setFoundUserByCode(null);
+
+        const status = err?.response?.status;
+        const message = err?.response?.data?.message;
+
+        if (status === 404) {
+          setFriendSearchMessage({ kind: "error", text: "пользователь не найден" });
+        } else if (typeof message === "string") {
+          setFriendSearchMessage({ kind: "error", text: message });
+        } else {
+          setFriendSearchMessage({ kind: "error", text: "Ошибка поиска" });
+        }
+      } finally {
+        if (seq === friendSearchSeqRef.current) setIsFriendSearching(false);
+      }
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    friendSearchCode,
+    friendsModalOpen,
+    friendsModalView,
+    isInitialized,
+    isAuth,
+    user?.id,
+  ]);
 
   const handleFriendAction = async (otherUserId: number) => {
     if (friendActionLoadingById[otherUserId]) return;
@@ -480,20 +546,23 @@ const FriendsModal = () => {
                   id="searchfriend"
                   value={friendSearchCode}
                   onChange={(e) => {
-                    setFriendSearchCode(e.target.value);
+                    const next = e.target.value.replace(/\D/g, "").slice(0, 8);
+                    setFriendSearchCode(next);
+                    setFoundUserByCode(null);
                     setFriendSearchMessage(null);
                   }}
                   placeholder="введите код дружбы"
+                  inputMode="numeric"
+                  pattern="\\d*"
+                  maxLength={8}
                   autoComplete="off"
                 />
-                <Mainbtn
-                  text={isFriendSearching ? "..." : "добавить"}
-                  variant="mini"
-                  kind="button"
-                  disabled={!friendSearchCode.trim() || isFriendSearching}
-                  onClick={handleAddFriendByCode}
-                />
               </div>
+
+              {isFriendSearching && friendSearchCode.trim().length === 8 && (
+                <p className={classes.friend_search_success}>поиск...</p>
+              )}
+
               {friendSearchMessage && (
                 <p
                   className={
@@ -504,6 +573,62 @@ const FriendsModal = () => {
                 >
                   {friendSearchMessage.text}
                 </p>
+              )}
+
+              {foundUserByCode && (
+                <div className={classes.friend_search_result}>
+                  <div className={classes.friend_item}>
+                    <Link
+                      to={`/user/${foundUserByCode.username}`}
+                      className={classes.friend_info}
+                      onClick={() => closeFriendsModal()}
+                    >
+                      <div className={classes.friend_info_wrap}>
+                        {(() => {
+                          const avatarSrc = foundUserByCode.avatar
+                            ? foundUserByCode.avatar.startsWith("/uploads/")
+                              ? `${API_URL}${foundUserByCode.avatar}`
+                              : `${API_URL}/uploads/${foundUserByCode.avatar}`
+                            : null;
+
+                          return avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />;
+                        })()}
+                        <div className={classes.friend_info_text}>
+                          <span>{foundUserByCode.nickname || foundUserByCode.username}</span>
+                          {(() => {
+                            const status = friendStatusById[foundUserByCode.id]?.status ?? "none";
+                            const friendMeta = friends.find((f) => f.id === foundUserByCode.id);
+                            if (status !== "friend" || !friendMeta?.created_at) return null;
+                            return <p>в друзьях: {timeAgo(friendMeta.created_at)}</p>;
+                          })()}
+                        </div>
+                      </div>
+                    </Link>
+
+                    {(() => {
+                      const status = friendStatusById[foundUserByCode.id]?.status ?? "none";
+                      const requestId = friendStatusById[foundUserByCode.id]?.requestId;
+
+                      return (
+                        <div className={getButtonClass(status)}>
+                          <Mainbtn
+                            text={getButtonText(status)}
+                            variant="auth"
+                            kind="button"
+                            disabled={status === "rejected" || Boolean(friendActionLoadingById[foundUserByCode.id])}
+                            onClick={() => {
+                              if (status === "received") {
+                                openIncomingRequest(requestId);
+                                return;
+                              }
+                              handleFriendAction(foundUserByCode.id);
+                            }}
+                          />
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
               )}
             </div>
           </div>

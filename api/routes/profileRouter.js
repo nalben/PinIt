@@ -36,6 +36,7 @@ router.put('/me', upload.single('avatar'), profileController.updateMe);
 router.get('/me', profileController.getMe);
 router.post('/me/friend-code', profileController.generateFriendCode);
 router.post('/me/friend-code/regenerate', profileController.regenerateFriendCode);
+router.get('/by-friend-code/:code', optionalAuth, profileController.getByFriendCode);
 router.get('/:username/friends-count', optionalAuth, profileController.getFriendsCount);
 router.get('/:username/friends', optionalAuth, profileController.getFriendsByUsername);
 router.get('/:username', optionalAuth, profileController.getByUsername);
