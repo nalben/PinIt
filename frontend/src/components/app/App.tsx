@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+ï»¿import React, { useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import classes from './App.module.scss';
 import "@/styles/general.scss";
@@ -9,6 +9,7 @@ import { useNotificationsStore } from '@/store/notificationsStore';
 import { connectSocket, disconnectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import Appitit from './AppInit'
+import FriendsModal from '@/components/friendsmodal/FriendsModal';
 
 const Root = () => {
   const { addRequest, removeRequest, updateRequestStatus } = useNotificationsStore();
@@ -36,7 +37,7 @@ const Root = () => {
 
         const validStatuses = ['friend', 'none', 'sent', 'received', 'rejected'] as const;
         if (!validStatuses.includes(rawStatus as typeof validStatuses[number])) {
-          console.warn('Ïîëó÷åí íåèçâåñòíûé ñòàòóñ äðóæáû:', rawStatus);
+          console.warn('ÐŸÐ¾Ð»ÑƒÑ‡ÐµÐ½ Ð½ÐµÐ¸Ð·Ð²ÐµÑÑ‚Ð½Ñ‹Ð¹ ÑÑ‚Ð°Ñ‚ÑƒÑ Ð´Ñ€ÑƒÐ¶Ð±Ñ‹:', rawStatus);
           return;
         }
 
@@ -56,6 +57,7 @@ const Root = () => {
       <main className={classes.pagecontent}>
         <Header />
         <Outlet />
+        <FriendsModal />
       </main>
     </div>
   );

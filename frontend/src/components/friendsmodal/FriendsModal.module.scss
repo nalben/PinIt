@@ -1,0 +1,250 @@
+.friends_modal {
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  gap: 1rem;
+  & strong {
+    font-size: fluid-prop(26, 20, 1920, 320);
+  }
+}
+
+.friends_toggleButtons {
+  display: flex;
+  width: 100%;
+  margin-top: 1rem;
+  & button {
+    width: 100%;
+    background-color: transparent;
+    color: var(--pink);
+    padding-block: fluid-prop(10, 8, 1920, 320);
+    padding-inline: fluid-prop(18, 12, 1920, 320);
+    border: var(--border);
+    cursor: pointer;
+    &:nth-child(1) {
+      border-right: none;
+    }
+  }
+}
+
+.friends_toggleActive {
+  background-color: var(--grey20) !important;
+}
+
+.friends_item_con {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-height: fluid-prop(700, 300, 1920, 320);
+  overflow-y: auto;
+
+  &::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    cursor: pointer;
+    background: var(--pink);
+    border-radius: 5px;
+  }
+}
+
+.friend_btn_remove {
+  background-color: rgb(255 104 104);
+  & button {
+    color: var(--blue20);
+  }
+}
+
+.friend_btn_add {
+  background-color: rgb(106 189 91);
+  & button {
+    color: var(--blue20);
+  }
+}
+
+.friend_btn_sent {
+  background-color: rgb(240 255 129);
+  & button {
+    color: var(--blue20);
+  }
+}
+
+.friend_btn_disabled {
+  background-color: rgb(115 103 103);
+  & button {
+    color: var(--blue20);
+  }
+}
+
+.friend_btn_received {
+  background-color: rgb(240 255 129);
+  & button {
+    color: var(--blue20);
+  }
+}
+
+.friend_item {
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  & img,
+  svg {
+    max-height: fluid-prop(50, 40, 1920, 320);
+    max-width: fluid-prop(50, 40, 1920, 320);
+    min-height: fluid-prop(50, 40, 1920, 320);
+    min-width: fluid-prop(50, 40, 1920, 320);
+    object-fit: cover;
+    object-position: center;
+  }
+  & button {
+    font-size: fluid-prop(20, 14, 1920, 320);
+    font-weight: 600;
+    height: fit-content;
+    padding-inline: fluid-prop(20, 5, 1920, 320);
+    padding-block: fluid-prop(15, 10, 1920, 320);
+    color: var(--blue20);
+  }
+}
+
+.friend_info {
+  display: flex;
+  gap: 1rem;
+  transition: all 0.3s;
+  &:hover {
+    opacity: 0.6;
+    transition: all 0.3s;
+  }
+}
+
+.friend_info_wrap {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.friend_info_text {
+  & span {
+    display: block;
+    max-width: fluid-prop(230, 90, 1050, 320);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: fluid-prop(18, 16, 1920, 320);
+  }
+  & p {
+    text-wrap: balance;
+    color: var(--cyan);
+    font-size: fluid-prop(16, 14, 1920, 320);
+  }
+}
+
+.findFriendContainer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.friend_code_block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  & span {
+    font-size: fluid-prop(20, 18, 1920, 320);
+    margin-right: auto;
+    align-self: center;
+    grid-column: span 3;
+  }
+  & button:nth-child(1) {
+    width: 100%;
+  }
+  @media (min-width: 700px) {
+    flex-direction: row;
+    & button:nth-child(1) {
+      width: 170px;
+    }
+  }
+}
+
+.code_btns {
+  display: flex;
+  gap: 0.4rem;
+  & button {
+    height: 100%;
+  }
+}
+
+.friend_code_reload_btn {
+  border: var(--border);
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: fluid-prop(15, 10, 1920, 320);
+  cursor: pointer;
+  & svg {
+    width: fluid-prop(24, 18, 1920, 320);
+    height: fluid-prop(24, 18, 1920, 320);
+    fill: var(--pink);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.friend_search_block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  & span {
+    font-size: fluid-prop(20, 18, 1920, 320);
+  }
+}
+
+.friend_search_controls {
+  display: flex;
+  gap: 0.6rem;
+  align-items: stretch;
+  height: fluid-prop(58, 41, 1920, 320);
+  & input {
+    display: flex;
+    border: var(--border);
+    padding: 10px;
+    color: var(--pink);
+    height: 100%;
+    width: 100%;
+    transition: all 0.3s;
+    &::placeholder {
+      font-size: fluid-prop(16, 14, 1920, 320);
+      transition: all 0.3s;
+    }
+    &:focus {
+      border-color: var(--pink);
+      transition: all 0.3s;
+      &::placeholder {
+        color: var(--pink);
+        transition: all 0.3s;
+      }
+    }
+  }
+  & button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.friend_search_error {
+  color: var(--cyan);
+}
+
+.friend_search_success {
+  color: var(--cyan);
+}
+

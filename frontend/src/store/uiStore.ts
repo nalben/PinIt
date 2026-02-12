@@ -1,10 +1,13 @@
 import { create } from 'zustand';
 
 type HeaderDropdown = 'profile' | 'notifications' | null;
+export type FriendsModalView = 'list' | 'search';
 
 interface UIState {
   headerDropdown: HeaderDropdown;
   authModalOpen: boolean;
+  friendsModalOpen: boolean;
+  friendsModalView: FriendsModalView;
 
   // dropdown actions
   openHeaderDropdown: (dropdown: HeaderDropdown) => void;
@@ -14,11 +17,16 @@ interface UIState {
   // modal actions
   openAuthModal: () => void;
   closeAuthModal: () => void;
+  openFriendsModal: (view?: FriendsModalView) => void;
+  closeFriendsModal: () => void;
+  setFriendsModalView: (view: FriendsModalView) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
   headerDropdown: null,
   authModalOpen: false,
+  friendsModalOpen: false,
+  friendsModalView: 'list',
 
   openHeaderDropdown: (dropdown) => set({ headerDropdown: dropdown }),
   closeHeaderDropdown: () => set({ headerDropdown: null }),
@@ -29,4 +37,9 @@ export const useUIStore = create<UIState>((set) => ({
 
   openAuthModal: () => set({ authModalOpen: true }),
   closeAuthModal: () => set({ authModalOpen: false }),
+
+  openFriendsModal: (view = 'list') =>
+    set({ friendsModalOpen: true, friendsModalView: view }),
+  closeFriendsModal: () => set({ friendsModalOpen: false }),
+  setFriendsModalView: (view) => set({ friendsModalView: view }),
 }));

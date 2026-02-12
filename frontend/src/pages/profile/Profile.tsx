@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import classes from "./Profile.module.scss";
 import axiosInstance, { API_URL } from "@/api/axiosInstance";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
@@ -16,7 +16,7 @@ import { connectSocket } from "@/services/socketManager";
 import { useUIStore } from "@/store/uiStore";
 import { useNotificationsStore } from "@/store/notificationsStore";
 import ProfileSkeleton from "./ProfileSkeleton";
-import Reload from '@/assets/icons/monochrome/reload.svg'
+
 
 interface ProfileData {
   id: number;
@@ -35,16 +35,9 @@ interface UpdateProfileResponse {
 }
 type FriendStatus = 'friend' | 'none' | 'sent' | 'rejected' | 'received';
 
-interface FriendItem extends ProfileData {
-  friendStatus: FriendStatus;
-  requestId?: number;
-}
-
 type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
 type OpenModal = "edit" | "reset" | null;
-type FriendsView = "list" | "search";
-type FriendSearchMessage = { kind: "error" | "success"; text: string } | null;
 
 const Profile = () => {
   const MAX_AVATAR_SIZE_MB = 5;
@@ -55,40 +48,16 @@ const Profile = () => {
   const [error, setError] = useState<ProfileError | null>(null);
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isFriendsOpen, setIsFriendsOpen] = useState(false);
-  const [friendsView, setFriendsView] = useState<FriendsView>("list");
-  const [friends, setFriends] = useState<FriendItem[]>([]);
   const [friendStatusById, setFriendStatusById] = useState<Record<number, { status: FriendStatus; requestId?: number }>>({});
   const [shareTextById, setShareTextById] = useState<Record<number, string>>({});
-  const [friendCodeCopyText, setFriendCodeCopyText] = useState<string | null>(null);
-  const [isFriendCodeGenerating, setIsFriendCodeGenerating] = useState<boolean>(false);
-  const [isFriendCodeRegenerating, setIsFriendCodeRegenerating] = useState<boolean>(false);
-  const [friendSearchCode, setFriendSearchCode] = useState<string>("");
-  const [friendSearchMessage, setFriendSearchMessage] = useState<FriendSearchMessage>(null);
-  const [isFriendSearching, setIsFriendSearching] = useState<boolean>(false);
   const [nicknameInput, setNicknameInput] = useState<string>('');
   const [statusInput, setStatusInput] = useState<string>('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [openModal, setOpenModal] = useState<OpenModal>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const { user, isAuth, isInitialized } = useAuthStore();
-  const { openHeaderDropdown } = useUIStore();
+  const { openHeaderDropdown, openFriendsModal } = useUIStore();
   const { setHighlightRequestId } = useNotificationsStore();
-
-  const declension = (number: number, titles: [string, string, string]) => {
-    const n = Math.abs(number) % 100;
-    const n1 = n % 10;
-    if (n > 10 && n < 20) return titles[2];
-    if (n1 > 1 && n1 < 5) return titles[1];
-    if (n1 === 1) return titles[0];
-    return titles[2];
-  };
-
-  useEffect(() => {
-    if (!friendSearchMessage) return;
-    const timeoutId = window.setTimeout(() => setFriendSearchMessage(null), 2000);
-    return () => window.clearTimeout(timeoutId);
-  }, [friendSearchMessage]);
 
   const safeCopyToClipboard = (text: string) => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -127,88 +96,6 @@ const Profile = () => {
       })
       .catch(err => console.error('РћС€РёР±РєР° РєРѕРїРёСЂРѕРІР°РЅРёСЏ РІ Р±СѓС„РµСЂ:', err));
   };
-
-  const handleGenerateFriendCode = async () => {
-    if (isFriendCodeGenerating) return;
-    try {
-      setIsFriendCodeGenerating(true);
-      const { data } = await axiosInstance.post<{ friend_code: string }>(`/api/profile/me/friend-code`);
-      setProfile(prev => prev ? { ...prev, friend_code: data.friend_code } : prev);
-    } catch (err) {
-      console.error('Ошибка при генерации кода дружбы', err);
-    } finally {
-      setIsFriendCodeGenerating(false);
-    }
-  };
-
-  const handleRegenerateFriendCode = async () => {
-    if (isFriendCodeRegenerating) return;
-    try {
-      setIsFriendCodeRegenerating(true);
-      setFriendCodeCopyText(null);
-      const { data } = await axiosInstance.post<{ friend_code: string }>(`/api/profile/me/friend-code/regenerate`);
-      setProfile(prev => prev ? { ...prev, friend_code: data.friend_code } : prev);
-    } catch (err) {
-      console.error('Ошибка при перегенерации кода дружбы', err);
-    } finally {
-      setIsFriendCodeRegenerating(false);
-    }
-  };
-
-  const handleAddFriendByCode = async () => {
-    const code = friendSearchCode.trim();
-    if (!code || isFriendSearching) return;
-
-    try {
-      setIsFriendSearching(true);
-      setFriendSearchMessage(null);
-      await axiosInstance.post(`/api/friends/send-by-code`, { code });
-      setFriendSearchMessage({ kind: "success", text: "Запрос отправлен" });
-    } catch (err: any) {
-      const status = err?.response?.status;
-      const message = err?.response?.data?.message;
-
-      if (status === 404) {
-        setFriendSearchMessage({ kind: "error", text: "пользователь не найден" });
-      } else if (typeof message === "string" && message.toLowerCase().includes("невозможно")) {
-        setFriendSearchMessage({ kind: "error", text: "Запрос отклонен" });
-      } else if (typeof message === "string") {
-        setFriendSearchMessage({ kind: "error", text: message });
-      } else {
-        setFriendSearchMessage({ kind: "error", text: "Запрос отклонен" });
-      }
-    } finally {
-      setIsFriendSearching(false);
-    }
-  };
-
-  const handleCopyFriendCode = (code: string) => {
-    safeCopyToClipboard(code)
-      .then(() => {
-        setFriendCodeCopyText('скопировано');
-        setTimeout(() => setFriendCodeCopyText(null), 1000);
-      })
-      .catch(err => console.error('Ошибка при копировании кода дружбы:', err));
-  };
-
-
-  const timeAgo = (dateString: string) => {
-    const now = new Date();
-    const past = new Date(dateString);
-    const diffMs = now.getTime() - past.getTime();
-    const diffSeconds = Math.floor(diffMs / 1000);
-    const diffMinutes = Math.floor(diffSeconds / 60);
-    const diffHours = Math.floor(diffMinutes / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    const diffMonths = Math.floor(diffDays / 30);
-    const diffYears = Math.floor(diffDays / 365);
-    if (diffYears > 0) return `${diffYears} ${declension(diffYears, ['год', 'года', 'лет'])}`;
-    if (diffMonths > 0) return `${diffMonths} ${declension(diffMonths, ['месяц', 'месяца', 'месяцев'])}`;
-    if (diffDays > 0) return `${diffDays} ${declension(diffDays, ['день', 'дня', 'дней'])}`;
-    if (diffHours > 0) return `${diffHours} ${declension(diffHours, ['час', 'часа', 'часов'])}`;
-    if (diffMinutes > 0) return `${diffMinutes} ${declension(diffMinutes, ['минуту', 'минуты', 'минут'])}`;
-    return 'только что';
-  };
   useEffect(() => {
     if (openModal !== 'edit') {
       setAvatarPreview(null);
@@ -233,22 +120,6 @@ const Profile = () => {
     }
   };
 
-  const refreshFriendsList = async () => {
-    if (!profile?.isOwner) return;
-    try {
-      const { data } =
-        await axiosInstance.get<FriendItem[]>(`/api/profile/${profile.username}/friends`);
-      setFriends(data);
-      const statuses: Record<number, { status: FriendStatus }> = {};
-      data.forEach(f => {
-        statuses[f.id] = { status: 'friend' };
-      });
-      setFriendStatusById(prev => ({ ...prev, ...statuses }));
-    } catch (err) {
-      console.error('Ошибка при обновлении списка друзей', err);
-    }
-  };
-
   useEffect(() => {
   if (!isInitialized) return;
 
@@ -258,7 +129,6 @@ const Profile = () => {
       setError(null);
       setProfile(null);
       setFriendCount(null);
-      setFriends([]);
       setFriendStatusById({});
       setShareTextById({});
 
@@ -296,11 +166,6 @@ const Profile = () => {
 
   if (username) fetchProfileData();
 }, [username, isAuth, isInitialized]);
-useEffect(() => {
-  if (!profile?.id || !profile.isOwner) return;
-
-  refreshFriendsList();
-}, [profile?.id, profile?.isOwner]);
 
 useEffect(() => {
   if (!profile?.id) return;
@@ -312,24 +177,10 @@ useEffect(() => {
         requestId: data.requestId ?? prev[data.userId]?.requestId
       }
     }));
-    setFriends(prev =>
-      prev.map(f =>
-        f.id === data.userId
-          ? {
-              ...f,
-              friendStatus: data.status,
-              requestId: data.requestId ?? f.requestId
-            }
-          : f
-      )
-    );
 
     const shouldUpdateCounts = profile?.isOwner || profile?.id === data.userId;
     if (shouldUpdateCounts) {
       refreshFriendCount();
-      if (profile?.isOwner && data.status === 'friend') {
-        refreshFriendsList();
-      }
     }
   };
   const handleNewRequest = (data: any) => {
@@ -350,9 +201,6 @@ useEffect(() => {
       }
       return updated;
     });
-    setFriends(prev => prev.map(f =>
-      f.requestId === data.id ? { ...f, friendStatus: 'none', requestId: undefined } : f
-    ));
   };
 
   const unsubscribe = connectSocket({
@@ -463,143 +311,10 @@ const handleFriendAction = async (userId: number) => {
             <button
               type="button"
               className={classes.friends_btn}
-              onClick={() => setIsFriendsOpen(true)}
+              onClick={() => openFriendsModal("list")}
             >
               Друзей: {friendCount ?? 'нет'}
             </button>
-            <AuthModal isOpen={isFriendsOpen} onClose={() => setIsFriendsOpen(false)}>
-              <div className={classes.friends_modal}>
-                <div className={classes.friends_toggleButtons}>
-                  <button
-                    type="button"
-                    className={friendsView === "list" ? classes.friends_toggleActive : ""}
-                    onClick={() => setFriendsView("list")}
-                  >
-                    Мои друзья
-                  </button>
-                  <button
-                    type="button"
-                    className={friendsView === "search" ? classes.friends_toggleActive : ""}
-                    onClick={() => setFriendsView("search")}
-                  >
-                    Найти друга
-                  </button>
-                </div>
-                {friendsView === "list" ? (
-                  <div className={classes.friends_item_con}>
-                      {friendCount === 0 && friends.length === 0 ? (
-                        <p>у вас пока нет друзей</p>
-                      ) : friends.map(friend => {
-                        const status = friendStatusById[friend.id]?.status ?? 'friend';
-                        const avatarSrc = friend.avatar
-                          ? friend.avatar.startsWith('/uploads/')
-                            ? `${API_URL}${friend.avatar}`
-                            : `${API_URL}/uploads/${friend.avatar}`
-                          : null;
-
-                        return (
-                          <div key={friend.id} className={classes.friend_item}>
-                            <Link to={`/user/${friend.username}`} className={classes.friend_info}>
-                              <div className={classes.friend_info_wrap}>
-                                {avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />}
-                                <div className={classes.friend_info_text}>
-                                  <span>{friend.nickname || friend.username}</span>
-                                  <p>в друзьях: {timeAgo(friend.created_at)}</p>
-                                </div>
-                              </div>
-                            </Link>
-                          <div className={getButtonClass(status)}>
-                            <Mainbtn
-                              text={getButtonText(status)}
-                              variant="auth"
-                              kind="button"
-                              onClick={() => {
-                                if (status === 'received') {
-                                  setIsFriendsOpen(false);
-                                  openHeaderDropdown('notifications');
-                                  if (friend.requestId) setHighlightRequestId(friend.requestId);
-                                  return;
-                                }
-                                handleFriendAction(friend.id);
-                              }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className={classes.findFriendContainer}>
-                    <div className={classes.friend_code_block}>
-                      <span>Ваш код дружбы:</span>
-                      {!profile.friend_code ? (
-                        <Mainbtn
-                          text={isFriendCodeGenerating ? 'генерируем...' : 'сгенерировать'}
-                          variant="mini"
-                          kind="button"
-                          disabled={isFriendCodeGenerating}
-                          onClick={handleGenerateFriendCode}
-                        />
-                      ) : (
-                        <div className={classes.code_btns}>
-                          <Mainbtn
-                            text={friendCodeCopyText ?? profile.friend_code}
-                            variant="mini"
-                            kind="button"
-                            onClick={() => handleCopyFriendCode(profile.friend_code!)}
-                          />
-                          <button
-                            type="button"
-                            className={classes.friend_code_reload_btn}
-                            onClick={handleRegenerateFriendCode}
-                            disabled={isFriendCodeRegenerating}
-                            aria-label="Перегенерировать код дружбы"
-                            title="Перегенерировать"
-                          >
-                            <Reload />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className={classes.friend_search_block}>
-                      <span>Найти друга</span>
-                      <div className={classes.friend_search_controls}>
-                        <input
-                          type="text"
-                          id="searchfriend"
-                          value={friendSearchCode}
-                          onChange={(e) => {
-                            setFriendSearchCode(e.target.value);
-                            setFriendSearchMessage(null);
-                          }}
-                          placeholder="введите код дружбы"
-                          autoComplete="off"
-                        />
-                        <Mainbtn
-                          text={isFriendSearching ? "..." : "добавить"}
-                          variant="mini"
-                          kind="button"
-                          disabled={!friendSearchCode.trim() || isFriendSearching}
-                          onClick={handleAddFriendByCode}
-                        />
-                      </div>
-                      {friendSearchMessage && (
-                        <p
-                          className={
-                            friendSearchMessage.kind === "error"
-                              ? classes.friend_search_error
-                              : classes.friend_search_success
-                          }
-                        >
-                          {friendSearchMessage.text}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </AuthModal>
 
             <div className={classes.interact_btns}>
               <Mainbtn

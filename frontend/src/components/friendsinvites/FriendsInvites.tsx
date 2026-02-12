@@ -9,11 +9,13 @@ import { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
 import AuthTrigger from '../auth/AuthTrigger';
+import { useUIStore } from '@/store/uiStore';
 
 const FriendsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
   const { requests, isLoading, fetchRequests, acceptRequest, rejectRequest } = useNotificationsStore();
   const requestsCount = requests.length;
+  const openFriendsModal = useUIStore((s) => s.openFriendsModal);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
@@ -128,6 +130,7 @@ const FriendsInvites: React.FC = () => {
           <Mainbtn
             variant='mini'
             text='Пригласить в друзья'
+            onClick={() => openFriendsModal('search')}
           />
         </div>
       )}

@@ -8,6 +8,7 @@ import { useAuthStore } from "@/store/authStore";
 import { API_URL } from "@/api/axiosInstance";
 import { connectSocket } from "@/services/socketManager";
 import AuthTrigger from "../auth/AuthTrigger";
+import { useUIStore } from "@/store/uiStore";
 
 const declension = (number: number, titles: [string, string, string]) => {
   const n = Math.abs(number) % 100;
@@ -40,6 +41,7 @@ const FriendsList: React.FC = () => {
   const friendsListRef = useRef<HTMLDivElement | null>(null);
   const { user, isAuth, isInitialized } = useAuthStore();
   const { friends, isLoading, fetchFriends } = useFriendsStore();
+  const openFriendsModal = useUIStore((s) => s.openFriendsModal);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
     __ENV__ === 'development' &&
@@ -192,7 +194,7 @@ const FriendsList: React.FC = () => {
       ) : (
         <div className={classes.friends_list_epmty}>
           <h3>Вы пока не добавили своих друзей</h3>
-          <Mainbtn variant="mini" text="Пригласить в друзья" />
+          <Mainbtn variant="mini" text="Пригласить в друзья" onClick={() => openFriendsModal('search')} />
         </div>
       )}
     </section>
