@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '../_UI/mainbtn/Mainbtn';
-import classes from './Lastdesks.module.scss';
+import classes from './Lastboards.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import { useBoardsStore } from '@/store/boardsStore';
 import AuthTrigger from '../auth/AuthTrigger';
 import { useAuthStore } from '@/store/authStore';
 
 // Zustand store для последних досок
-const Lastdesks: React.FC = () => {
+const Lastboards: React.FC = () => {
   const recentBoards = useBoardsStore(state => state.recentBoards);
   const isLoading = useBoardsStore(state => state.isLoading);
   const loadBoards = useBoardsStore(state => state.loadBoards);
@@ -40,11 +40,11 @@ const Lastdesks: React.FC = () => {
 
   if (forceSkeleton || ((isLoading || !hasLoadedOnce) && recentBoards.length === 0)) {
     return (
-      <section className={classes.desks_container} aria-busy="true">
+      <section className={classes.boards_container} aria-busy="true">
         <h2>Последние открытые доски:</h2>
-        <div className={classes.desks_list}>
+        <div className={classes.boards_list}>
           {Array.from({ length: 3 }).map((_, idx) => (
-            <div key={idx} className={classes.desks_item}>
+            <div key={idx} className={classes.boards_item}>
               <div className={`${classes.skeleton} ${classes.skeleton_img}`} />
               <div className={classes.board_info_con}>
                 <div className={`${classes.skeleton} ${classes.skeleton_line}`} />
@@ -59,10 +59,10 @@ const Lastdesks: React.FC = () => {
   }
 
   return (
-    <section className={classes.desks_container}>
+    <section className={classes.boards_container}>
       <h2>Последние открытые доски:</h2>
       {recentBoards.length > 0 ? (
-        <div className={classes.desks_list}>
+        <div className={classes.boards_list}>
           {recentBoards.slice(0, 3).map(board => {
             const imgSrc = board.image
               ? board.image.startsWith('/uploads/')
@@ -71,11 +71,11 @@ const Lastdesks: React.FC = () => {
               : null;
 
             return (
-              <div key={board.id} className={classes.desks_item}>
+              <div key={board.id} className={classes.boards_item}>
                 {imgSrc ? <img src={imgSrc} alt={board.title} /> : <Default />}
                 <div className={classes.board_info_con}>
                   <h3>{board.title}</h3>
-                  <p>{board.description || 'Нет описания'}</p>
+                  <p>{board.description || ''}</p>
                 </div>
                 <Mainbtn variant="mini" text="Открыть" />
               </div>
@@ -83,7 +83,7 @@ const Lastdesks: React.FC = () => {
           })}
         </div>
       ) : (
-        <div className={classes.desks_empty}>
+        <div className={classes.boards_empty}>
           <h3>Досок не найдено</h3>
           <AuthTrigger type='login'>
             <Mainbtn variant="mini" text="Создать доску" />
@@ -94,4 +94,4 @@ const Lastdesks: React.FC = () => {
   );
 };
 
-export default Lastdesks;
+export default Lastboards;

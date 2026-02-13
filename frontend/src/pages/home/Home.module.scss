@@ -39,7 +39,7 @@
     grid-column: auto;
 }
 
-.lastdesks_container{
+.lastboards_container{
     grid-column: auto;
 }
 .friends_container{
@@ -50,7 +50,7 @@
     .home_container{
         grid-template-columns: 1fr 1fr;
     }
-    .lastdesks_container{
+    .lastboards_container{
         grid-column: span 2;
     }
     .friends_container{
@@ -61,7 +61,7 @@
     }
 }
 @media (min-width:1400px) {
-    .lastdesks_container {
+    .lastboards_container {
         grid-column: span 1;
     }
 
@@ -73,7 +73,7 @@
     .home_container{
         grid-template-columns: 1fr 1fr 1fr 1fr;
     }
-    .lastdesks_container {
+    .lastboards_container {
         order: 2;
         grid-column: span 2;
     }

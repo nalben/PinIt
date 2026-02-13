@@ -1,6 +1,6 @@
 import React from 'react';
 import classes from './Home.module.scss';
-import Lastdesks from '@/components/lastdesks/Lastdesks';
+import Lastboards from '@/components/lastboards/Lastboards';
 import FriendsList from '@/components/friendlist/Friendlist';
 import FriendsInvites from '@/components/friendsinvites/FriendsInvites';
 import BoardsInvites from '@/components/boardsinvites/BoardsInvites';
@@ -11,8 +11,8 @@ const Home = () => {
         <div className={classes.home}>
             <main className={classes.home_container}>
                 <HomeWelcome />
-                <div className={classes.lastdesks_container}>
-                    <Lastdesks />
+                <div className={classes.lastboards_container}>
+                    <Lastboards />
                 </div>
                 <div className={classes.friends_container}>
                     <FriendsList />
