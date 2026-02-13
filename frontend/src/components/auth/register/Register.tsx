@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { RegisterScheme } from "@/schemas/RegisterScheme";
 import { InferType } from "yup";
@@ -21,19 +20,24 @@ interface LoginResponse {
   token: string;
   username: string;
   id: number;
+  avatar?: string | null;
+  email?: string | null;
 }
 
-const RegisterForm: React.FC = () => {
+interface RegisterFormProps {
+  onClose?: () => void;
+}
+
+const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [codeError, setCodeError] = useState<string | null>(null);
   const login = useAuthStore(state => state.login);
+  const bootstrap = useAuthStore(state => state.bootstrap);
 
   const [emailValue, setEmailValue] = useState("");
   const [usernameValue, setUsernameValue] = useState("");
   const [passwordValue, setPasswordValue] = useState("");
-
-  const navigate = useNavigate();
 
   const {
     register: registerStep1,
@@ -114,13 +118,14 @@ const RegisterForm: React.FC = () => {
       });
 
       localStorage.setItem("token", res.data.token);
-      localStorage.setItem("userId", res.data.id.toString());
-      localStorage.setItem("username", res.data.username);
-
       login({
         id: res.data.id,
         username: res.data.username,
+        avatar: res.data.avatar,
+        email: res.data.email ?? undefined,
       });
+      onClose?.();
+      bootstrap();
 
     } catch (err: any) {
       const msg =

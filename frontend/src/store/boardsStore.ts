@@ -71,12 +71,6 @@ export const useBoardsStore = create<BoardsState>(set => ({
         boards: Array.isArray(myBoards) ? myBoards : [],
         recentBoards,
       });
-
-      try {
-        localStorage.setItem(RECENT_BOARDS_LS_KEY, JSON.stringify(recentBoards));
-      } catch {
-        // ignore localStorage write errors (quota/private mode)
-      }
     } catch {
       set({ boards: [], recentBoards: [] });
     } finally {

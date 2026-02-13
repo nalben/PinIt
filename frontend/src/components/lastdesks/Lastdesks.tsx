@@ -5,12 +5,15 @@ import classes from './Lastdesks.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import { useBoardsStore } from '@/store/boardsStore';
 import AuthTrigger from '../auth/AuthTrigger';
+import { useAuthStore } from '@/store/authStore';
 
 // Zustand store для последних досок
 const Lastdesks: React.FC = () => {
   const recentBoards = useBoardsStore(state => state.recentBoards);
   const isLoading = useBoardsStore(state => state.isLoading);
   const loadBoards = useBoardsStore(state => state.loadBoards);
+  const isAuth = useAuthStore(state => state.isAuth);
+  const isInitialized = useAuthStore(state => state.isInitialized);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
     __ENV__ === 'development' &&
@@ -22,7 +25,9 @@ const Lastdesks: React.FC = () => {
       setHasLoadedOnce(false);
       return;
     }
+    if (!isInitialized) return;
     let mounted = true;
+    setHasLoadedOnce(false);
     loadBoards().finally(() => {
       if (!mounted) return;
       setHasLoadedOnce(true);
@@ -31,7 +36,7 @@ const Lastdesks: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [loadBoards, forceSkeleton]);
+  }, [loadBoards, forceSkeleton, isInitialized, isAuth]);
 
   if (forceSkeleton || ((isLoading || !hasLoadedOnce) && recentBoards.length === 0)) {
     return (

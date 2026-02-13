@@ -43,7 +43,7 @@ const AuthTrigger: React.FC<AuthTriggerProps> = ({
         onClose={close}
         closeOnOverlayClick={false}
       >
-        <RegisterForm />
+        <RegisterForm onClose={close} />
       </AuthModal>
 
       <AuthModal

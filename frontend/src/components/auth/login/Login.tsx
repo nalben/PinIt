@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { LoginScheme } from "@/schemas/LoginScheme";
 import { InferType } from "yup";
@@ -38,8 +37,7 @@ const LoginForm: React.FC<LoginFormProps> = ({
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const login = useAuthStore(state => state.login);
-
-  const navigate = useNavigate();
+  const bootstrap = useAuthStore(state => state.bootstrap);
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm<LoginFormData>({
     resolver: yupResolver(LoginScheme) as any,
@@ -62,10 +60,9 @@ const LoginForm: React.FC<LoginFormProps> = ({
 
       if (token && id && username) {
         localStorage.setItem("token", token);
-        localStorage.setItem("userId", String(id));
-        localStorage.setItem("username", username);
         login({ id, username, avatar: res.data.avatar, email: res.data.email });
-        window.location.reload();
+        onClose?.();
+        bootstrap();
       }
 
 

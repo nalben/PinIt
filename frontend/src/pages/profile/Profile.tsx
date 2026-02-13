@@ -216,13 +216,18 @@ useEffect(() => {
 
 
   const profileFriendStatus = profile ? friendStatusById[profile.id]?.status ?? 'none' : 'none';
-  const profileFriendRequestId = profile ? friendStatusById[profile.id]?.requestId : undefined;
 
 const handleFriendAction = async (userId: number) => {
   const current = friendStatusById[userId]?.status ?? 'none';
   const requestId = friendStatusById[userId]?.requestId;
 
   try {
+    if (current === 'received') {
+      openHeaderDropdown('notifications');
+      if (requestId) setHighlightRequestId(requestId);
+      return;
+    }
+
     if (current === 'friend') {
       await axiosInstance.delete(`/api/friends/${userId}`);
       setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
@@ -233,14 +238,7 @@ const handleFriendAction = async (userId: number) => {
     } else if (current === 'sent' && requestId) {
       await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
       setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
-    }else if (current === 'received' && requestId) {
-  await axiosInstance.put(`/api/friends/accept/${requestId}`);
-  setFriendStatusById(prev => ({
-    ...prev,
-    [userId]: { status: 'friend' }
-  }));
-}
-
+    }
   } catch (e) {
     console.error(e);
   }
@@ -472,14 +470,7 @@ const handleFriendAction = async (userId: number) => {
                   variant="auth"
                   kind="button"
                   disabled={profileFriendStatus === 'rejected'}
-                  onClick={() => {
-                    if (profileFriendStatus === 'received') {
-                      openHeaderDropdown('notifications');
-                      if (profileFriendRequestId) setHighlightRequestId(profileFriendRequestId);
-                      return;
-                    }
-                    handleFriendAction(profile.id);
-                  }}
+                  onClick={() => handleFriendAction(profile.id)}
                 />
               </div>
             </AuthOnly>

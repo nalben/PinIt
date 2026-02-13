@@ -75,9 +75,10 @@ const Header = () => {
 
 useEffect(() => {
   if (!isInitialized) return;
+  if (!isAuth) return;
   if (requestsCount > 0) return;
   fetchRequests();
-}, [fetchRequests, isAuth, isInitialized]);
+}, [fetchRequests, isAuth, isInitialized, requestsCount]);
 
   useEffect(() => {
     if (!isNotiOpen || !highlightRequestId) return;
