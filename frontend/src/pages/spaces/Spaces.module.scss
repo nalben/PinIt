@@ -1,1 +1,33 @@
+.spaces_container{
+    display: grid;
+    grid-template-columns: 1fr;
+    padding: fluid-prop(40, 20, 1920, 320);
+    --gaphome: clamp(1.25rem, 1rem + 1.25vw, 2.5rem);
+        gap: var(--gaphome);
+    & section{
+        border: var(--border);
+        padding: fluid-prop(20, 10, 1920, 320);
+        width: 100%;
+        height: 100%;
+    }
+    & button{
+        border-color: var(--pink);
+    }
+    & h2{
+        font-size: fluid-prop(20,16,1920,320);
+        text-wrap: balance;
+        color: var(--pink);
+    }
+}
 
+@media (min-width:1150px) {
+    .spaces_container{
+        grid-template-columns: 1fr 1fr;
+    }
+    .myboards_container{
+        grid-column: span 2;
+    }
+    .publicboards_container{
+        grid-column: span 2;
+    }
+}

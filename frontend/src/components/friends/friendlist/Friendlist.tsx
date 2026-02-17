@@ -7,7 +7,7 @@ import { useFriendsStore } from "@/store/friendsStore";
 import { useAuthStore } from "@/store/authStore";
 import { API_URL } from "@/api/axiosInstance";
 import { connectSocket } from "@/services/socketManager";
-import AuthTrigger from "../auth/AuthTrigger";
+import AuthTrigger from "@/components/auth/AuthTrigger";
 import { useUIStore } from "@/store/uiStore";
 
 const declension = (number: number, titles: [string, string, string]) => {

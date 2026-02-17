@@ -3,10 +3,12 @@ import classes from './HomeWelcome.module.scss';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { useAuthStore } from '@/store/authStore';
+import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 
 const HomeWelcome: React.FC = () => {
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
+  const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
 
   const forceSkeleton =
     __ENV__ === 'development' &&
@@ -32,6 +34,7 @@ const HomeWelcome: React.FC = () => {
         <Mainbtn
           variant='mini'
           text='Создать доску'
+          onClick={openCreateBoardModal}
         />
       ) : (
         <AuthTrigger type='login'>

@@ -164,7 +164,7 @@
   & button:nth-child(1) {
     width: 100%;
   }
-  @media (min-width: 700px) {
+  @media (min-width: 1440px) {
     flex-direction: row;
     & button:nth-child(1) {
       width: 170px;
@@ -175,9 +175,6 @@
 .code_btns {
   display: flex;
   gap: 0.6rem;
-  & button {
-    height: 100%;
-  }
 }
 
 .friend_code_reload_btn {

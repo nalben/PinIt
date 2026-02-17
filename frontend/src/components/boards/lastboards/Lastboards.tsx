@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { API_URL } from '@/api/axiosInstance';
-import Mainbtn from '../_UI/mainbtn/Mainbtn';
+import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import classes from './Lastboards.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import { useBoardsStore } from '@/store/boardsStore';
-import AuthTrigger from '../auth/AuthTrigger';
+import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
+import AuthTrigger from '@/components/auth/AuthTrigger';
 import { useAuthStore } from '@/store/authStore';
 
 // Zustand store для последних досок
@@ -12,6 +13,7 @@ const Lastboards: React.FC = () => {
   const recentBoards = useBoardsStore(state => state.recentBoards);
   const isLoading = useBoardsStore(state => state.isLoading);
   const loadBoards = useBoardsStore(state => state.loadBoards);
+  const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -85,9 +87,13 @@ const Lastboards: React.FC = () => {
       ) : (
         <div className={classes.boards_empty}>
           <h3>Досок не найдено</h3>
-          <AuthTrigger type='login'>
-            <Mainbtn variant="mini" text="Создать доску" />
-          </AuthTrigger>
+          {isAuth ? (
+            <Mainbtn variant="mini" text="Создать доску" onClick={openCreateBoardModal} />
+          ) : (
+            <AuthTrigger type='login'>
+              <Mainbtn variant="mini" text="Создать доску" />
+            </AuthTrigger>
+          )}
         </div>
       )}
     </section>

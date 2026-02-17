@@ -8,7 +8,7 @@ const profileRoutes = require('./profileRouter');
 const friendsRoutes = require('./friendsRouter');
 const boardsRoutes = require('./boardsRouter');
 
-router.use('/boards', authMiddleware, boardsRoutes);
+router.use('/boards', boardsRoutes);
 
 router.use('/cards', authMiddleware, cardsRoutes);
 

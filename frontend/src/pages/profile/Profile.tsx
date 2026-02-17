@@ -76,7 +76,7 @@ const Profile = () => {
           const successful = document.execCommand('copy');
           document.body.removeChild(textarea);
           if (successful) resolve();
-          else reject(new Error('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєРѕРїРёСЂРѕРІР°С‚СЊ'));
+          else reject(new Error('Не удалось скопировать'));
         } catch (err) {
           document.body.removeChild(textarea);
           reject(err);
@@ -94,7 +94,7 @@ const Profile = () => {
           setShareTextById(prev => ({ ...prev, [userId]: 'Поделиться' }));
         }, 2000);
       })
-      .catch(err => console.error('РћС€РёР±РєР° РєРѕРїРёСЂРѕРІР°РЅРёСЏ РІ Р±СѓС„РµСЂ:', err));
+      .catch(err => console.error('Ошибка копирования в буфер:', err));
   };
   useEffect(() => {
     if (openModal !== 'edit') {
@@ -390,7 +390,7 @@ const handleFriendAction = async (userId: number) => {
                           if (!file) return;
 
                           if (!file.type.startsWith('image/')) {
-                            alert('РњРѕР¶РЅРѕ Р·Р°РіСЂСѓР¶Р°С‚СЊ С‚РѕР»СЊРєРѕ РёР·РѕР±СЂР°Р¶РµРЅРёСЏ');
+                            alert('Можно загружать только изображения');
                             e.target.value = '';
                             return;
                           }

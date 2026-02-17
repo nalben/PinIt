@@ -9,7 +9,8 @@ import { useNotificationsStore } from '@/store/notificationsStore';
 import { connectSocket, disconnectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import Appitit from './AppInit'
-import FriendsModal from '@/components/friendsmodal/FriendsModal';
+import FriendsModal from '@/components/friends/friendsmodal/FriendsModal';
+import CreateBoardModal from '@/components/boards/createboardmodal/CreateBoardModal';
 
 const Root = () => {
   const { addRequest, removeRequest, updateRequestStatus } = useNotificationsStore();
@@ -57,6 +58,7 @@ const Root = () => {
       <main className={classes.pagecontent}>
         <Header />
         <Outlet />
+        <CreateBoardModal />
         <FriendsModal />
       </main>
     </div>

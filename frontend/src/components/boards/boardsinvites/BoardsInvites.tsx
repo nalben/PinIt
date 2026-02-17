@@ -5,7 +5,8 @@ import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
-import AuthTrigger from '../auth/AuthTrigger';
+import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
+import AuthTrigger from '@/components/auth/AuthTrigger';
 
 const BoardsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
@@ -15,6 +16,7 @@ const BoardsInvites: React.FC = () => {
   const acceptInvite = useBoardsInvitesStore(state => state.acceptInvite);
   const rejectInvite = useBoardsInvitesStore(state => state.rejectInvite);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
@@ -89,7 +91,7 @@ const BoardsInvites: React.FC = () => {
       ) : sortedInvites.length === 0 ? (
         <div className={classes.empty}>
           <h3>Приглашений в доски не найдено</h3>
-          <Mainbtn variant="mini" text="Создать доску" />
+          <Mainbtn variant="mini" text="Создать доску" onClick={openCreateBoardModal} />
         </div>
       ) : (
         <div className={classes.list}>

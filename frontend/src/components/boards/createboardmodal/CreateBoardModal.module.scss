@@ -1,0 +1,69 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: fluid-prop(18, 12, 1920, 320);
+  color: var(--pink);
+  font-family: "Nata Sans", sans-serif;
+}
+
+.title {
+  font-size: fluid-prop(26, 20, 1920, 320);
+  font-weight: 600;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: fluid-prop(14, 10, 1920, 320);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 0.6rem;
+  & label {
+    font-size: fluid-prop(20, 15, 1920, 320);
+  }
+
+  & input {
+    width: 100%;
+    background-color: transparent;
+    border: var(--border);
+    color: var(--pink);
+    font-size: fluid-prop(18, 14, 1920, 320);
+    padding-block: fluid-prop(10, 8, 1920, 320);
+    padding-inline: fluid-prop(18, 12, 1920, 320);
+    transition: all 0.3s;
+
+    &::placeholder {
+      color: var(--grey10);
+    }
+
+    &:focus {
+      border-color: var(--pink);
+      transition: all 0.3s;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+}
+.error {
+  color: var(--error);
+  font-size: fluid-prop(18, 14, 1920, 320);
+}
+
+.actions {
+  display: flex;
+  gap: 0.6rem;
+  width: 100%;
+  & button{
+    width: 100%;
+    &:disabled{
+      opacity: 0.5;
+    }
+  }
+}

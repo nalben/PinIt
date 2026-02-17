@@ -1,9 +1,9 @@
 import React from 'react';
 import classes from './Home.module.scss';
-import Lastboards from '@/components/lastboards/Lastboards';
-import FriendsList from '@/components/friendlist/Friendlist';
-import FriendsInvites from '@/components/friendsinvites/FriendsInvites';
-import BoardsInvites from '@/components/boardsinvites/BoardsInvites';
+import Lastboards from '@/components/boards/lastboards/Lastboards';
+import FriendsList from '@/components/friends/friendlist/Friendlist';
+import FriendsInvites from '@/components/friends/friendsinvites/FriendsInvites';
+import BoardsInvites from '@/components/boards/boardsinvites/BoardsInvites';
 import HomeWelcome from '@/components/homewelcome/HomeWelcome';
 
 const Home = () => {

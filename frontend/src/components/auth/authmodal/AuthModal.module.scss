@@ -13,8 +13,10 @@
     backdrop-filter: blur(10px);
     padding: 2rem;
     border: 2px solid var(--grey20);
+    // min-width: fluid-prop(550,320,1920,320);
+    // width: fluid-prop(550,320,1920,320);
+    max-width: fluid-prop(550,320,1920,320);
     min-width: fluid-prop(550,320,1920,320);
-    max-width: fluid-prop(950,320,1920,320);
     position: relative;
     color: var(--pink);
     font-weight: 500;

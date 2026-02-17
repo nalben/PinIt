@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const boardsController = require('../controllers/boardsController');
+const authMiddleware = require('../middleware/authMiddleware');
 const multer = require('multer');
 const path = require('path');
 
@@ -33,8 +34,15 @@ const maybeUploadSingleImage = (req, res, next) => {
   return upload.single('image')(req, res, next);
 };
 
+// Public routes (no auth)
+router.get('/public/popular', boardsController.getPopularPublicBoards);
+
+// All routes below require auth
+router.use(authMiddleware);
+
 router.get('/', boardsController.getMyBoards);
 router.get('/guest', boardsController.getGuestBoards);
+router.get('/friends', boardsController.getFriendsBoards);
 router.get('/recent', boardsController.getRecentBoards);
 router.get('/invites/incoming', boardsController.getIncomingBoardInvites);
 router.put('/invites/accept/:invite_id', boardsController.acceptBoardInvite);
