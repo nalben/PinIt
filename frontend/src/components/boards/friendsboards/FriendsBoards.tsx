@@ -4,28 +4,24 @@ import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { API_URL } from '@/api/axiosInstance';
-import axiosInstance from '@/api/axiosInstance';
 import { connectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
-
-interface FriendBoard {
-  id: number;
-  title: string;
-  description?: string | null;
-  created_at: string;
-  image?: string | null;
-}
+import { FriendsBoard, useSpacesBoardsStore } from '@/store/spacesBoardsStore';
 
 const FriendsBoards: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
   const openFriendsModal = useUIStore((s) => s.openFriendsModal);
-  const [boards, setBoards] = useState<FriendBoard[]>([]);
-  const [debugBoards, setDebugBoards] = useState<FriendBoard[] | null>(null);
+  const boards = useSpacesBoardsStore((s) => s.friendsBoards);
+  const isLoading = useSpacesBoardsStore((s) => s.isLoadingFriendsBoards);
+  const hasLoadedOnce = useSpacesBoardsStore((s) => s.hasLoadedOnceFriendsBoards);
+  const ensureLoaded = useSpacesBoardsStore((s) => s.ensureFriendsBoardsLoaded);
+  const refresh = useSpacesBoardsStore((s) => s.refreshFriendsBoards);
+  const clear = useSpacesBoardsStore((s) => s.clearFriendsBoards);
+
+  const [debugBoards, setDebugBoards] = useState<FriendsBoard[] | null>(null);
   const boardsListRef = useRef<HTMLDivElement | null>(null);
   const [hasListScroll, setHasListScroll] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
@@ -60,13 +56,13 @@ const FriendsBoards: React.FC = () => {
 
     const w = window as unknown as {
       addFakeFriendsBoards?: () => void;
-      setFakeFriendsBoards?: (boards: FriendBoard[]) => void;
+      setFakeFriendsBoards?: (boards: FriendsBoard[]) => void;
       clearFakeFriendsBoards?: () => void;
     };
 
     w.addFakeFriendsBoards = () => {
       const now = new Date().toISOString();
-      const fakeBoards: FriendBoard[] = Array.from({ length: 6 }).map((_, i) => ({
+      const fakeBoards: FriendsBoard[] = Array.from({ length: 6 }).map((_, i) => ({
         id: i + 1,
         title: `Fake friend board ${i + 1}`,
         description: `Fake description ${i + 1}`,
@@ -74,14 +70,10 @@ const FriendsBoards: React.FC = () => {
         image: null,
       }));
       setDebugBoards(fakeBoards);
-      setIsLoading(false);
-      setHasLoadedOnce(true);
     };
 
     w.setFakeFriendsBoards = (nextBoards) => {
       setDebugBoards(Array.isArray(nextBoards) ? nextBoards : []);
-      setIsLoading(false);
-      setHasLoadedOnce(true);
     };
 
     w.clearFakeFriendsBoards = () => {
@@ -100,33 +92,12 @@ const FriendsBoards: React.FC = () => {
     if (debugBoards !== null) return;
     if (!isInitialized) return;
     if (!isAuth) {
-      setBoards([]);
-      setHasLoadedOnce(false);
+      clear();
       return;
     }
 
-    let mounted = true;
-    setIsLoading(true);
-    setHasLoadedOnce(false);
-    axiosInstance.get<FriendBoard[]>('/api/boards/friends')
-      .then(({ data }) => {
-        if (!mounted) return;
-        setBoards(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setBoards([]);
-      })
-      .then(() => {
-        if (!mounted) return;
-        setIsLoading(false);
-        setHasLoadedOnce(true);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards]);
+    ensureLoaded();
+  }, [isAuth, isInitialized, forceSkeleton, debugBoards, ensureLoaded, clear]);
 
   useEffect(() => {
     if (forceSkeleton) return;
@@ -134,33 +105,16 @@ const FriendsBoards: React.FC = () => {
     if (!isInitialized) return;
     if (!isAuth) return;
 
-    let mounted = true;
-
     const unsubscribe = connectSocket({
       onBoardsUpdate: () => {
-        setIsLoading(true);
-        axiosInstance.get<FriendBoard[]>('/api/boards/friends')
-          .then(({ data }) => {
-            if (!mounted) return;
-            setBoards(Array.isArray(data) ? data : []);
-          })
-          .catch(() => {
-            if (!mounted) return;
-            setBoards([]);
-          })
-          .then(() => {
-            if (!mounted) return;
-            setIsLoading(false);
-            setHasLoadedOnce(true);
-          });
+        refresh();
       },
     });
 
     return () => {
-      mounted = false;
       unsubscribe?.();
     };
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards]);
+  }, [isAuth, isInitialized, forceSkeleton, debugBoards, refresh]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">

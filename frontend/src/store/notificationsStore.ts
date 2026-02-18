@@ -16,9 +16,11 @@ interface FriendRequestNoti {
 interface NotificationsState {
   requests: FriendRequestNoti[];
   isLoading: boolean;
+  hasLoadedOnce: boolean;
   highlightRequestId: number | null;
 
   fetchRequests: () => Promise<void>;
+  ensureRequestsLoaded: () => Promise<void>;
   addRequest: (req: FriendRequestNoti) => void;
   removeRequest: (id: number) => void;
   updateRequestStatus: (requestId: number, status: FriendStatus) => void;
@@ -29,13 +31,15 @@ interface NotificationsState {
 
 export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   requests: [],
-  isLoading: true,
+  isLoading: false,
+  hasLoadedOnce: false,
   highlightRequestId: null,
 
   fetchRequests: async () => {
+    if (get().isLoading) return;
     const token = localStorage.getItem('token');
     if (!token) {
-      set({ requests: [], isLoading: false });
+      set({ requests: [], isLoading: false, hasLoadedOnce: false });
       return;
     }
     set({ isLoading: true });
@@ -60,8 +64,13 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     } catch {
       set({ requests: [] });
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, hasLoadedOnce: true });
     }
+  },
+
+  ensureRequestsLoaded: async () => {
+    if (get().hasLoadedOnce) return;
+    await get().fetchRequests();
   },
 
   addRequest: (req) => {

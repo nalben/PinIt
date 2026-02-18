@@ -9,6 +9,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { useNotificationsStore } from "@/store/notificationsStore";
 import { connectSocket } from "@/services/socketManager";
+import { useFriendsStore } from "@/store/friendsStore";
 import classes from "./FriendsModal.module.scss";
 
 type FriendStatus = "friend" | "none" | "sent" | "received" | "rejected";
@@ -35,6 +36,32 @@ interface UserByFriendCodeResponse {
 }
 
 type FriendSearchMessage = { kind: "error" | "success"; text: string } | null;
+
+let meFriendCodeCache: string | null | undefined;
+let meFriendCodeInFlight: Promise<string | null> | null = null;
+
+const loadMeFriendCode = async () => {
+  if (meFriendCodeCache !== undefined) return meFriendCodeCache;
+  if (meFriendCodeInFlight) return meFriendCodeInFlight;
+
+  meFriendCodeInFlight = (async () => {
+    const { data } = await axiosInstance.get<MeProfileResponse>("/api/profile/me");
+    const next = data?.friend_code ?? null;
+    meFriendCodeCache = next;
+    return next;
+  })();
+
+  return meFriendCodeInFlight.then(
+    (v) => {
+      meFriendCodeInFlight = null;
+      return v;
+    },
+    (err) => {
+      meFriendCodeInFlight = null;
+      throw err;
+    }
+  );
+};
 
 const declension = (number: number, titles: [string, string, string]) => {
   const n = Math.abs(number) % 100;
@@ -98,6 +125,10 @@ const FriendsModal = () => {
   const setFriendsModalView = useUIStore((s) => s.setFriendsModalView);
   const openHeaderDropdown = useUIStore((s) => s.openHeaderDropdown);
   const setHighlightRequestId = useNotificationsStore((s) => s.setHighlightRequestId);
+  const ensureFriendsLoaded = useFriendsStore((s) => s.ensureFriendsLoaded);
+  const storeHasLoadedOnce = useFriendsStore((s) => s.hasLoadedOnce);
+  const storeLoadedUserId = useFriendsStore((s) => s.loadedUserId);
+  const storeFriends = useFriendsStore((s) => s.friends);
 
   const [friends, setFriends] = useState<Friend[]>([]);
   const [isFriendsLoading, setIsFriendsLoading] = useState(false);
@@ -147,19 +178,16 @@ const FriendsModal = () => {
   };
 
   const fetchFriendsAndCode = async (userId: number) => {
-    const [{ data: me }, { data: friendsData }] = await Promise.all([
-      axiosInstance.get<MeProfileResponse>("/api/profile/me"),
-      axiosInstance.get<Friend[]>(`/api/friends/all/${userId}`),
-    ]);
-
-    const friends = Array.isArray(friendsData) ? friendsData : [];
+    await ensureFriendsLoaded(userId);
+    const friends = useFriendsStore.getState().friends as unknown as Friend[];
+    const friendCode = await loadMeFriendCode();
     const statuses: Record<number, { status: FriendStatus; requestId?: number }> = {};
     friends.forEach((f) => {
       statuses[f.id] = { status: "friend" };
     });
 
     return {
-      friendCode: me.friend_code ?? null,
+      friendCode,
       friends,
       statuses,
     };
@@ -172,6 +200,16 @@ const FriendsModal = () => {
     setFriends((prev) => mergeFriends(prev, fetchedFriends));
     setFriendStatusById((prev) => {
       const next = { ...prev };
+      const fetchedIds = new Set(fetchedFriends.map((f) => f.id));
+
+      Object.keys(next).forEach((key) => {
+        const id = Number(key);
+        if (!Number.isFinite(id)) return;
+        if (next[id]?.status === "friend" && !fetchedIds.has(id)) {
+          next[id] = { status: "none" };
+        }
+      });
+
       fetchedFriends.forEach((f) => {
         next[f.id] = { status: "friend" };
       });
@@ -197,7 +235,12 @@ const FriendsModal = () => {
     }
 
     let mounted = true;
-    setIsFriendsLoading(true);
+    const canUseCache =
+      storeHasLoadedOnce &&
+      storeLoadedUserId === user.id &&
+      meFriendCodeCache !== undefined;
+
+    if (!canUseCache) setIsFriendsLoading(true);
 
     fetchFriendsAndCode(user.id)
       .then(({ friendCode, friends: fetchedFriends, statuses }) => {
@@ -221,7 +264,7 @@ const FriendsModal = () => {
     return () => {
       mounted = false;
     };
-  }, [friendsModalOpen, isInitialized, isAuth, user?.id]);
+  }, [friendsModalOpen, isInitialized, isAuth, user?.id, storeHasLoadedOnce, storeLoadedUserId, ensureFriendsLoaded]);
 
   useEffect(() => {
     if (!friendsModalOpen) return;
@@ -236,18 +279,46 @@ const FriendsModal = () => {
 
         const status = rawStatus as FriendStatus;
         const requestId = typeof data.requestId === "number" ? data.requestId : undefined;
+        const otherUserId = Number(data?.userId);
+        if (!Number.isFinite(otherUserId)) return;
 
         setFriendStatusById((prev) => ({
           ...prev,
-          [data.userId]: {
+          [otherUserId]: {
             status,
-            requestId: requestId ?? prev[data.userId]?.requestId,
+            requestId: requestId ?? prev[otherUserId]?.requestId,
           },
         }));
 
-        if (status === "friend") {
+        if (status === "friend" || status === "none") {
           reloadFriends(user.id).catch((err) => console.error("Ошибка при обновлении списка друзей", err));
         }
+      },
+      onNewRequest: (data) => {
+        const otherUserId = Number(data?.user_id ?? data?.userId);
+        const requestId = Number(data?.id ?? data?.requestId);
+        if (!Number.isFinite(otherUserId) || !Number.isFinite(requestId)) return;
+
+        setFriendStatusById((prev) => ({
+          ...prev,
+          [otherUserId]: { status: "received", requestId },
+        }));
+      },
+      onRemoveRequest: (data) => {
+        const requestId = Number(data?.id ?? data?.requestId);
+        if (!Number.isFinite(requestId)) return;
+
+        setFriendStatusById((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((key) => {
+            const id = Number(key);
+            if (!Number.isFinite(id)) return;
+            if (next[id]?.requestId === requestId) {
+              next[id] = { status: "none" };
+            }
+          });
+          return next;
+        });
       },
     });
 
@@ -262,6 +333,7 @@ const FriendsModal = () => {
       setIsFriendCodeGenerating(true);
       const { data } = await axiosInstance.post<{ friend_code: string }>(`/api/profile/me/friend-code`);
       setFriendCode(data.friend_code);
+      meFriendCodeCache = data.friend_code;
     } catch (err) {
       console.error("Ошибка при генерации кода дружбы", err);
     } finally {
@@ -276,6 +348,7 @@ const FriendsModal = () => {
       setFriendCodeCopyText(null);
       const { data } = await axiosInstance.post<{ friend_code: string }>(`/api/profile/me/friend-code/regenerate`);
       setFriendCode(data.friend_code);
+      meFriendCodeCache = data.friend_code;
     } catch (err) {
       console.error("Ошибка при перегенерации кода дружбы", err);
     } finally {

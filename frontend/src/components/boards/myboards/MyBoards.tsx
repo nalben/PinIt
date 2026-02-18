@@ -11,7 +11,7 @@ import AuthTrigger from '@/components/auth/AuthTrigger';
 const MyBoards: React.FC = () => {
   const boards = useBoardsStore(state => state.boards);
   const isLoading = useBoardsStore(state => state.isLoading);
-  const loadBoards = useBoardsStore(state => state.loadBoards);
+  const ensureBoardsLoaded = useBoardsStore(state => state.ensureBoardsLoaded);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const { isAuth, isInitialized } = useAuthStore();
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -95,7 +95,7 @@ const MyBoards: React.FC = () => {
 
     let mounted = true;
     setHasLoadedOnce(false);
-    loadBoards().finally(() => {
+    ensureBoardsLoaded().finally(() => {
       if (!mounted) return;
       setHasLoadedOnce(true);
     });
@@ -103,7 +103,7 @@ const MyBoards: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [loadBoards, forceSkeleton, isInitialized, isAuth, debugBoards]);
+  }, [ensureBoardsLoaded, forceSkeleton, isInitialized, isAuth, debugBoards]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">

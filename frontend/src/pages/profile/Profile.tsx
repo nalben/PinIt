@@ -39,6 +39,15 @@ type ProfileError = "NOT_FOUND" | "UNKNOWN";
 
 type OpenModal = "edit" | "reset" | null;
 
+type ProfileCacheKey = string;
+type ProfileCacheEntry = { profile: ProfileData; friendCount: number | null };
+
+const profileCache = new Map<ProfileCacheKey, ProfileCacheEntry>();
+const profileInFlight = new Map<ProfileCacheKey, Promise<ProfileCacheEntry>>();
+const friendCountInFlight = new Map<string, boolean>();
+const friendStatusCache = new Map<number, { status: FriendStatus; requestId?: number }>();
+const friendStatusInFlight = new Map<number, boolean>();
+
 const Profile = () => {
   const MAX_AVATAR_SIZE_MB = 5;
   const MAX_AVATAR_SIZE_BYTES = MAX_AVATAR_SIZE_MB * 1024 * 1024;
@@ -111,65 +120,158 @@ const Profile = () => {
 
   const refreshFriendCount = async () => {
     if (!username) return;
+    if (friendCountInFlight.get(username)) return;
     try {
+      friendCountInFlight.set(username, true);
       const { data } =
         await axiosInstance.get<{ friend_count: number }>(`/api/profile/${username}/friends-count`);
       setFriendCount(data.friend_count);
     } catch (err) {
       console.error('Ошибка при обновлении количества друзей', err);
+    } finally {
+      friendCountInFlight.delete(username);
     }
   };
 
   useEffect(() => {
-  if (!isInitialized) return;
+    if (!isInitialized) return;
+    if (!username) return;
 
-  const fetchProfileData = async () => {
-    try {
+    const tokenPresent = Boolean(localStorage.getItem('token'));
+    const cacheKey: ProfileCacheKey = `${username}|${tokenPresent ? 'auth' : 'anon'}`;
+
+    const cached = profileCache.get(cacheKey);
+    if (cached) {
+      setError(null);
+      setProfile(cached.profile);
+      setFriendCount(cached.friendCount);
+      setIsLoading(false);
+
+      if (tokenPresent && !cached.profile.isOwner) {
+        const cachedStatus = friendStatusCache.get(cached.profile.id);
+        if (cachedStatus) {
+          setFriendStatusById(prev => ({
+            ...prev,
+            [cached.profile.id]: cachedStatus,
+          }));
+        } else if (!friendStatusInFlight.get(cached.profile.id)) {
+          friendStatusInFlight.set(cached.profile.id, true);
+          axiosInstance
+            .get<{ status: FriendStatus; requestId?: number }>(`/api/friends/status/${cached.profile.id}`)
+            .then(({ data }) => {
+              friendStatusCache.set(cached.profile.id, { status: data.status, requestId: data.requestId });
+              setFriendStatusById(prev => ({
+                ...prev,
+                [cached.profile.id]: {
+                  status: data.status,
+                  requestId: data.requestId
+                }
+              }));
+            })
+            .catch(() => {
+              // ignore
+            })
+            .then(() => {
+              friendStatusInFlight.delete(cached.profile.id);
+            });
+        }
+      }
+
+      return;
+    } else {
       setIsLoading(true);
       setError(null);
       setProfile(null);
       setFriendCount(null);
       setFriendStatusById({});
       setShareTextById({});
-
-      const { data } =
-        await axiosInstance.get<ProfileData>(`/api/profile/${username}`);
-      setProfile(data);
-
-      await refreshFriendCount();
-
-      if (!data.isOwner && isAuth) {
-        const { data: statusData } =
-          await axiosInstance.get<{ status: FriendStatus; requestId?: number }>(
-            `/api/friends/status/${data.id}`
-          );
-
-        setFriendStatusById(prev => ({
-          ...prev,
-          [data.id]: {
-            status: statusData.status,
-            requestId: statusData.requestId
-          }
-        }));
-      }
-
-    } catch (err: any) {
-      if (err.response?.status === 404) {
-        setError("NOT_FOUND");
-      } else {
-        console.error(err);
-      }
-    } finally {
-      setIsLoading(false);
     }
-  };
 
-  if (username) fetchProfileData();
-}, [username, isAuth, isInitialized]);
+    let mounted = true;
+    const promise =
+      profileInFlight.get(cacheKey) ??
+      (async () => {
+        const [{ data: profile }, { data: count }] = await Promise.all([
+          axiosInstance.get<ProfileData>(`/api/profile/${username}`),
+          axiosInstance.get<{ friend_count: number }>(`/api/profile/${username}/friends-count`),
+        ]);
+
+        const entry: ProfileCacheEntry = {
+          profile,
+          friendCount: typeof count?.friend_count === 'number' ? count.friend_count : null,
+        };
+
+        profileCache.set(cacheKey, entry);
+        return entry;
+      })();
+
+    if (!profileInFlight.has(cacheKey)) {
+      profileInFlight.set(
+        cacheKey,
+        promise.then((v) => {
+          profileInFlight.delete(cacheKey);
+          return v;
+        }, (err) => {
+          profileInFlight.delete(cacheKey);
+          throw err;
+        })
+      );
+    }
+
+    profileInFlight
+      .get(cacheKey)!
+      .then((entry) => {
+        if (!mounted) return;
+        setProfile(entry.profile);
+        setFriendCount(entry.friendCount);
+
+        if (tokenPresent && !entry.profile.isOwner) {
+          if (friendStatusInFlight.get(entry.profile.id)) return;
+          friendStatusInFlight.set(entry.profile.id, true);
+
+          axiosInstance
+            .get<{ status: FriendStatus; requestId?: number }>(`/api/friends/status/${entry.profile.id}`)
+            .then(({ data }) => {
+              friendStatusCache.set(entry.profile.id, { status: data.status, requestId: data.requestId });
+              if (!mounted) return;
+              setFriendStatusById(prev => ({
+                ...prev,
+                [entry.profile.id]: {
+                  status: data.status,
+                  requestId: data.requestId
+                }
+              }));
+            })
+            .catch(() => {
+              // ignore
+            })
+            .then(() => {
+              friendStatusInFlight.delete(entry.profile.id);
+            });
+        }
+      })
+      .catch((err: any) => {
+        if (!mounted) return;
+        if (err?.response?.status === 404) setError("NOT_FOUND");
+        else console.error(err);
+      })
+      .then(() => {
+        if (!mounted) return;
+        setIsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [username, isInitialized, isAuth]);
 
 useEffect(() => {
   if (!profile?.id) return;
   const handleFriendStatusChange = (data: { userId: number; status: FriendStatus; requestId?: number }) => {
+    if (typeof data?.userId === 'number') {
+      friendStatusCache.set(data.userId, { status: data.status, requestId: data.requestId });
+    }
+
     setFriendStatusById(prev => ({
       ...prev,
       [data.userId]: {
@@ -180,10 +282,17 @@ useEffect(() => {
 
     const shouldUpdateCounts = profile?.isOwner || profile?.id === data.userId;
     if (shouldUpdateCounts) {
+      profileCache.delete(`${username}|auth`);
+      profileCache.delete(`${username}|anon`);
       refreshFriendCount();
     }
   };
   const handleNewRequest = (data: any) => {
+    const userId = Number(data?.user_id);
+    const requestId = Number(data?.id);
+    if (Number.isFinite(userId) && Number.isFinite(requestId)) {
+      friendStatusCache.set(userId, { status: 'received', requestId });
+    }
     setFriendStatusById(prev => ({
       ...prev,
       [data.user_id]: { status: 'received', requestId: data.id }
@@ -197,6 +306,10 @@ useEffect(() => {
           updated[key] = {
             status: updated[key].status === 'friend' ? 'friend' : 'none'
           };
+          const numericKey = Number(key);
+          if (Number.isFinite(numericKey)) {
+            friendStatusCache.set(numericKey, { status: updated[key].status });
+          }
         }
       }
       return updated;
@@ -230,13 +343,16 @@ const handleFriendAction = async (userId: number) => {
 
     if (current === 'friend') {
       await axiosInstance.delete(`/api/friends/${userId}`);
+      friendStatusCache.set(userId, { status: 'none' });
       setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
     } else if (current === 'none') {
       if (friendStatusById[userId]?.status === 'sent' || friendStatusById[userId]?.status === 'rejected') return;
       const { data } = await axiosInstance.post<{ id: number }>(`/api/friends/send`, { friend_id: userId });
+      friendStatusCache.set(userId, { status: 'sent', requestId: data.id });
       setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'sent', requestId: data.id } }));
     } else if (current === 'sent' && requestId) {
       await axiosInstance.delete(`/api/friends/remove-request/${requestId}`);
+      friendStatusCache.set(userId, { status: 'none' });
       setFriendStatusById(prev => ({ ...prev, [userId]: { status: 'none' } }));
     }
   } catch (e) {

@@ -107,6 +107,7 @@
     height: fit-content;
     padding-inline: fluid-prop(20, 5, 1920, 320);
     padding-block: fluid-prop(15, 10, 1920, 320);
+    text-wrap: nowrap;
     color: var(--blue20);
   }
 }

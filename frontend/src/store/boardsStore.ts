@@ -51,20 +51,33 @@ interface BoardsState {
   boards: Board[];
   recentBoards: Board[];
   isLoading: boolean;
+  hasLoadedOnce: boolean;
+  lastTokenPresent: boolean;
   loadBoards: () => Promise<void>;
+  ensureBoardsLoaded: () => Promise<void>;
 }
 
 export const useBoardsStore = create<BoardsState>((set, get) => ({
   boards: [],
   recentBoards: [],
   isLoading: false,
+  hasLoadedOnce: false,
+  lastTokenPresent: false,
   loadBoards: async () => {
     if (get().isLoading) return;
     const token = localStorage.getItem('token');
     if (!token) {
-      set({ boards: [], recentBoards: readRecentBoardsFromLocalStorage(), isLoading: false });
+      set({
+        boards: [],
+        recentBoards: readRecentBoardsFromLocalStorage(),
+        isLoading: false,
+        hasLoadedOnce: false,
+        lastTokenPresent: false,
+      });
       return;
     }
+
+    set({ lastTokenPresent: true });
     set({ isLoading: true });
     try {
       const { data: myBoards } = await axiosInstance.get<Board[]>('/api/boards');
@@ -78,8 +91,18 @@ export const useBoardsStore = create<BoardsState>((set, get) => ({
     } catch {
       set({ boards: [], recentBoards: [] });
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, hasLoadedOnce: true });
     }
+  },
+  ensureBoardsLoaded: async () => {
+    const tokenPresent = Boolean(localStorage.getItem('token'));
+    const lastTokenPresent = get().lastTokenPresent;
+    if (tokenPresent !== lastTokenPresent) {
+      await get().loadBoards();
+      return;
+    }
+    if (get().hasLoadedOnce) return;
+    await get().loadBoards();
   },
 }));
 

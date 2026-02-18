@@ -12,7 +12,7 @@ import { useAuthStore } from '@/store/authStore';
 const Lastboards: React.FC = () => {
   const recentBoards = useBoardsStore(state => state.recentBoards);
   const isLoading = useBoardsStore(state => state.isLoading);
-  const loadBoards = useBoardsStore(state => state.loadBoards);
+  const ensureBoardsLoaded = useBoardsStore(state => state.ensureBoardsLoaded);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
@@ -30,7 +30,7 @@ const Lastboards: React.FC = () => {
     if (!isInitialized) return;
     let mounted = true;
     setHasLoadedOnce(false);
-    loadBoards().finally(() => {
+    ensureBoardsLoaded().finally(() => {
       if (!mounted) return;
       setHasLoadedOnce(true);
     });
@@ -38,7 +38,7 @@ const Lastboards: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [loadBoards, forceSkeleton, isInitialized, isAuth]);
+  }, [ensureBoardsLoaded, forceSkeleton, isInitialized, isAuth]);
 
   if (forceSkeleton || ((isLoading || !hasLoadedOnce) && recentBoards.length === 0)) {
     return (

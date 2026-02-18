@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
 import Default from '@/assets/icons/monochrome/default-user.svg';
@@ -40,9 +40,8 @@ const timeAgo = (dateString: string) => {
 const FriendsList: React.FC = () => {
   const friendsListRef = useRef<HTMLDivElement | null>(null);
   const { user, isAuth, isInitialized } = useAuthStore();
-  const { friends, isLoading, fetchFriends } = useFriendsStore();
+  const { friends, isLoading, hasLoadedOnce, fetchFriends, ensureFriendsLoaded, clearFriends } = useFriendsStore();
   const openFriendsModal = useUIStore((s) => s.openFriendsModal);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
@@ -53,7 +52,7 @@ const FriendsList: React.FC = () => {
     if (!isInitialized) return;
 
     if (!isAuth) {
-      setHasLoadedOnce(false);
+      clearFriends();
       return;
     }
 
@@ -61,34 +60,15 @@ const FriendsList: React.FC = () => {
     if (!userId || userId <= 0) return;
 
     if (localStorage.getItem('debugFriends') === '1') {
-      setHasLoadedOnce(true);
       return;
     }
 
-    let mounted = true;
-    setHasLoadedOnce(false);
-    fetchFriends(userId).finally(() => {
-      if (!mounted) return;
-      setHasLoadedOnce(true);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [user?.id, fetchFriends, isAuth, isInitialized, forceSkeleton]);
+    ensureFriendsLoaded(userId);
+  }, [user?.id, ensureFriendsLoaded, clearFriends, isAuth, isInitialized, forceSkeleton]);
 
   useEffect(() => {
     if (forceSkeleton) return;
     if (!user) return;
-    const unsubscribe = connectSocket({
-      onFriendStatusChange: () => {
-        if (localStorage.getItem('debugFriends') === '1') return;
-        fetchFriends(user.id);
-      }
-    });
-    return () => {
-      unsubscribe?.();
-    };
   }, [user, fetchFriends, forceSkeleton]);
 
 

@@ -9,6 +9,7 @@ import { useNotificationsStore } from '@/store/notificationsStore';
 import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { connectSocket, disconnectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
+import { useFriendsStore } from '@/store/friendsStore';
 import Appitit from './AppInit'
 import FriendsModal from '@/components/friends/friendsmodal/FriendsModal';
 import CreateBoardModal from '@/components/boards/createboardmodal/CreateBoardModal';
@@ -16,8 +17,10 @@ import CreateBoardModal from '@/components/boards/createboardmodal/CreateBoardMo
 const Root = () => {
   const { addRequest, removeRequest, updateRequestStatus } = useNotificationsStore();
   const { addInvite, removeInvite } = useBoardsInvitesStore();
+  const fetchFriends = useFriendsStore((s) => s.fetchFriends);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
+  const userId = useAuthStore(state => state.user?.id);
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -53,13 +56,23 @@ const Root = () => {
 
         const status = rawStatus as typeof validStatuses[number];
         updateRequestStatus(requestId, status);
+
+        if (typeof userId === 'number') {
+          if (status === 'friend') {
+            fetchFriends(userId);
+          } else if (status === 'none') {
+            const otherUserId = Number((data as { userId?: unknown }).userId);
+            const isExistingFriend = Number.isFinite(otherUserId) && useFriendsStore.getState().friends.some((f) => f.id === otherUserId);
+            if (isExistingFriend) fetchFriends(userId);
+          }
+        }
       }
     });
 
     return () => {
       unsubscribe?.();
     };
-  }, [addInvite, addRequest, removeInvite, removeRequest, updateRequestStatus, isAuth, isInitialized]);
+  }, [addInvite, addRequest, removeInvite, removeRequest, updateRequestStatus, fetchFriends, userId, isAuth, isInitialized]);
 
   return (
     <div className={classes.sitecon}>

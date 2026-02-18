@@ -18,8 +18,10 @@ export interface BoardInvite {
 interface BoardsInvitesState {
   invites: BoardInvite[];
   isLoading: boolean;
+  hasLoadedOnce: boolean;
 
   fetchInvites: () => Promise<void>;
+  ensureInvitesLoaded: () => Promise<void>;
   addInvite: (invite: BoardInvite) => void;
   removeInvite: (inviteId: number) => void;
   clearInvites: () => void;
@@ -31,15 +33,17 @@ interface BoardsInvitesState {
 export const useBoardsInvitesStore = create<BoardsInvitesState>((set, get) => ({
   invites: [],
   isLoading: false,
+  hasLoadedOnce: false,
 
   fetchInvites: async () => {
+    if (get().isLoading) return;
     const token = localStorage.getItem('token');
     if (!token) {
-      set({ invites: [], isLoading: false });
+      set({ invites: [], isLoading: false, hasLoadedOnce: false });
       return;
     }
     if (localStorage.getItem('debugBoardInvites') === '1') {
-      set({ isLoading: false });
+      set({ isLoading: false, hasLoadedOnce: true });
       return;
     }
 
@@ -50,8 +54,13 @@ export const useBoardsInvitesStore = create<BoardsInvitesState>((set, get) => ({
     } catch {
       set({ invites: [] });
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, hasLoadedOnce: true });
     }
+  },
+
+  ensureInvitesLoaded: async () => {
+    if (get().hasLoadedOnce) return;
+    await get().fetchInvites();
   },
 
   addInvite: (invite) => {
@@ -66,7 +75,7 @@ export const useBoardsInvitesStore = create<BoardsInvitesState>((set, get) => ({
     }));
   },
 
-  clearInvites: () => set({ invites: [], isLoading: false }),
+  clearInvites: () => set({ invites: [], isLoading: false, hasLoadedOnce: false }),
 
   acceptInvite: async (inviteId) => {
     if (localStorage.getItem('debugBoardInvites') === '1') {

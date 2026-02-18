@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import classes from './BoardsInvites.module.scss';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
@@ -12,10 +12,10 @@ const BoardsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
   const invites = useBoardsInvitesStore(state => state.invites);
   const isLoading = useBoardsInvitesStore(state => state.isLoading);
-  const fetchInvites = useBoardsInvitesStore(state => state.fetchInvites);
+  const hasLoadedOnce = useBoardsInvitesStore(state => state.hasLoadedOnce);
+  const ensureInvitesLoaded = useBoardsInvitesStore(state => state.ensureInvitesLoaded);
   const acceptInvite = useBoardsInvitesStore(state => state.acceptInvite);
   const rejectInvite = useBoardsInvitesStore(state => state.rejectInvite);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const forceSkeleton =
     __ENV__ === 'development' &&
@@ -26,18 +26,8 @@ const BoardsInvites: React.FC = () => {
     if (forceSkeleton) return;
     if (!isInitialized) return;
     if (!isAuth) return;
-
-    let mounted = true;
-    setHasLoadedOnce(false);
-    fetchInvites().finally(() => {
-      if (!mounted) return;
-      setHasLoadedOnce(true);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [fetchInvites, isInitialized, isAuth, forceSkeleton]);
+    ensureInvitesLoaded();
+  }, [ensureInvitesLoaded, isInitialized, isAuth, forceSkeleton]);
 
   const sortedInvites = useMemo(
     () =>

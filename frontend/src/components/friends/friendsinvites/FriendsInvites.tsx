@@ -13,7 +13,7 @@ import { useUIStore } from '@/store/uiStore';
 
 const FriendsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
-  const { requests, isLoading, fetchRequests, acceptRequest, rejectRequest } = useNotificationsStore();
+  const { requests, isLoading, ensureRequestsLoaded, acceptRequest, rejectRequest } = useNotificationsStore();
   const requestsCount = requests.length;
   const openFriendsModal = useUIStore((s) => s.openFriendsModal);
   const forceSkeleton =
@@ -24,9 +24,8 @@ const FriendsInvites: React.FC = () => {
   useEffect(() => {
     if (forceSkeleton) return;
     if (!isInitialized || !isAuth) return;
-    if (requestsCount > 0) return;
-    fetchRequests();
-  }, [fetchRequests, isInitialized, isAuth, requestsCount, forceSkeleton]);
+    ensureRequestsLoaded();
+  }, [ensureRequestsLoaded, isInitialized, isAuth, forceSkeleton]);
 
   const sortedRequests = useMemo(
     () =>

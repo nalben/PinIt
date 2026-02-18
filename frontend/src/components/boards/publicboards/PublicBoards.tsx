@@ -4,27 +4,21 @@ import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { API_URL } from '@/api/axiosInstance';
-import axiosInstance from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
-
-interface PublicBoard {
-  id: number;
-  title: string;
-  description?: string | null;
-  created_at: string;
-  image?: string | null;
-}
+import { PublicBoard, useSpacesBoardsStore } from '@/store/spacesBoardsStore';
 
 const PublicBoards: React.FC = () => {
   const isAuth = useAuthStore((s) => s.isAuth);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
-  const [boards, setBoards] = useState<PublicBoard[]>([]);
+  const boards = useSpacesBoardsStore((s) => s.publicBoards);
+  const isLoading = useSpacesBoardsStore((s) => s.isLoadingPublicBoards);
+  const hasLoadedOnce = useSpacesBoardsStore((s) => s.hasLoadedOncePublicBoards);
+  const ensureLoaded = useSpacesBoardsStore((s) => s.ensurePublicBoardsLoaded);
+
   const [debugBoards, setDebugBoards] = useState<PublicBoard[] | null>(null);
   const boardsListRef = useRef<HTMLDivElement | null>(null);
   const [hasListScroll, setHasListScroll] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
@@ -73,14 +67,10 @@ const PublicBoards: React.FC = () => {
         image: null,
       }));
       setDebugBoards(fakeBoards);
-      setIsLoading(false);
-      setHasLoadedOnce(true);
     };
 
     w.setFakePublicBoards = (nextBoards) => {
       setDebugBoards(Array.isArray(nextBoards) ? nextBoards : []);
-      setIsLoading(false);
-      setHasLoadedOnce(true);
     };
 
     w.clearFakePublicBoards = () => {
@@ -98,28 +88,8 @@ const PublicBoards: React.FC = () => {
     if (forceSkeleton) return;
     if (debugBoards !== null) return;
 
-    let mounted = true;
-    setIsLoading(true);
-    setHasLoadedOnce(false);
-    axiosInstance.get<PublicBoard[]>('/api/boards/public/popular')
-      .then(({ data }) => {
-        if (!mounted) return;
-        setBoards(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setBoards([]);
-      })
-      .then(() => {
-        if (!mounted) return;
-        setIsLoading(false);
-        setHasLoadedOnce(true);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [forceSkeleton, debugBoards]);
+    ensureLoaded();
+  }, [forceSkeleton, debugBoards, ensureLoaded]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">

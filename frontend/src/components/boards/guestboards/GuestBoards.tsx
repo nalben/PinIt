@@ -4,30 +4,24 @@ import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { API_URL } from '@/api/axiosInstance';
-import axiosInstance from '@/api/axiosInstance';
 import { connectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
-
-interface GuestBoard {
-  id: number;
-  title: string;
-  description?: string | null;
-  created_at: string;
-  image?: string | null;
-  my_role?: string | null;
-  last_visited_at?: string | null;
-}
+import { GuestBoard, useSpacesBoardsStore } from '@/store/spacesBoardsStore';
 
 const GuestBoards: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
-  const [boards, setBoards] = useState<GuestBoard[]>([]);
+  const boards = useSpacesBoardsStore((s) => s.guestBoards);
+  const isLoading = useSpacesBoardsStore((s) => s.isLoadingGuestBoards);
+  const hasLoadedOnce = useSpacesBoardsStore((s) => s.hasLoadedOnceGuestBoards);
+  const ensureLoaded = useSpacesBoardsStore((s) => s.ensureGuestBoardsLoaded);
+  const refresh = useSpacesBoardsStore((s) => s.refreshGuestBoards);
+  const clear = useSpacesBoardsStore((s) => s.clearGuestBoards);
+
   const [debugBoards, setDebugBoards] = useState<GuestBoard[] | null>(null);
   const boardsListRef = useRef<HTMLDivElement | null>(null);
   const [hasListScroll, setHasListScroll] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
@@ -78,14 +72,10 @@ const GuestBoards: React.FC = () => {
         last_visited_at: null,
       }));
       setDebugBoards(fakeBoards);
-      setIsLoading(false);
-      setHasLoadedOnce(true);
     };
 
     w.setFakeGuestBoards = (nextBoards) => {
       setDebugBoards(Array.isArray(nextBoards) ? nextBoards : []);
-      setIsLoading(false);
-      setHasLoadedOnce(true);
     };
 
     w.clearFakeGuestBoards = () => {
@@ -104,33 +94,12 @@ const GuestBoards: React.FC = () => {
     if (debugBoards !== null) return;
     if (!isInitialized) return;
     if (!isAuth) {
-      setBoards([]);
-      setHasLoadedOnce(false);
+      clear();
       return;
     }
 
-    let mounted = true;
-    setIsLoading(true);
-    setHasLoadedOnce(false);
-    axiosInstance.get<GuestBoard[]>('/api/boards/guest')
-      .then(({ data }) => {
-        if (!mounted) return;
-        setBoards(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setBoards([]);
-      })
-      .then(() => {
-        if (!mounted) return;
-        setIsLoading(false);
-        setHasLoadedOnce(true);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards]);
+    ensureLoaded();
+  }, [isAuth, isInitialized, forceSkeleton, debugBoards, ensureLoaded, clear]);
 
   useEffect(() => {
     if (forceSkeleton) return;
@@ -138,33 +107,16 @@ const GuestBoards: React.FC = () => {
     if (!isInitialized) return;
     if (!isAuth) return;
 
-    let mounted = true;
-
     const unsubscribe = connectSocket({
       onBoardsUpdate: () => {
-        setIsLoading(true);
-        axiosInstance.get<GuestBoard[]>('/api/boards/guest')
-          .then(({ data }) => {
-            if (!mounted) return;
-            setBoards(Array.isArray(data) ? data : []);
-          })
-          .catch(() => {
-            if (!mounted) return;
-            setBoards([]);
-          })
-          .then(() => {
-            if (!mounted) return;
-            setIsLoading(false);
-            setHasLoadedOnce(true);
-          });
+        refresh();
       },
     });
 
     return () => {
-      mounted = false;
       unsubscribe?.();
     };
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards]);
+  }, [isAuth, isInitialized, forceSkeleton, debugBoards, refresh]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">
@@ -246,4 +198,3 @@ const GuestBoards: React.FC = () => {
 };
 
 export default GuestBoards;
-

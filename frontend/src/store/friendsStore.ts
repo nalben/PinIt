@@ -12,31 +12,57 @@ export interface Friend {
 interface FriendsState {
   friends: Friend[];
   isLoading: boolean;
+  hasLoadedOnce: boolean;
+  loadedUserId: number | null;
+  lastTokenPresent: boolean;
   fetchFriends: (userId: number) => Promise<void>;
+  ensureFriendsLoaded: (userId: number) => Promise<void>;
+  clearFriends: () => void;
 }
 
-export const useFriendsStore = create<FriendsState>(set => ({
+export const useFriendsStore = create<FriendsState>((set, get) => ({
   friends: [],
   isLoading: false,
+  hasLoadedOnce: false,
+  loadedUserId: null,
+  lastTokenPresent: false,
   fetchFriends: async (userId: number) => {
+    if (get().isLoading) return;
+
     if (localStorage.getItem('debugFriends') === '1') {
-      set({ isLoading: false });
+      set({ isLoading: false, hasLoadedOnce: true });
       return;
     }
+
+    const tokenPresent = Boolean(localStorage.getItem('token'));
+    set({ lastTokenPresent: tokenPresent });
+
     if (userId <= 0) {
-      set({ friends: [], isLoading: false });
+      set({ friends: [], isLoading: false, hasLoadedOnce: false, loadedUserId: null });
       return;
     }
+
     set({ isLoading: true });
     try {
       const { data } = await axiosInstance.get(`/api/friends/all/${userId}`);
-      set({ friends: Array.isArray(data) ? data : [] });
+      set({ friends: Array.isArray(data) ? data : [], loadedUserId: userId });
     } catch {
-      set({ friends: [] });
+      set({ friends: [], loadedUserId: userId });
     } finally {
-      set({ isLoading: false });
+      set({ isLoading: false, hasLoadedOnce: true });
     }
   },
+  ensureFriendsLoaded: async (userId: number) => {
+    const tokenPresent = Boolean(localStorage.getItem('token'));
+    if (!tokenPresent) {
+      if (get().lastTokenPresent) set({ friends: [], isLoading: false, hasLoadedOnce: false, loadedUserId: null, lastTokenPresent: false });
+      return;
+    }
+
+    if (get().loadedUserId === userId && get().hasLoadedOnce) return;
+    await get().fetchFriends(userId);
+  },
+  clearFriends: () => set({ friends: [], isLoading: false, hasLoadedOnce: false, loadedUserId: null, lastTokenPresent: false }),
 }));
 
 // Dev helper: allow seeding fake friends from the browser console.
