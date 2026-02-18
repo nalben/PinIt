@@ -20,6 +20,7 @@ const PublicBoards: React.FC = () => {
   const isAuth = useAuthStore((s) => s.isAuth);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const [boards, setBoards] = useState<PublicBoard[]>([]);
+  const [debugBoards, setDebugBoards] = useState<PublicBoard[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
@@ -28,7 +29,49 @@ const PublicBoards: React.FC = () => {
     localStorage.getItem('debugSkeleton') === '1';
 
   useEffect(() => {
+    if (__ENV__ !== 'development') return;
+    if (typeof window === 'undefined') return;
+
+    const w = window as unknown as {
+      addFakePublicBoards?: () => void;
+      setFakePublicBoards?: (boards: PublicBoard[]) => void;
+      clearFakePublicBoards?: () => void;
+    };
+
+    w.addFakePublicBoards = () => {
+      const now = new Date().toISOString();
+      const fakeBoards: PublicBoard[] = Array.from({ length: 6 }).map((_, i) => ({
+        id: i + 1,
+        title: `Fake public board ${i + 1}`,
+        description: `Fake description ${i + 1}`,
+        created_at: now,
+        image: null,
+      }));
+      setDebugBoards(fakeBoards);
+      setIsLoading(false);
+      setHasLoadedOnce(true);
+    };
+
+    w.setFakePublicBoards = (nextBoards) => {
+      setDebugBoards(Array.isArray(nextBoards) ? nextBoards : []);
+      setIsLoading(false);
+      setHasLoadedOnce(true);
+    };
+
+    w.clearFakePublicBoards = () => {
+      setDebugBoards(null);
+    };
+
+    return () => {
+      delete w.addFakePublicBoards;
+      delete w.setFakePublicBoards;
+      delete w.clearFakePublicBoards;
+    };
+  }, []);
+
+  useEffect(() => {
     if (forceSkeleton) return;
+    if (debugBoards !== null) return;
 
     let mounted = true;
     setIsLoading(true);
@@ -51,7 +94,7 @@ const PublicBoards: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [forceSkeleton]);
+  }, [forceSkeleton, debugBoards]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">
@@ -71,15 +114,18 @@ const PublicBoards: React.FC = () => {
     </section>
   );
 
+  const boardsToRender = debugBoards ?? boards;
+  const isDebug = debugBoards !== null;
+
   if (forceSkeleton) return skeleton;
-  if ((isLoading || !hasLoadedOnce) && boards.length === 0) return skeleton;
+  if (!isDebug && (isLoading || !hasLoadedOnce) && boards.length === 0) return skeleton;
 
   return (
     <section className={classes.boards_container}>
       <h2>Популярные доступные доски:</h2>
-      {boards.length > 0 ? (
+      {boardsToRender.length > 0 ? (
         <div className={classes.boards_list}>
-          {boards.map(board => {
+          {boardsToRender.map(board => {
             const imgSrc = board.image
               ? board.image.startsWith('/uploads/')
                 ? `${API_URL}${board.image}`
@@ -93,7 +139,7 @@ const PublicBoards: React.FC = () => {
                   <h3>{board.title}</h3>
                   <p>{board.description || ''}</p>
                 </div>
-                <Mainbtn variant="mini" text="Открыть" />
+                <Mainbtn variant="mini" kind="navlink" href={`/spaces/${board.id}`} text="Открыть" />
               </div>
             );
           })}

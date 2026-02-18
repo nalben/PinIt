@@ -9,6 +9,21 @@
     flex-direction: column;
     gap: 1rem;
     overflow-y: auto;
+    max-height: 272px;
+    padding-right: 1rem;
+    &::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        cursor: pointer;
+        background: var(--pink);
+        border-radius: 5px;
+    }
 }
 .boards_item{
     display: flex;
@@ -38,6 +53,16 @@
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
         line-clamp: 2;
+    }
+    & a {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        border-color: var(--pink);
+
+        @media (min-width:540px) {
+            width: auto;
+        }
     }
 }
 .board_info_con{

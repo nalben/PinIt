@@ -316,7 +316,9 @@ const isProfileActive = () => {
                               {invite.nickname || invite.username}
                             </NavLink>
                             {' пригласил(а) в доску '}
-                            {invite.title}
+                            <span className={classes.board_invite_name}>
+                              {invite.title}
+                            </span>
                           </span>
 
                           <div className={classes.noti_int}>

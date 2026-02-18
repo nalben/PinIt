@@ -86,7 +86,7 @@ const Lastboards: React.FC = () => {
                   <h3>{board.title}</h3>
                   <p>{board.description || ''}</p>
                 </div>
-                <Mainbtn variant="mini" text="Открыть" />
+                <Mainbtn variant="mini" kind="navlink" href={`/spaces/${board.id}`} text="Открыть" />
               </div>
             );
           })}

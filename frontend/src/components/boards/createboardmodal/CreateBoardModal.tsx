@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import AuthModal from '@/components/auth/authmodal/AuthModal';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
+import { useNavigate } from 'react-router-dom';
 import {
   CREATE_BOARD_TITLE_MAX_LENGTH,
   useCreateBoardModalStore,
@@ -8,6 +9,7 @@ import {
 import classes from './CreateBoardModal.module.scss';
 
 const CreateBoardModal: React.FC = () => {
+  const navigate = useNavigate();
   const isOpen = useCreateBoardModalStore((s) => s.isOpen);
   const title = useCreateBoardModalStore((s) => s.title);
   const isSubmitting = useCreateBoardModalStore((s) => s.isSubmitting);
@@ -33,7 +35,12 @@ const CreateBoardModal: React.FC = () => {
           className={classes.form}
           onSubmit={(e) => {
             e.preventDefault();
-            submit();
+            submit().then((created) => {
+              const boardId = Number(created?.id);
+              if (Number.isFinite(boardId) && boardId > 0) {
+                navigate(`/spaces/${boardId}`);
+              }
+            });
           }}
         >
           <div className={classes.field}>
@@ -76,4 +83,3 @@ const CreateBoardModal: React.FC = () => {
 };
 
 export default CreateBoardModal;
-

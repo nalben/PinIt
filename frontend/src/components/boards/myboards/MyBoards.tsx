@@ -3,7 +3,7 @@ import classes from './MyBoards.module.scss';
 import { API_URL } from '@/api/axiosInstance';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
-import { useBoardsStore } from '@/store/boardsStore';
+import { Board, useBoardsStore } from '@/store/boardsStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 import { useAuthStore } from '@/store/authStore';
 import AuthTrigger from '@/components/auth/AuthTrigger';
@@ -15,13 +15,53 @@ const MyBoards: React.FC = () => {
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const { isAuth, isInitialized } = useAuthStore();
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [debugBoards, setDebugBoards] = useState<Board[] | null>(null);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
     localStorage.getItem('debugSkeleton') === '1';
 
   useEffect(() => {
+    if (__ENV__ !== 'development') return;
+    if (typeof window === 'undefined') return;
+
+    const w = window as unknown as {
+      addFakeMyBoards?: () => void;
+      setFakeMyBoards?: (boards: Board[]) => void;
+      clearFakeMyBoards?: () => void;
+    };
+
+    w.addFakeMyBoards = () => {
+      const now = new Date().toISOString();
+      const fakeBoards: Board[] = Array.from({ length: 6 }).map((_, i) => ({
+        id: i + 1,
+        title: `Fake board ${i + 1}`,
+        description: `Fake description ${i + 1}`,
+        created_at: now
+      }));
+      setDebugBoards(fakeBoards);
+      setHasLoadedOnce(true);
+    };
+
+    w.setFakeMyBoards = (nextBoards) => {
+      setDebugBoards(Array.isArray(nextBoards) ? nextBoards : []);
+      setHasLoadedOnce(true);
+    };
+
+    w.clearFakeMyBoards = () => {
+      setDebugBoards(null);
+    };
+
+    return () => {
+      delete w.addFakeMyBoards;
+      delete w.setFakeMyBoards;
+      delete w.clearFakeMyBoards;
+    };
+  }, []);
+
+  useEffect(() => {
     if (forceSkeleton) return;
+    if (debugBoards !== null) return;
     if (!isInitialized) return;
     if (!isAuth) {
       setHasLoadedOnce(false);
@@ -38,7 +78,7 @@ const MyBoards: React.FC = () => {
     return () => {
       mounted = false;
     };
-  }, [loadBoards, forceSkeleton, isInitialized, isAuth]);
+  }, [loadBoards, forceSkeleton, isInitialized, isAuth, debugBoards]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">
@@ -58,9 +98,12 @@ const MyBoards: React.FC = () => {
     </section>
   );
 
-  if (forceSkeleton || !isInitialized) return skeleton;
+  const boardsToRender = debugBoards ?? boards;
+  const isDebug = debugBoards !== null;
 
-  if (!isAuth) {
+  if (forceSkeleton || (!isInitialized && !isDebug)) return skeleton;
+
+  if (!isAuth && !isDebug) {
     return (
       <section className={classes.boards_container}>
         <h2>Ваши доски:</h2>
@@ -74,14 +117,14 @@ const MyBoards: React.FC = () => {
     );
   }
 
-  if ((isLoading || !hasLoadedOnce) && boards.length === 0) return skeleton;
+  if (!isDebug && (isLoading || !hasLoadedOnce) && boards.length === 0) return skeleton;
 
   return (
     <section className={classes.boards_container}>
       <h2>Ваши доски:</h2>
-      {boards.length > 0 ? (
+      {boardsToRender.length > 0 ? (
         <div className={classes.boards_list}>
-          {boards.map(board => {
+          {boardsToRender.map(board => {
             const imgSrc = board.image
               ? board.image.startsWith('/uploads/')
                 ? `${API_URL}${board.image}`
@@ -95,7 +138,7 @@ const MyBoards: React.FC = () => {
                   <h3>{board.title}</h3>
                   <p>{board.description || ''}</p>
                 </div>
-                <Mainbtn variant="mini" text="Открыть" />
+                <Mainbtn variant="mini" kind="navlink" href={`/spaces/${board.id}`} text="Открыть" />
               </div>
             );
           })}

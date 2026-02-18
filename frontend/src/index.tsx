@@ -9,15 +9,22 @@ import Profile from "./pages/profile/Profile";
 import ProfileRedirect from "./components/__general/profileredirect/ProfileRedirect";
 import Todo from "./pages/todo/Todo";
 import Spaces from "./pages/spaces/Spaces";
+import Board from "./pages/board/Board";
 
 const useDocumentTitle = (defaultTitle = "PinIt") => {
   const location = useLocation();
 
   useEffect(() => {
     const profileMatch = matchPath("/user/:username", location.pathname);
+    const boardMatch = matchPath("/spaces/:boardId", location.pathname);
 
     if (profileMatch?.params?.username) {
       document.title = `${profileMatch.params.username} | PinIt`;
+      return;
+    }
+
+    if (boardMatch?.params?.boardId) {
+      document.title = "Board | PinIt";
       return;
     }
 
@@ -91,6 +98,10 @@ const router = createBrowserRouter([
       {
         path: "/spaces",
         element: <Spaces />
+      },
+      {
+        path: "/spaces/:boardId",
+        element: <Board />
       },
       {
         path: "*",

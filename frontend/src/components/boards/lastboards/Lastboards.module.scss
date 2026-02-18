@@ -39,6 +39,18 @@
         -webkit-line-clamp: 2;
         line-clamp: 2;
     }
+    & a{
+        width: 100%;
+        align-self: center;
+        display: flex;
+        justify-content: center;
+        border-color: var(--pink);
+    }
+    @media (min-width:540px) {
+        & a{
+            width: auto;
+        }
+    }
 }
 .board_info_con{
     width: 100%;
@@ -57,7 +69,7 @@
     justify-content: space-between;
     height: 100%;
     & span {
-        & button {
+        & button, a {
             width: 100%;
         }
     }
