@@ -12,6 +12,7 @@ export interface MainbtnProps {
   kind?: Type;
   type?: ButtonType;
   href?: string;
+  state?: unknown;
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
 }
@@ -22,6 +23,7 @@ const Mainbtn: React.FC<MainbtnProps> = ({
   kind = 'button',
   type = 'button',
   href = '#',
+  state,
   onClick,
   disabled = false,
 }) => {
@@ -50,7 +52,7 @@ const Mainbtn: React.FC<MainbtnProps> = ({
 
   if (kind === 'navlink') {
     return (
-      <NavLink to={href} className={className}>
+      <NavLink to={href} state={state} className={className}>
         {text}
       </NavLink>
     );

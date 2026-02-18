@@ -72,14 +72,6 @@ export const useCreateBoardModalStore = create<CreateBoardModalState>((set, get)
       const { data } = await axiosInstance.post<CreateBoardResponse>('/api/boards', { title });
       const boardId = Number(data?.id);
 
-      if (Number.isFinite(boardId) && boardId > 0) {
-        try {
-          await axiosInstance.post(`/api/boards/${boardId}/visit`);
-        } catch {
-          // ignore
-        }
-      }
-
       await useBoardsStore.getState().loadBoards();
 
       set({ isOpen: false, title: '', isSubmitting: false, error: null });
@@ -91,4 +83,3 @@ export const useCreateBoardModalStore = create<CreateBoardModalState>((set, get)
     }
   },
 }));
-

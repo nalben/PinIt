@@ -13,7 +13,7 @@ export interface Board {
   my_role?: string | null;
 }
 
-const RECENT_BOARDS_LS_KEY = 'pinit_recentBoards';
+export const RECENT_BOARDS_LS_KEY = 'pinit_recentBoards';
 
 const readRecentBoardsFromLocalStorage = (): Board[] => {
   try {
@@ -39,6 +39,8 @@ const readRecentBoardsFromLocalStorage = (): Board[] => {
           created_at: typeof x.created_at === 'string' ? x.created_at : now,
           last_visited_at: typeof x.last_visited_at === 'string' || x.last_visited_at === null ? x.last_visited_at : null,
           image: typeof x.image === 'string' || x.image === null ? x.image : null,
+          is_public: typeof x.is_public === 'boolean' || typeof x.is_public === 'number' ? x.is_public : undefined,
+          my_role: typeof x.my_role === 'string' || x.my_role === null ? x.my_role : undefined,
         };
       })
       .filter((b): b is Board => b !== null);
@@ -71,7 +73,7 @@ export const useBoardsStore = create<BoardsState>((set, get) => ({
         boards: [],
         recentBoards: readRecentBoardsFromLocalStorage(),
         isLoading: false,
-        hasLoadedOnce: false,
+        hasLoadedOnce: true,
         lastTokenPresent: false,
       });
       return;

@@ -140,7 +140,13 @@ const PublicBoards: React.FC = () => {
                   <h3>{board.title}</h3>
                   <p>{board.description || ''}</p>
                 </div>
-                <Mainbtn variant="mini" kind="navlink" href={`/spaces/${board.id}`} text="Открыть" />
+                <Mainbtn
+                  variant="mini"
+                  kind="navlink"
+                  href={`/spaces/${board.id}`}
+                  state={{ board }}
+                  text="Открыть"
+                />
               </div>
             );
           })}

@@ -114,6 +114,35 @@ exports.getPopularPublicBoards = async (req, res) => {
   }
 };
 
+/* Public board by id (for guests) */
+exports.getPublicBoardById = async (req, res) => {
+  try {
+    const boardId = Number(req.params.board_id);
+    if (!Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректный board_id' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT b.id, b.owner_id, b.is_public, b.title, b.description, b.image, b.created_at,
+              u.username AS owner_username, u.nickname AS owner_nickname, u.avatar AS owner_avatar
+       FROM boards b
+       JOIN users u ON u.id = b.owner_id
+       WHERE b.id = ? AND b.is_public = 1
+       LIMIT 1`,
+      [boardId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    return res.status(200).json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка получения доски' });
+  }
+};
+
 /* РџРѕСЃР»РµРґРЅРёРµ РїРѕСЃРµС‰С‘РЅРЅС‹Рµ РґРѕСЃРєРё */
 exports.getRecentBoards = async (req, res) => {
   try {
