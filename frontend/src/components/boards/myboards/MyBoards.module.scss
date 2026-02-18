@@ -90,6 +90,15 @@
     }
 }
 
+.create_board{
+    width: 100%;
+    display: flex;
+    padding-bottom: 1rem;
+    & button{
+        width: 100%;
+    }
+}
+
 @media (min-width:540px) {
     .boards_item{
         flex-direction: row;
@@ -102,6 +111,12 @@
         & svg{
             background-color: transparent;
             padding: 0;
+        }
+    }
+
+    .create_board{
+        & button{
+            width: auto;
         }
     }
 }

@@ -124,6 +124,9 @@ const MyBoards: React.FC = () => {
       <h2>Ваши доски:</h2>
       {boardsToRender.length > 0 ? (
         <div className={classes.boards_list}>
+          <div className={classes.create_board}>
+            <Mainbtn variant="mini" text="Создать новую доску" onClick={openCreateBoardModal} />
+          </div>
           {boardsToRender.map(board => {
             const imgSrc = board.image
               ? board.image.startsWith('/uploads/')
