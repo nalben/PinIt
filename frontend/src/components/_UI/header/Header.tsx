@@ -13,6 +13,7 @@ import Accept from '@/assets/icons/monochrome/accept.svg'
 import Deny from '@/assets/icons/monochrome/deny.svg'
 import { useAuthStore } from '@/store/authStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
+import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { useUIStore } from '@/store/uiStore';
 
 interface UserProfile {
@@ -41,6 +42,9 @@ const Header = () => {
   const [isAvatarLoaded, setIsAvatarLoaded] = useState(false);
   const { requests, fetchRequests, acceptRequest, rejectRequest, highlightRequestId, setHighlightRequestId } = useNotificationsStore();
   const requestsCount = requests.length;
+  const { invites, fetchInvites, acceptInvite, rejectInvite } = useBoardsInvitesStore();
+  const invitesCount = invites.length;
+  const totalNotiCount = requestsCount + invitesCount;
   const {
     headerDropdown,
     toggleHeaderDropdown,
@@ -79,6 +83,13 @@ useEffect(() => {
   if (requestsCount > 0) return;
   fetchRequests();
 }, [fetchRequests, isAuth, isInitialized, requestsCount]);
+
+useEffect(() => {
+  if (!isInitialized) return;
+  if (!isAuth) return;
+  if (invitesCount > 0) return;
+  fetchInvites();
+}, [fetchInvites, invitesCount, isAuth, isInitialized]);
 
   useEffect(() => {
     if (!isNotiOpen || !highlightRequestId) return;
@@ -196,10 +207,10 @@ const isProfileActive = () => {
           </div>
         ) : isAuth ? (
           <div className={classes.user}>
-                <div className={`${classes.noti} ${requests.length > 0 ? classes.noti_have : ''}`}>
-                  <div className={`${classes.noti_lenght} ${requests.length <= 0 ? classes.noti_none : ''}`}>
+                <div className={`${classes.noti} ${totalNotiCount > 0 ? classes.noti_have : ''}`}>
+                  <div className={`${classes.noti_lenght} ${totalNotiCount <= 0 ? classes.noti_none : ''}`}>
                     <span>
-                      {requests.length > 10 ? '10+' : requests.length}
+                      {totalNotiCount > 10 ? '10+' : totalNotiCount}
                     </span>
                   </div>
                   <DropdownWrapper
@@ -211,12 +222,12 @@ const isProfileActive = () => {
                   >
                     <div className={classes.noti_icon_con} onClick={() => toggleHeaderDropdown('notifications')}>
                       <Noti />
-                      {requests.length > 0 && <span className={classes.badge} />}
+                      {totalNotiCount > 0 && <span className={classes.badge} />}
                     </div>
 
                     <div className={classes.noti_con}>
                       <span className={classes.empty}>
-                        {requests.length === 0 ? 'Нет уведомлений' : 'Уведомления'}
+                        {totalNotiCount === 0 ? 'Нет уведомлений' : 'Уведомления'}
                       </span>
                       {[...requests]
                         .sort((a, b) => {
@@ -263,6 +274,56 @@ const isProfileActive = () => {
                               <Accept />
                             </button>
                             <button onClick={() => rejectRequest(req.id)}>
+                              <Deny />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {[...invites]
+                        .sort((a, b) => {
+                          const da = new Date(a.created_at).getTime();
+                          const db = new Date(b.created_at).getTime();
+                          return db - da;
+                        })
+                        .map(invite => (
+                        <div
+                          key={`board-${invite.id}`}
+                          className={classes.noti_item}
+                          data-dropdown-class={''}
+                        >
+                          <NavLink
+                            to={`/user/${invite.username}`}
+                            className={classes.noti_user_link}
+                            onClick={closeHeaderDropdown}
+                          >
+                            {invite.avatar ? (
+                              <img
+                                src={invite.avatar.startsWith('/uploads/') ? `${API_URL}${invite.avatar}` : `${API_URL}/uploads/${invite.avatar}`}
+                                alt="Аватар"
+                                className={classes.avatar}
+                              />
+                            ) : (
+                              <Default />
+                            )}
+                          </NavLink>
+
+                          <span>
+                            <NavLink
+                              to={`/user/${invite.username}`}
+                              className={classes.noti_user_link}
+                              onClick={closeHeaderDropdown}
+                            >
+                              {invite.nickname || invite.username}
+                            </NavLink>
+                            {' пригласил(а) в доску '}
+                            {invite.title}
+                          </span>
+
+                          <div className={classes.noti_int}>
+                            <button onClick={() => acceptInvite(invite.id)}>
+                              <Accept />
+                            </button>
+                            <button onClick={() => rejectInvite(invite.id)}>
                               <Deny />
                             </button>
                           </div>

@@ -60,12 +60,19 @@ const Lastboards: React.FC = () => {
     );
   }
 
+  const accessibleBoards = recentBoards.filter((board) => {
+    const isPublic = Boolean(board.is_public);
+    if (isPublic) return true;
+    if (!isAuth) return false;
+    return Boolean(board.my_role);
+  });
+
   return (
     <section className={classes.boards_container}>
       <h2>Последние открытые доски:</h2>
-      {recentBoards.length > 0 ? (
+      {accessibleBoards.length > 0 ? (
         <div className={classes.boards_list}>
-          {recentBoards.slice(0, 3).map(board => {
+          {accessibleBoards.slice(0, 3).map(board => {
             const imgSrc = board.image
               ? board.image.startsWith('/uploads/')
                 ? `${API_URL}${board.image}`

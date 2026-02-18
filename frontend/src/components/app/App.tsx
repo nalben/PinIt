@@ -6,6 +6,7 @@ import "@/styles/fonts.scss";
 import "@/styles/variables.scss";
 import Header from '../_UI/header/Header';
 import { useNotificationsStore } from '@/store/notificationsStore';
+import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { connectSocket, disconnectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import Appitit from './AppInit'
@@ -14,6 +15,7 @@ import CreateBoardModal from '@/components/boards/createboardmodal/CreateBoardMo
 
 const Root = () => {
   const { addRequest, removeRequest, updateRequestStatus } = useNotificationsStore();
+  const { addInvite, removeInvite } = useBoardsInvitesStore();
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
 
@@ -30,6 +32,13 @@ const Root = () => {
       onRemoveRequest: (data) => {
         const id = Number(data.id ?? data.requestId);
         if (!isNaN(id)) removeRequest(id);
+      },
+
+      onNewBoardInvite: addInvite,
+
+      onRemoveBoardInvite: (data) => {
+        const id = Number(data.id ?? data.inviteId);
+        if (!isNaN(id)) removeInvite(id);
       },
 
       onFriendStatusChange: (data) => {
@@ -50,7 +59,7 @@ const Root = () => {
     return () => {
       unsubscribe?.();
     };
-  }, [addRequest, removeRequest, updateRequestStatus, isAuth, isInitialized]);
+  }, [addInvite, addRequest, removeInvite, removeRequest, updateRequestStatus, isAuth, isInitialized]);
 
   return (
     <div className={classes.sitecon}>

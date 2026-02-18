@@ -3,11 +3,14 @@ import axiosInstance from '@/api/axiosInstance';
 
 export interface Board {
   id: number;
+  owner_id?: number;
   title: string;
   description?: string | null;
   created_at: string;
   last_visited_at?: string | null;
   image?: string | null;
+  is_public?: number | boolean;
+  my_role?: string | null;
 }
 
 const RECENT_BOARDS_LS_KEY = 'pinit_recentBoards';

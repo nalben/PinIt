@@ -8,6 +8,8 @@ type Callbacks = {
   onFriendStatusChange?: (data: { userId: number; status: string; requestId?: number }) => void;
   onNewRequest?: (data: any) => void;
   onRemoveRequest?: (data: any) => void;
+  onNewBoardInvite?: (data: any) => void;
+  onRemoveBoardInvite?: (data: any) => void;
   onBoardsUpdate?: (data: { reason?: string; board_id?: number }) => void;
 };
 
@@ -45,6 +47,16 @@ export const connectSocket = (callbacks?: Callbacks) => {
     socket.on('friend_request:removed', callbacks.onRemoveRequest);
   if (callbacks.onRemoveRequest)
     listeners.push(['friend_request:removed', callbacks.onRemoveRequest]);
+
+  if (callbacks.onNewBoardInvite)
+    socket.on('board_invite:new', callbacks.onNewBoardInvite);
+  if (callbacks.onNewBoardInvite)
+    listeners.push(['board_invite:new', callbacks.onNewBoardInvite]);
+
+  if (callbacks.onRemoveBoardInvite)
+    socket.on('board_invite:removed', callbacks.onRemoveBoardInvite);
+  if (callbacks.onRemoveBoardInvite)
+    listeners.push(['board_invite:removed', callbacks.onRemoveBoardInvite]);
 
   if (callbacks.onBoardsUpdate)
     socket.on('boards:updated', callbacks.onBoardsUpdate);
