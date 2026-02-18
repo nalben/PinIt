@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import classes from './FriendsBoards.module.scss';
+import classes from './GuestBoards.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import AuthTrigger from '@/components/auth/AuthTrigger';
@@ -7,21 +7,23 @@ import { API_URL } from '@/api/axiosInstance';
 import axiosInstance from '@/api/axiosInstance';
 import { connectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
-import { useUIStore } from '@/store/uiStore';
+import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 
-interface FriendBoard {
+interface GuestBoard {
   id: number;
   title: string;
   description?: string | null;
   created_at: string;
   image?: string | null;
+  my_role?: string | null;
+  last_visited_at?: string | null;
 }
 
-const FriendsBoards: React.FC = () => {
+const GuestBoards: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
-  const openFriendsModal = useUIStore((s) => s.openFriendsModal);
-  const [boards, setBoards] = useState<FriendBoard[]>([]);
-  const [debugBoards, setDebugBoards] = useState<FriendBoard[] | null>(null);
+  const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
+  const [boards, setBoards] = useState<GuestBoard[]>([]);
+  const [debugBoards, setDebugBoards] = useState<GuestBoard[] | null>(null);
   const boardsListRef = useRef<HTMLDivElement | null>(null);
   const [hasListScroll, setHasListScroll] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -59,39 +61,41 @@ const FriendsBoards: React.FC = () => {
     if (typeof window === 'undefined') return;
 
     const w = window as unknown as {
-      addFakeFriendsBoards?: () => void;
-      setFakeFriendsBoards?: (boards: FriendBoard[]) => void;
-      clearFakeFriendsBoards?: () => void;
+      addFakeGuestBoards?: () => void;
+      setFakeGuestBoards?: (boards: GuestBoard[]) => void;
+      clearFakeGuestBoards?: () => void;
     };
 
-    w.addFakeFriendsBoards = () => {
+    w.addFakeGuestBoards = () => {
       const now = new Date().toISOString();
-      const fakeBoards: FriendBoard[] = Array.from({ length: 6 }).map((_, i) => ({
+      const fakeBoards: GuestBoard[] = Array.from({ length: 6 }).map((_, i) => ({
         id: i + 1,
-        title: `Fake friend board ${i + 1}`,
+        title: `Fake guest board ${i + 1}`,
         description: `Fake description ${i + 1}`,
         created_at: now,
         image: null,
+        my_role: 'guest',
+        last_visited_at: null,
       }));
       setDebugBoards(fakeBoards);
       setIsLoading(false);
       setHasLoadedOnce(true);
     };
 
-    w.setFakeFriendsBoards = (nextBoards) => {
+    w.setFakeGuestBoards = (nextBoards) => {
       setDebugBoards(Array.isArray(nextBoards) ? nextBoards : []);
       setIsLoading(false);
       setHasLoadedOnce(true);
     };
 
-    w.clearFakeFriendsBoards = () => {
+    w.clearFakeGuestBoards = () => {
       setDebugBoards(null);
     };
 
     return () => {
-      delete w.addFakeFriendsBoards;
-      delete w.setFakeFriendsBoards;
-      delete w.clearFakeFriendsBoards;
+      delete w.addFakeGuestBoards;
+      delete w.setFakeGuestBoards;
+      delete w.clearFakeGuestBoards;
     };
   }, []);
 
@@ -108,7 +112,7 @@ const FriendsBoards: React.FC = () => {
     let mounted = true;
     setIsLoading(true);
     setHasLoadedOnce(false);
-    axiosInstance.get<FriendBoard[]>('/api/boards/friends')
+    axiosInstance.get<GuestBoard[]>('/api/boards/guest')
       .then(({ data }) => {
         if (!mounted) return;
         setBoards(Array.isArray(data) ? data : []);
@@ -139,7 +143,7 @@ const FriendsBoards: React.FC = () => {
     const unsubscribe = connectSocket({
       onBoardsUpdate: () => {
         setIsLoading(true);
-        axiosInstance.get<FriendBoard[]>('/api/boards/friends')
+        axiosInstance.get<GuestBoard[]>('/api/boards/guest')
           .then(({ data }) => {
             if (!mounted) return;
             setBoards(Array.isArray(data) ? data : []);
@@ -164,7 +168,7 @@ const FriendsBoards: React.FC = () => {
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">
-      <h2>Доски ваших друзей:</h2>
+      <h2>Гостевые доски:</h2>
       <div
         ref={boardsListRef}
         className={`${classes.boards_list} ${hasListScroll ? classes.boards_list_scroll : ''}`}
@@ -191,9 +195,9 @@ const FriendsBoards: React.FC = () => {
   if (!isAuth && !isDebug) {
     return (
       <section className={classes.boards_container}>
-        <h2>Доски ваших друзей:</h2>
+        <h2>Гостевые доски:</h2>
         <div className={classes.boards_empty}>
-          <h3>Войдите, чтобы увидеть доски друзей</h3>
+          <h3>Войдите, чтобы увидеть гостевые доски</h3>
           <AuthTrigger type="login">
             <Mainbtn variant="mini" text="Войти" />
           </AuthTrigger>
@@ -206,7 +210,7 @@ const FriendsBoards: React.FC = () => {
 
   return (
     <section className={classes.boards_container}>
-      <h2>Доски ваших друзей:</h2>
+      <h2>Гостевые доски:</h2>
       {boardsToRender.length > 0 ? (
         <div
           ref={boardsListRef}
@@ -233,12 +237,13 @@ const FriendsBoards: React.FC = () => {
         </div>
       ) : (
         <div className={classes.boards_empty}>
-          <h3>Досок друзей не найдено</h3>
-          <Mainbtn variant="mini" text="Добавить друзей" onClick={() => openFriendsModal('search')} />
+          <h3>Вы еще не вошли ни в одну доску как гость</h3>
+          <Mainbtn variant="mini" text="Создать доску" onClick={openCreateBoardModal} />
         </div>
       )}
     </section>
   );
 };
 
-export default FriendsBoards;
+export default GuestBoards;
+

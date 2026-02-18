@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import classes from './PublicBoards.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
@@ -21,12 +21,37 @@ const PublicBoards: React.FC = () => {
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const [boards, setBoards] = useState<PublicBoard[]>([]);
   const [debugBoards, setDebugBoards] = useState<PublicBoard[] | null>(null);
+  const boardsListRef = useRef<HTMLDivElement | null>(null);
+  const [hasListScroll, setHasListScroll] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
     localStorage.getItem('debugSkeleton') === '1';
+
+  useLayoutEffect(() => {
+    const el = boardsListRef.current;
+    if (!el) return;
+    const next = el.scrollHeight > el.clientHeight + 1;
+    setHasListScroll(prev => (prev === next ? prev : next));
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const onResize = () => {
+      const el = boardsListRef.current;
+      if (!el) return;
+      const next = el.scrollHeight > el.clientHeight + 1;
+      setHasListScroll(prev => (prev === next ? prev : next));
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
 
   useEffect(() => {
     if (__ENV__ !== 'development') return;
@@ -99,7 +124,10 @@ const PublicBoards: React.FC = () => {
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">
       <h2>Популярные доступные доски:</h2>
-      <div className={classes.boards_list}>
+      <div
+        ref={boardsListRef}
+        className={`${classes.boards_list} ${hasListScroll ? classes.boards_list_scroll : ''}`}
+      >
         {Array.from({ length: 3 }).map((_, idx) => (
           <div key={idx} className={classes.boards_item}>
             <div className={`${classes.skeleton} ${classes.skeleton_img}`} />
@@ -124,7 +152,10 @@ const PublicBoards: React.FC = () => {
     <section className={classes.boards_container}>
       <h2>Популярные доступные доски:</h2>
       {boardsToRender.length > 0 ? (
-        <div className={classes.boards_list}>
+        <div
+          ref={boardsListRef}
+          className={`${classes.boards_list} ${hasListScroll ? classes.boards_list_scroll : ''}`}
+        >
           {boardsToRender.map(board => {
             const imgSrc = board.image
               ? board.image.startsWith('/uploads/')

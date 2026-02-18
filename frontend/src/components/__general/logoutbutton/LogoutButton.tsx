@@ -8,7 +8,7 @@ const LogoutButton: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/welcome';
+    // window.location.href = '/welcome';
   };
 
   return (

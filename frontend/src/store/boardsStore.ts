@@ -54,11 +54,12 @@ interface BoardsState {
   loadBoards: () => Promise<void>;
 }
 
-export const useBoardsStore = create<BoardsState>(set => ({
+export const useBoardsStore = create<BoardsState>((set, get) => ({
   boards: [],
   recentBoards: [],
   isLoading: false,
   loadBoards: async () => {
+    if (get().isLoading) return;
     const token = localStorage.getItem('token');
     if (!token) {
       set({ boards: [], recentBoards: readRecentBoardsFromLocalStorage(), isLoading: false });

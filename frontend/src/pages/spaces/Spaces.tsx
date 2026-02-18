@@ -1,6 +1,7 @@
 import React from 'react';
 import classes from './Spaces.module.scss';
 import MyBoards from '@/components/boards/myboards/MyBoards';
+import GuestBoards from '@/components/boards/guestboards/GuestBoards';
 import FriendsBoards from '@/components/boards/friendsboards/FriendsBoards';
 import PublicBoards from '@/components/boards/publicboards/PublicBoards';
 import Lastboards from '@/components/boards/lastboards/Lastboards';
@@ -12,6 +13,9 @@ const Spaces = () => {
                 <div className={classes.spaces_container}>
                     <div className={classes.myboards_container}>
                         <MyBoards />
+                    </div>
+                    <div className={classes.guestboards_container}>
+                        <GuestBoards />
                     </div>
                     <div className={classes.lastboards_container}>
                         <Lastboards />

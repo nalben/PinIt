@@ -10,7 +10,7 @@
     gap: 1rem;
     overflow-y: auto;
     max-height: 272px;
-    padding-right: 1rem;
+    padding-right: 0;
     &::-webkit-scrollbar {
         width: 10px;
     }
@@ -24,6 +24,9 @@
         background: var(--pink);
         border-radius: 5px;
     }
+}
+.boards_list_scroll{
+    padding-right: 0.5rem;
 }
 .boards_item{
     display: flex;
