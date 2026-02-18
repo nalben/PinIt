@@ -91,10 +91,10 @@ const router = createBrowserRouter([
         path: "/home",
         element: <Home />
       },
-      {
-        path: "/todo",
-        element: <Todo />
-      },
+      // {
+      //   path: "/todo",
+      //   element: <Todo />
+      // },
       {
         path: "/spaces",
         element: <Spaces />
