@@ -1,17 +1,64 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import classes from './Board.module.scss';
-import axiosInstance from '@/api/axiosInstance';
+import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { Board as BoardEntity, RECENT_BOARDS_LS_KEY, useBoardsStore } from '@/store/boardsStore';
 import { useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import { useUIStore } from '@/store/uiStore';
 import FlowBoard from '@/components/flow/FlowBoard';
+import Close from '@/assets/icons/monochrome/back.svg';
+import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 
 const Board = () => {
     const { boardId } = useParams<{ boardId: string }>();
     const location = useLocation();
     const isAuth = useAuthStore((s) => s.isAuth);
     const isInitialized = useAuthStore((s) => s.isInitialized);
+    const boards = useBoardsStore((s) => s.boards);
+    const recentBoards = useBoardsStore((s) => s.recentBoards);
+    const publicBoards = useSpacesBoardsStore((s) => s.publicBoards);
+    const friendsBoards = useSpacesBoardsStore((s) => s.friendsBoards);
+    const guestBoards = useSpacesBoardsStore((s) => s.guestBoards);
+    const isBoardMenuOpen = useUIStore((s) => s.isBoardMenuOpen);
+    const toggleBoardMenu = useUIStore((s) => s.toggleBoardMenu);
+
+    const boardInfo = useMemo(() => {
+        const id = Number(boardId);
+        if (!Number.isFinite(id) || id <= 0) return null;
+
+        const stateBoard = (location.state as { board?: Partial<BoardEntity> } | null)?.board;
+        const fromState = stateBoard && Number(stateBoard.id) === id ? stateBoard : undefined;
+
+        const fromBoards = boards.find((b) => b.id === id);
+        const fromRecent = recentBoards.find((b) => b.id === id);
+        const fromPublic = publicBoards.find((b) => b.id === id);
+        const fromFriends = friendsBoards.find((b) => b.id === id);
+        const fromGuest = guestBoards.find((b) => b.id === id);
+
+        const merged: Partial<BoardEntity> = {
+            ...(fromPublic ?? {}),
+            ...(fromFriends ?? {}),
+            ...(fromGuest ?? {}),
+            ...(fromRecent ?? {}),
+            ...(fromBoards ?? {}),
+            ...(fromState ?? {}),
+            id,
+        };
+
+        const imageSrc = merged.image
+            ? merged.image.startsWith('/uploads/')
+                ? `${API_URL}${merged.image}`
+                : merged.image
+            : null;
+
+        return {
+            id,
+            title: typeof merged.title === 'string' && merged.title.trim() ? merged.title : `Board ${id}`,
+            description: typeof merged.description === 'string' ? merged.description : null,
+            imageSrc,
+        };
+    }, [boardId, boards, friendsBoards, guestBoards, location.state, publicBoards, recentBoards]);
 
     useEffect(() => {
         if (!isInitialized) return;
@@ -121,6 +168,22 @@ const Board = () => {
     return (
         <div className={classes.board_container}>
             <FlowBoard />
+            <div className={`${classes.board_menu_con} ${!isBoardMenuOpen ? classes.menu_close : ''}`}>
+                <button className={classes.close_btn} onClick={toggleBoardMenu} type="button">
+                    <Close />
+                </button>
+                <div className={classes.board_menu_}>
+                    <div className={classes.board_info}>
+                        {boardInfo?.imageSrc ? (
+                            <img src={boardInfo.imageSrc} alt={boardInfo.title} width={120} height={120} />
+                        ) : (
+                            <Default />
+                        )}
+                        <span>{boardInfo ? boardInfo.title : 'Board'}</span>
+                        <p>{boardInfo?.description ?? ''}</p>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
