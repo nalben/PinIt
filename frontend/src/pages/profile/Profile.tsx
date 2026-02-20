@@ -118,6 +118,12 @@ const Profile = () => {
     }
   }, [profile]);
 
+  useEffect(() => {
+    if (!profile) return;
+    const displayName = (profile.nickname ?? '').trim() || profile.username;
+    document.title = `${displayName} | PinIt`;
+  }, [profile]);
+
   const refreshFriendCount = async () => {
     if (!username) return;
     if (friendCountInFlight.get(username)) return;
@@ -393,7 +399,8 @@ const handleFriendAction = async (userId: number) => {
   );
   if (!profile) return null;
 
-  const UserNickname = profile.nickname || profile.username;
+  const userNickname = (profile.nickname ?? '').trim();
+  const UserNickname = userNickname.length > 0 ? userNickname : profile.username;
   const avatarSrc = profile.isOwner && user?.avatar
     ? (user.avatar.startsWith('/uploads/') ? `${API_URL}${user.avatar}` : `${API_URL}/uploads/${user.avatar}`)
     : profile.avatar

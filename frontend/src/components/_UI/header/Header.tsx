@@ -31,7 +31,9 @@ interface FriendRequestNoti {
   created_at: string;
 }
 
-const Header = () => {
+type HeaderVariant = 'default' | 'board';
+
+const Header = ({ variant = 'default' }: { variant?: HeaderVariant }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const { user, login } = useAuthStore();
   const isAuth = useAuthStore(state => state.isAuth);
@@ -152,7 +154,9 @@ const isProfileActive = () => {
   };
 
   return (
-    <header className={classes.container}>
+    <header
+      className={`${classes.container} ${variant === 'board' ? classes.container_board : ''}`}
+    >
       <div className={classes.burger_con}>
         <button
           ref={burgerRef}

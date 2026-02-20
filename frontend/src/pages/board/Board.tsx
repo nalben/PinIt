@@ -5,6 +5,7 @@ import axiosInstance from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { Board as BoardEntity, RECENT_BOARDS_LS_KEY, useBoardsStore } from '@/store/boardsStore';
 import { useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import FlowBoard from '@/components/flow/FlowBoard';
 
 const Board = () => {
     const { boardId } = useParams<{ boardId: string }>();
@@ -119,7 +120,7 @@ const Board = () => {
 
     return (
         <div className={classes.board_container}>
-            
+            <FlowBoard />
         </div>
     );
 };

@@ -1,5 +1,5 @@
 ﻿import React, { useEffect } from 'react';
-import { Outlet } from 'react-router-dom';
+import { matchPath, Outlet, useLocation } from 'react-router-dom';
 import classes from './App.module.scss';
 import "@/styles/general.scss";
 import "@/styles/fonts.scss";
@@ -21,6 +21,8 @@ const Root = () => {
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
   const userId = useAuthStore(state => state.user?.id);
+  const location = useLocation();
+  const isBoardPage = Boolean(matchPath('/spaces/:boardId', location.pathname));
 
   useEffect(() => {
     if (!isInitialized) return;
@@ -78,7 +80,8 @@ const Root = () => {
     <div className={classes.sitecon}>
       <Appitit />
       <main className={classes.pagecontent}>
-        <Header />
+        <Header variant={isBoardPage ? 'board' : 'default'} />
+        {!isBoardPage && <div className={classes.header_spacer} aria-hidden="true" />}
         <Outlet />
         <CreateBoardModal />
         <FriendsModal />

@@ -11,6 +11,7 @@
     font-family: "Nata Sans", sans-serif; // 100-900
 }
 .pagecontent{
+    --header-height: 5rem;
     width: 100%;
     display: flex;
     flex-direction: column;
@@ -20,4 +21,9 @@
             margin: 0 auto;
         }
     }
+}
+
+.header_spacer{
+    height: var(--header-height);
+    flex: 0 0 auto;
 }

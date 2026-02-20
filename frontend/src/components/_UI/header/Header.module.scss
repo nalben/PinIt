@@ -1,13 +1,18 @@
 .container{
-    height: 5rem;
+    height: var(--header-height);
     color: var(--pink);
     font-family: "Nata Sans", sans-serif;
     display: flex;
     justify-content: right;
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     z-index: 12;
-    background: linear-gradient(180deg, var(--grey20) 48%, rgba(199, 87, 87, 0) 130%);
+    background: linear-gradient(180deg, var(--grey20) 48%, rgba(199, 87, 87, 0) 100%);
+}
+.container_board{
+    background: transparent;
 }
 .menu{
     display: flex;

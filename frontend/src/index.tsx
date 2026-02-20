@@ -19,7 +19,7 @@ const useDocumentTitle = (defaultTitle = "PinIt") => {
     const boardMatch = matchPath("/spaces/:boardId", location.pathname);
 
     if (profileMatch?.params?.username) {
-      document.title = `${profileMatch.params.username} | PinIt`;
+      document.title = `Profile | PinIt`;
       return;
     }
 

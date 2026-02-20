@@ -1,0 +1,49 @@
+.board_container{
+    display: flex;
+}
+.space_container{
+
+}
+.board_menu_con{
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    height: 100dvh;
+    width: 450px;
+    border-left: var(--border);
+    padding-top: 24px;
+    padding-inline: fluid-prop(20,10,1920,320);
+    transition: all 0.3s;
+    &.menu_close{
+        padding: 0;
+        width: 0px;
+    }
+}
+.close_btn{
+    & svg{
+        width: 30px;
+        fill: var(--pink);
+        rotate: 180deg;
+    }
+}
+.board_info{
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    & img, svg{
+        height: 110px;
+        width: 100%;
+        object-fit: cover;
+    }
+    & svg{
+        background-color: var(--grey10);
+        padding-block: 3px;
+    }
+    & span{
+        color: var(--pink);
+        font-size: fluid-prop(24,16,1920,320);
+    }
+    & p{
+        font-size: fluid-prop(20,14,1920,320);
+    }
+}

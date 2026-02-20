@@ -1,85 +1,81 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import FlowBoardContainer from './FlowBoardContainer';
-import { Node, Edge, addEdge } from 'reactflow';
-
-interface Card {
-  id: number;
-  board_id: number;
-  type: 'circle' | 'rectangle';
-  title: string;
-  text: string | null;
-  image_path: string | null;
-  x: number;
-  y: number;
-  linked_card_ids: string | null;
-}
+import React, { useMemo } from 'react';
+import { useLocation, useParams } from 'react-router-dom';
+import ReactFlow, { ReactFlowProvider } from 'reactflow';
+import 'reactflow/dist/style.css';
+import classes from './FlowBoard.module.scss'
+import Close from '@/assets/icons/monochrome/back.svg'
+import Default from '@/assets/icons/monochrome/image-placeholder.svg';
+import { API_URL } from '@/api/axiosInstance';
+import { Board as BoardEntity, useBoardsStore } from '@/store/boardsStore';
+import { useSpacesBoardsStore } from '@/store/spacesBoardsStore';
 
 const FlowBoard: React.FC = () => {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
+  const { boardId } = useParams<{ boardId: string }>();
+  const location = useLocation();
 
-  useEffect(() => {
-    // Получаем данные из API
-    fetch('http://localhost:3001/cards')
-      .then(res => res.json())
-      .then((data: Card[]) => {
-        const mappedNodes: Node[] = data.map(card => ({
-          id: String(card.id),
-          type: 'default',
-          position: { x: card.x, y: card.y },
-          data: { label: card.type === 'circle' ? <div style={{
-            borderRadius: '50%',
-            width: 80,
-            height: 80,
-            background: '#eee',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}>{card.title}</div> : card.text },
-        }));
+  const boards = useBoardsStore((s) => s.boards);
+  const recentBoards = useBoardsStore((s) => s.recentBoards);
+  const publicBoards = useSpacesBoardsStore((s) => s.publicBoards);
+  const friendsBoards = useSpacesBoardsStore((s) => s.friendsBoards);
+  const guestBoards = useSpacesBoardsStore((s) => s.guestBoards);
 
-        const mappedEdges: Edge[] = [];
-        data.forEach(card => {
-          if (card.linked_card_ids) {
-            card.linked_card_ids.split(',').map(id => id.trim()).forEach(targetId => {
-              mappedEdges.push({
-                id: `e${card.id}-${targetId}`,
-                source: String(card.id),
-                target: String(targetId),
-                animated: true,
-              });
-            });
-          }
-        });
+  const boardInfo = useMemo(() => {
+    const id = Number(boardId);
+    if (!Number.isFinite(id) || id <= 0) return null;
 
-        setNodes(mappedNodes);
-        setEdges(mappedEdges);
-      });
-  }, []);
+    const stateBoard = (location.state as { board?: Partial<BoardEntity> } | null)?.board;
+    const fromState = stateBoard && Number(stateBoard.id) === id ? stateBoard : undefined;
 
-  const onNodesChange = useCallback(
-    (changes: any) => setNodes(nds => nds.map(node => ({ ...node, ...changes.find((c: any) => c.id === node.id) }))),
-    []
-  );
+    const fromBoards = boards.find((b) => b.id === id);
+    const fromRecent = recentBoards.find((b) => b.id === id);
+    const fromPublic = publicBoards.find((b) => b.id === id);
+    const fromFriends = friendsBoards.find((b) => b.id === id);
+    const fromGuest = guestBoards.find((b) => b.id === id);
 
-  const onEdgesChange = useCallback(
-    (changes: any) => setEdges(eds => eds.map(edge => ({ ...edge, ...changes.find((c: any) => c.id === edge.id) }))),
-    []
-  );
+    const merged: Partial<BoardEntity> = {
+      ...(fromPublic ?? {}),
+      ...(fromFriends ?? {}),
+      ...(fromGuest ?? {}),
+      ...(fromRecent ?? {}),
+      ...(fromBoards ?? {}),
+      ...(fromState ?? {}),
+      id,
+    };
 
-  const onConnect = useCallback(
-    (connection: any) => setEdges(eds => addEdge(connection, eds)),
-    []
-  );
+    const imageSrc = merged.image
+      ? merged.image.startsWith('/uploads/')
+        ? `${API_URL}${merged.image}`
+        : merged.image
+      : null;
+
+    return {
+      id,
+      title: typeof merged.title === 'string' && merged.title.trim() ? merged.title : `Board ${id}`,
+      description: typeof merged.description === 'string' ? merged.description : null,
+      imageSrc,
+    };
+  }, [boardId, boards, friendsBoards, guestBoards, location.state, publicBoards, recentBoards]);
 
   return (
-    <FlowBoardContainer
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={onNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={onConnect}
-    />
+    <div className={classes.board_container}>
+      <div style={{ width: '100%', height: '100vh' }} className={classes.space_container}>
+        <ReactFlowProvider>
+          <ReactFlow nodes={[]} edges={[]} fitView />
+        </ReactFlowProvider>
+      </div>
+      <div className={classes.board_menu_con}>
+        <div className={classes.close_btn}>
+          <Close />
+        </div>
+        <div className={classes.board_menu_}>
+          <div className={classes.board_info}>
+            {boardInfo?.imageSrc ? <img src={boardInfo.imageSrc} alt={boardInfo.title} width={120} height={120} /> : <Default />}
+            <span>{boardInfo ? boardInfo.title : 'Board'}</span>
+            <p>{boardInfo?.description ?? ''}</p>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
