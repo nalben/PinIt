@@ -7,8 +7,9 @@
 }
 .board_menu_con{
     position: relative;
-    height: 100dvh;
+    height: 100%;
     width: min(450px, 80%);
+    border-left: var(--border);
     margin-left: 0;
     transform: translateX(0);
     transition:
@@ -49,18 +50,31 @@
 .board_menu_{
     display: flex;
     flex-direction: column;
-    gap: 30px;
-    height: 100dvh;
-    box-sizing: border-box;
-    border-left: var(--border);
-    padding-top: 94px;
+    gap: 1.5rem;
+    height: 100%;
+    padding-block: fluid-prop(20, 10, 1920, 320);
     padding-inline: fluid-prop(20,10,1920,320);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    &::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        cursor: pointer;
+        background: var(--pink);
+        border-radius: 5px;
+    }
 }
 .board_info{
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    margin-top: 80px;
     & img, svg{
         height: 110px;
         width: 100%;
@@ -77,4 +91,153 @@
     & p{
         font-size: fluid-prop(20,14,1920,320);
     }
+}
+.board_info_actions{
+    display: flex;
+    width: 100%;
+    & button{
+        width: 100%;
+    }
+}
+.participants{
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: auto;
+}
+.participants_title{
+    color: var(--pink);
+    font-size: fluid-prop(20,14,1920,320);
+}
+.participants_list{
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    & p{
+        font-size: fluid-prop(18,13,1920,320);
+    }
+}
+.participant_item{
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 0.5rem;
+    border: var(--border);
+    padding: 0.5rem;
+}
+.participant_link{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.3s;
+    &:hover{
+        opacity: 0.75;
+    }
+}
+.participant_add{
+    width: 100%;
+    & button{
+        width: 100%;
+    }
+}
+.participant_avatar{
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    & img{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    & svg{
+        width: 100%;
+        height: 100%;
+    }
+}
+.participant_names{
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.participant_name{
+    font-size: fluid-prop(18,13,1920,320);
+    overflow: hidden;
+    max-width: fluid-prop(180,60,550,320);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.participant_username{
+    font-size: fluid-prop(16,12,1920,320);
+    opacity: 0.75;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.participant_role{
+    font-size: fluid-prop(16,12,1920,320);
+    opacity:  0.85;
+    white-space: nowrap;
+}
+.participant_remove{
+    background: transparent;
+    color: var(--error);
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    border: none;
+    &:hover{
+        opacity: 0.6;
+    }
+    &:disabled{
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    & svg{
+        width: 25px;
+    }
+}
+.participant_confirm_title{
+    cursor: default;
+    background-color: transparent;
+    &:hover{
+        background-color: transparent;
+    }
+    & > div{
+        color: var(--white);
+        font-size: fluid-prop(16,12,1920,320);
+    }
+}
+.participant_confirm_danger{
+    & > button{
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--error);
+        font-family: "Nata Sans", sans-serif;
+        font-size: fluid-prop(16,12,1920,320);
+        cursor: pointer;
+    }
+}
+.participant_confirm_cancel{
+    & > button{
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--pink);
+        font-family: "Nata Sans", sans-serif;
+        font-size: fluid-prop(16,12,1920,320);
+        cursor: pointer;
+    }
+}
+.participants_empty{
+    display: flex;
+    width: 100%;
 }

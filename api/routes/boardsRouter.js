@@ -58,6 +58,7 @@ router.post('/:board_id/leave', boardsController.leaveBoard);
 router.patch('/:board_id/title', boardsController.renameBoard);
 router.patch('/:board_id/description', boardsController.updateDescription);
 router.patch('/:board_id/image', maybeUploadSingleImage, boardsController.updateBoardImage);
+router.get('/:board_id/participants', boardsController.getBoardParticipants);
 router.get('/:board_id/full', boardsController.getBoardFull);
 router.get('/:board_id', boardsController.getBoardById);
 

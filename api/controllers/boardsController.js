@@ -750,6 +750,79 @@ exports.getBoardById = async (req, res) => {
 
 
 /* РџРѕР»СѓС‡РёС‚СЊ РІСЃРµ РґР°РЅРЅС‹Рµ РґРѕСЃРєРё */
+/* Participants list (owner + guests) */
+exports.getBoardParticipants = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(
+      `SELECT b.id, b.owner_id,
+              o.username AS owner_username, o.nickname AS owner_nickname, o.avatar AS owner_avatar,
+              CASE
+                WHEN b.owner_id = ? THEN 'owner'
+                WHEN bg.user_id IS NOT NULL THEN bg.role
+                ELSE NULL
+              END AS my_role
+       FROM boards b
+       JOIN users o ON o.id = b.owner_id
+       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ?
+       WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
+       LIMIT 1`,
+      [user_id, user_id, boardId, user_id]
+    );
+
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const board = boardRows[0];
+
+    const [guests] = await db.execute(
+      `SELECT bg.user_id AS id, u.username, u.nickname, u.avatar, bg.role, bg.added_at
+       FROM boardguests bg
+       JOIN users u ON u.id = bg.user_id
+       WHERE bg.board_id = ?
+       ORDER BY bg.added_at ASC`,
+      [boardId]
+    );
+
+    const participants = [
+      {
+        id: board.owner_id,
+        username: board.owner_username,
+        nickname: board.owner_nickname ?? null,
+        avatar: board.owner_avatar ?? null,
+        role: 'owner',
+      },
+      ...guests
+        .filter((g) => g.id !== board.owner_id)
+        .map((g) => ({
+          id: g.id,
+          username: g.username,
+          nickname: g.nickname ?? null,
+          avatar: g.avatar ?? null,
+          role: g.role,
+          added_at: g.added_at,
+        })),
+    ];
+
+    return res.status(200).json({
+      board_id: boardId,
+      my_role: board.my_role,
+      participants,
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка получения участников' });
+  }
+};
+
+
 exports.getBoardFull = async (req, res) => {
   try {
     const user_id = req.user.id;

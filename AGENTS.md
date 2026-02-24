@@ -1038,7 +1038,7 @@ cards
 ├─ cardcomments
 └─ activitylog
 
-SECTION 11 - VERIFIED CURRENT CODE FACTS (2026-02-20)
+SECTION 11 - VERIFIED CURRENT CODE FACTS (2026-02-24)
 
 These points are confirmed from current repository code and override any older conflicting notes.
 
@@ -1086,8 +1086,11 @@ These points are confirmed from current repository code and override any older c
 - Public board endpoints exist and are unauthenticated:
   - `GET /api/boards/public/popular`
   - `GET /api/boards/public/:board_id`
+- Board participants endpoint exists and is authenticated:
+  - `GET /api/boards/:board_id/participants` — returns `my_role` and participants (owner + guests from `boardguests`).
 - `frontend/src/pages/board/Board.tsx`:
   - For auth users: sends `POST /api/boards/:id/visit`, then reloads boards store.
+  - Loads participants for board menu via `GET /api/boards/:id/participants`.
   - For guests: persists recent public board info into localStorage key `pinit_recentBoards`.
 - `frontend/src/components/flow/FlowBoard.tsx` is currently a placeholder with empty `nodes`/`edges`.
 

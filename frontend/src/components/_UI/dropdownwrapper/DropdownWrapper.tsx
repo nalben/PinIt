@@ -7,6 +7,7 @@ type DropdownWrapperProps = {
   profile?: boolean;
   noti?: boolean;
   middle?: boolean;
+  up?: boolean;
   children: [React.ReactNode, React.ReactNode];
   closeOnClick?: boolean;
   isOpen?: boolean; // управляемое состояние
@@ -19,6 +20,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   middle,
   profile,
   noti,
+  up,
   children,
   closeOnClick = true,
   isOpen: controlledOpen,
@@ -67,6 +69,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       if (middle) classes.push(styles.middle);
       if (!left && !right && !middle) classes.push(styles.middle);
     }
+    if (up) classes.push(styles.up);
 
     setPositionClass(classes.join(" "));
 
@@ -123,7 +126,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 
   useLayoutEffect(() => {
     if (open) updatePosition();
-  }, [left, right, middle, profile, noti, open]);
+  }, [left, right, middle, profile, noti, up, open]);
 
   useEffect(() => {
     updatePosition();
@@ -133,7 +136,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       window.removeEventListener("resize", updatePosition);
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [left, right, middle, profile, noti, open]);
+  }, [left, right, middle, profile, noti, up, open]);
 
   return (
     <div ref={wrapperRef} className={styles.wrapper}>

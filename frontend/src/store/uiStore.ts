@@ -9,6 +9,7 @@ interface UIState {
   friendsModalOpen: boolean;
   friendsModalView: FriendsModalView;
   isBoardMenuOpen: boolean;
+  boardSettingsModalOpen: boolean;
 
   // dropdown actions
   openHeaderDropdown: (dropdown: HeaderDropdown) => void;
@@ -24,6 +25,8 @@ interface UIState {
   openBoardMenu: () => void;
   closeBoardMenu: () => void;
   toggleBoardMenu: () => void;
+  openBoardSettingsModal: () => void;
+  closeBoardSettingsModal: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -32,6 +35,7 @@ export const useUIStore = create<UIState>((set) => ({
   friendsModalOpen: false,
   friendsModalView: 'list',
   isBoardMenuOpen: true,
+  boardSettingsModalOpen: false,
 
   openHeaderDropdown: (dropdown) => set({ headerDropdown: dropdown }),
   closeHeaderDropdown: () => set({ headerDropdown: null }),
@@ -54,4 +58,7 @@ export const useUIStore = create<UIState>((set) => ({
     set((s) => ({
       isBoardMenuOpen: !s.isBoardMenuOpen,
     })),
+
+  openBoardSettingsModal: () => set({ boardSettingsModalOpen: true }),
+  closeBoardSettingsModal: () => set({ boardSettingsModalOpen: false }),
 }));

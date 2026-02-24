@@ -30,6 +30,13 @@
         background: var(--pink);
         border-radius: 5px;
     }
+    &.menu.up{
+        min-width: 120px;
+    }
+}
+.menu.up{
+    top: auto;
+    bottom: calc(100% + 16px);
 }
 .menu.noti{
     align-items: stretch;
