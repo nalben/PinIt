@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { API_URL } from '@/api/axiosInstance';
+import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import classes from './Lastboards.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
-import { useBoardsStore } from '@/store/boardsStore';
+import { Board, RECENT_BOARDS_LS_KEY, useBoardsStore } from '@/store/boardsStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { useAuthStore } from '@/store/authStore';
@@ -21,6 +21,69 @@ const Lastboards: React.FC = () => {
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
     localStorage.getItem('debugSkeleton') === '1';
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    if (isAuth) return;
+
+    const readCurrent = (): Board[] => {
+      try {
+        const raw = localStorage.getItem(RECENT_BOARDS_LS_KEY);
+        if (!raw) return [];
+        const parsed: unknown = JSON.parse(raw);
+        return Array.isArray(parsed) ? (parsed as Board[]) : [];
+      } catch {
+        return [];
+      }
+    };
+
+    let cancelled = false;
+    const current = readCurrent();
+    if (current.length === 0) return;
+
+    const normalizePublicEntry = (existing: Board, patch: Partial<Board>): Board => ({
+      ...existing,
+      ...patch,
+      id: existing.id,
+      is_public: true,
+    });
+
+    Promise.all(
+      current.map(async (b) => {
+        const id = Number(b?.id);
+        if (!Number.isFinite(id) || id <= 0) return null;
+
+        try {
+          const { data } = await axiosInstance.get<Partial<Board>>(`/api/boards/public/${id}`);
+          const title = typeof data?.title === 'string' && data.title.trim() ? data.title : b.title;
+          if (!title) return null;
+
+          const description = typeof data?.description === 'string' || data?.description === null ? data.description : b.description ?? null;
+          const image = typeof data?.image === 'string' || data?.image === null ? data.image : b.image ?? null;
+          const created_at = typeof data?.created_at === 'string' ? data.created_at : b.created_at;
+
+          return normalizePublicEntry(b, { title, description, image, created_at });
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const publicOnly = results.filter((x): x is Board => Boolean(x));
+
+      try {
+        localStorage.setItem(RECENT_BOARDS_LS_KEY, JSON.stringify(publicOnly));
+      } catch {
+        // ignore
+      }
+
+      useBoardsStore.setState({ recentBoards: publicOnly });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuth, isInitialized]);
 
   useEffect(() => {
     if (forceSkeleton) {

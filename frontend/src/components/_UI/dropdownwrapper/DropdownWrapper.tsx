@@ -8,6 +8,7 @@ type DropdownWrapperProps = {
   noti?: boolean;
   middle?: boolean;
   up?: boolean;
+  upDel?: boolean;
   children: [React.ReactNode, React.ReactNode];
   closeOnClick?: boolean;
   isOpen?: boolean; // управляемое состояние
@@ -21,6 +22,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   profile,
   noti,
   up,
+  upDel,
   children,
   closeOnClick = true,
   isOpen: controlledOpen,
@@ -48,7 +50,16 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     if (!closeOnClick) event.stopPropagation();
   };
 
-  const handleItemClick = () => {
+  const handleItemClick = (event: React.MouseEvent, child: React.ReactNode) => {
+    if (
+      (up || upDel) &&
+      event.target === event.currentTarget &&
+      React.isValidElement(child) &&
+      typeof (child.props as { onClick?: unknown }).onClick === "function"
+    ) {
+      (child.props as { onClick: (e: React.MouseEvent) => void }).onClick(event);
+    }
+
     if (closeOnClick) {
       if (controlledOpen !== undefined) onClose?.();
       else setInternalOpen(false);
@@ -69,7 +80,8 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       if (middle) classes.push(styles.middle);
       if (!left && !right && !middle) classes.push(styles.middle);
     }
-    if (up) classes.push(styles.up);
+    if (up || upDel) classes.push(styles.up);
+    if (upDel) classes.push(styles.upDel);
 
     setPositionClass(classes.join(" "));
 
@@ -126,17 +138,17 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 
   useLayoutEffect(() => {
     if (open) updatePosition();
-  }, [left, right, middle, profile, noti, up, open]);
+  }, [left, right, middle, profile, noti, up, upDel, open]);
 
   useEffect(() => {
     updatePosition();
     window.addEventListener("resize", updatePosition);
-    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("pointerdown", handleClickOutside, true);
     return () => {
       window.removeEventListener("resize", updatePosition);
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("pointerdown", handleClickOutside, true);
     };
-  }, [left, right, middle, profile, noti, up, open]);
+  }, [left, right, middle, profile, noti, up, upDel, open]);
 
   return (
     <div ref={wrapperRef} className={styles.wrapper}>
@@ -159,7 +171,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
                 <div
                   key={index}
                   className={`${styles.item} ${extraClass || ""}`}
-                  onClick={handleItemClick}
+                  onClick={(event) => handleItemClick(event, child)}
                 >
                   {child}
                 </div>

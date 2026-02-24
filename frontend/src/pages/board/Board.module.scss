@@ -92,6 +92,43 @@
         font-size: fluid-prop(20,14,1920,320);
     }
 }
+.skeleton{
+    position: relative;
+    overflow: hidden;
+    background-color: var(--skeleton-base);
+}
+.skeleton::after{
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: var(--skeleton-shimmer);
+    animation: boardmenu-shimmer 1.2s infinite;
+}
+.board_info_img_skeleton{
+    width: 100%;
+    height: 110px;
+    border-radius: 12px;
+}
+.board_info_line_skeleton{
+    width: 70%;
+    height: fluid-prop(24,16,1920,320);
+    border-radius: 999px;
+}
+.board_info_line_sm_skeleton{
+    width: 100%;
+    height: fluid-prop(18,14,1920,320);
+    border-radius: 999px;
+    margin-top: 0.2rem;
+}
+@keyframes boardmenu-shimmer {
+    0% {
+        transform: translateX(-150%);
+    }
+    100% {
+        transform: translateX(150%);
+    }
+}
 .board_info_actions{
     display: flex;
     width: 100%;
@@ -109,6 +146,11 @@
     color: var(--pink);
     font-size: fluid-prop(20,14,1920,320);
 }
+.participants_title_skeleton{
+    width: 45%;
+    height: fluid-prop(20,14,1920,320);
+    border-radius: 999px;
+}
 .participants_list{
     display: flex;
     flex-direction: column;
@@ -116,6 +158,11 @@
     & p{
         font-size: fluid-prop(18,13,1920,320);
     }
+}
+.participant_add_skeleton{
+    width: 100%;
+    height: 38px;
+    border-radius: 10px;
 }
 .participant_item{
     display: grid;
@@ -161,6 +208,12 @@
         height: 100%;
     }
 }
+.participant_avatar_skeleton{
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    flex-shrink: 0;
+}
 .participant_names{
     display: flex;
     flex-direction: column;
@@ -174,6 +227,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.participant_name_skeleton{
+    width: 70%;
+    height: fluid-prop(18,13,1920,320);
+    border-radius: 999px;
+}
 .participant_username{
     font-size: fluid-prop(16,12,1920,320);
     opacity: 0.75;
@@ -181,10 +239,21 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+.participant_username_skeleton{
+    width: 55%;
+    height: fluid-prop(16,12,1920,320);
+    border-radius: 999px;
+    opacity: 0.8;
+}
 .participant_role{
     font-size: fluid-prop(16,12,1920,320);
     opacity:  0.85;
     white-space: nowrap;
+}
+.participant_role_skeleton{
+    width: 70px;
+    height: fluid-prop(16,12,1920,320);
+    border-radius: 999px;
 }
 .participant_remove{
     background: transparent;
@@ -203,6 +272,11 @@
     & svg{
         width: 25px;
     }
+}
+.participant_remove_skeleton{
+    width: 25px;
+    height: 25px;
+    border-radius: 8px;
 }
 .participant_confirm_title{
     cursor: default;

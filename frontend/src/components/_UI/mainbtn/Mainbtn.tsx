@@ -13,7 +13,7 @@ export interface MainbtnProps {
   type?: ButtonType;
   href?: string;
   state?: unknown;
-  onClick?: React.MouseEventHandler<HTMLButtonElement>;
+  onClick?: React.MouseEventHandler<HTMLElement>;
   disabled?: boolean;
 }
 
@@ -34,7 +34,7 @@ const Mainbtn: React.FC<MainbtnProps> = ({
     <button
       type={type}
       className={className}
-      onClick={onClick}
+      onClick={onClick as React.MouseEventHandler<HTMLButtonElement>}
       disabled={disabled}
     >
       {text}
@@ -52,7 +52,7 @@ const Mainbtn: React.FC<MainbtnProps> = ({
 
   if (kind === 'navlink') {
     return (
-      <NavLink to={href} state={state} className={className}>
+      <NavLink to={href} state={state} className={className} onClick={onClick as React.MouseEventHandler<HTMLAnchorElement>}>
         {text}
       </NavLink>
     );

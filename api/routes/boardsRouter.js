@@ -20,6 +20,9 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB
+  },
   fileFilter: (req, file, cb) => {
     if (!file.mimetype.startsWith('image/')) {
       return cb(new Error('Только изображения'), false);
@@ -31,7 +34,12 @@ const upload = multer({
 const maybeUploadSingleImage = (req, res, next) => {
   const contentType = String(req.headers['content-type'] || '').toLowerCase();
   if (!contentType.startsWith('multipart/form-data')) return next();
-  return upload.single('image')(req, res, next);
+  return upload.single('image')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ message: 'Некорректный файл (макс. 5MB)' });
+    }
+    return next();
+  });
 };
 
 // Public routes (no auth)
@@ -54,9 +62,11 @@ router.post('/', maybeUploadSingleImage, boardsController.createBoard);
 router.post('/:board_id/invites', boardsController.inviteToBoard);
 router.delete('/:board_id/guests/:guest_id', boardsController.removeGuestFromBoard);
 router.post('/:board_id/leave', boardsController.leaveBoard);
+router.post('/:board_id/join-public', boardsController.joinPublicBoardAsGuest);
 
 router.patch('/:board_id/title', boardsController.renameBoard);
 router.patch('/:board_id/description', boardsController.updateDescription);
+router.patch('/:board_id/public', boardsController.updateBoardPublic);
 router.patch('/:board_id/image', maybeUploadSingleImage, boardsController.updateBoardImage);
 router.get('/:board_id/participants', boardsController.getBoardParticipants);
 router.get('/:board_id/full', boardsController.getBoardFull);

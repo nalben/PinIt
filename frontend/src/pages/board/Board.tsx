@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router-dom';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import classes from './Board.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
@@ -46,6 +46,7 @@ const loadBoardParticipants = async (boardId: number) => {
 const Board = () => {
     const { boardId } = useParams<{ boardId: string }>();
     const location = useLocation();
+    const navigate = useNavigate();
     const isAuth = useAuthStore((s) => s.isAuth);
     const isInitialized = useAuthStore((s) => s.isInitialized);
     const boards = useBoardsStore((s) => s.boards);
@@ -55,11 +56,29 @@ const Board = () => {
     const guestBoards = useSpacesBoardsStore((s) => s.guestBoards);
     const isBoardMenuOpen = useUIStore((s) => s.isBoardMenuOpen);
     const toggleBoardMenu = useUIStore((s) => s.toggleBoardMenu);
+    const openBoardMenu = useUIStore((s) => s.openBoardMenu);
+    const closeBoardMenu = useUIStore((s) => s.closeBoardMenu);
     const openBoardSettingsModal = useUIStore((s) => s.openBoardSettingsModal);
+    const closeBoardSettingsModal = useUIStore((s) => s.closeBoardSettingsModal);
 
     const [participantsData, setParticipantsData] = useState<BoardParticipantsResponse | null>(null);
     const [participantsLoading, setParticipantsLoading] = useState(false);
     const [removeConfirmParticipantId, setRemoveConfirmParticipantId] = useState<number | null>(null);
+    const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
+    const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<BoardEntity> | null>(null);
+    const [loadedBoardImageSrc, setLoadedBoardImageSrc] = useState<string | null>(null);
+    const [failedBoardImageSrc, setFailedBoardImageSrc] = useState<string | null>(null);
+    const tokenPresent = Boolean(localStorage.getItem('token'));
+    const isLoggedIn = isInitialized && isAuth;
+    const numericBoardId = Number(boardId);
+    const hasValidBoardId = Number.isFinite(numericBoardId) && numericBoardId > 0;
+
+    useLayoutEffect(() => {
+        if (typeof window === 'undefined') return;
+        const shouldOpen = window.innerWidth >= 1440;
+        if (shouldOpen) openBoardMenu();
+        else closeBoardMenu();
+    }, [closeBoardMenu, openBoardMenu]);
 
     const boardInfo = useMemo(() => {
         const id = Number(boardId);
@@ -67,6 +86,7 @@ const Board = () => {
 
         const stateBoard = (location.state as { board?: Partial<BoardEntity> } | null)?.board;
         const fromState = stateBoard && Number(stateBoard.id) === id ? stateBoard : undefined;
+        const fromOverride = boardMetaOverride && Number(boardMetaOverride.id) === id ? boardMetaOverride : undefined;
 
         const fromBoards = boards.find((b) => b.id === id);
         const fromRecent = recentBoards.find((b) => b.id === id);
@@ -75,139 +95,251 @@ const Board = () => {
         const fromGuest = guestBoards.find((b) => b.id === id);
 
         const merged: Partial<BoardEntity> = {
+            ...(fromState ?? {}),
             ...(fromPublic ?? {}),
             ...(fromFriends ?? {}),
             ...(fromGuest ?? {}),
+            ...(fromOverride ?? {}),
             ...(fromRecent ?? {}),
             ...(fromBoards ?? {}),
-            ...(fromState ?? {}),
             id,
         };
 
+        const imageValue = merged.image;
         const imageSrc = merged.image
             ? merged.image.startsWith('/uploads/')
                 ? `${API_URL}${merged.image}`
                 : merged.image
             : null;
 
-        return {
-            id,
-            title: typeof merged.title === 'string' && merged.title.trim() ? merged.title : `Board ${id}`,
-            description: typeof merged.description === 'string' ? merged.description : null,
-            imageSrc,
-        };
-    }, [boardId, boards, friendsBoards, guestBoards, location.state, publicBoards, recentBoards]);
-
-    useEffect(() => {
-        if (!isInitialized) return;
-        const id = Number(boardId);
-        if (!Number.isFinite(id) || id <= 0) return;
-
-        if (isAuth) {
-            (async () => {
-                try {
-                    await axiosInstance.post(`/api/boards/${id}/visit`);
-                } catch {
-                    // ignore
-                } finally {
-                    void useBoardsStore.getState().loadBoards();
-                }
-            })();
-            return;
-        }
-
-        const stateBoard = (location.state as { board?: Partial<BoardEntity> } | null)?.board;
-
-        const spaces = useSpacesBoardsStore.getState();
-        const known =
-            (stateBoard && Number(stateBoard.id) === id ? stateBoard : undefined) ??
-            spaces.publicBoards.find((b) => b.id === id) ??
-            spaces.friendsBoards.find((b) => b.id === id) ??
-            spaces.guestBoards.find((b) => b.id === id);
-
-        const persistRecent = (entry: BoardEntity) => {
-            const readCurrent = (): BoardEntity[] => {
-                try {
-                    const raw = localStorage.getItem(RECENT_BOARDS_LS_KEY);
-                    if (!raw) return [];
-                    const parsed: unknown = JSON.parse(raw);
-                    return Array.isArray(parsed) ? (parsed as BoardEntity[]) : [];
-                } catch {
-                    return [];
-                }
-            };
-
-            const current = readCurrent();
-            const withoutThis = current.filter((b) => Number(b?.id) !== entry.id);
-            const updated = [entry, ...withoutThis].slice(0, 20);
-
-            try {
-                localStorage.setItem(RECENT_BOARDS_LS_KEY, JSON.stringify(updated));
-            } catch {
-                // ignore
-            }
-
-            useBoardsStore.setState({ recentBoards: updated });
-        };
-
-        const now = new Date().toISOString();
-        const explicitIsPublic = (() => {
-            if (!known || typeof known !== 'object') return undefined;
-            if (!('is_public' in known)) return undefined;
-            const v = (known as { is_public?: unknown }).is_public;
+        const isPublic = (() => {
+            if (!merged || typeof merged !== 'object') return null;
+            if (!('is_public' in merged)) return null;
+            const v = (merged as { is_public?: unknown }).is_public;
             if (typeof v === 'boolean') return v;
             if (typeof v === 'number') return v === 1;
-            return undefined;
+            return null;
         })();
 
-        if (explicitIsPublic === false) return;
+        return {
+            id,
+            title: typeof merged.title === 'string' && merged.title.trim() ? merged.title : null,
+            description: typeof merged.description === 'string' ? merged.description : null,
+            imageSrc,
+            imageState: typeof imageValue === 'string' ? ('some' as const) : imageValue === null ? ('none' as const) : ('unknown' as const),
+            isPublic,
+            myRole: typeof merged.my_role === 'string' || merged.my_role === null ? merged.my_role : null,
+        };
+    }, [boardId, boardMetaOverride, boards, friendsBoards, guestBoards, location.state, publicBoards, recentBoards]);
 
-        if (known?.title) {
-            const maybeMyRole: BoardEntity['my_role'] = (() => {
-                if (!known || typeof known !== 'object') return undefined;
-                if (!('my_role' in known)) return undefined;
-                const v = (known as { my_role?: unknown }).my_role;
-                if (typeof v === 'string' || v === null) return v as string | null;
-                return undefined;
-            })();
-
-            persistRecent({
-                id,
-                title: known.title,
-                description: known.description ?? null,
-                created_at: known.created_at ?? now,
-                last_visited_at: now,
-                image: known.image ?? null,
-                is_public: explicitIsPublic ?? true,
-                my_role: maybeMyRole,
-            });
+    useEffect(() => {
+        const src = boardInfo?.imageSrc ?? null;
+        if (!src) {
+            setLoadedBoardImageSrc(null);
+            setFailedBoardImageSrc(null);
             return;
         }
 
-        axiosInstance
-            .get<Partial<BoardEntity>>(`/api/boards/public/${id}`)
-            .then(({ data }) => {
-                const entry: BoardEntity = {
-                    id,
-                    title: typeof data?.title === 'string' && data.title.trim() ? data.title : `Board ${id}`,
-                    description: typeof data?.description === 'string' || data?.description === null ? data.description : null,
-                    created_at: typeof data?.created_at === 'string' ? data.created_at : now,
-                    last_visited_at: now,
-                    image: typeof data?.image === 'string' || data?.image === null ? data.image : null,
-                    is_public: true,
-                };
-                persistRecent(entry);
-            })
-            .catch(() => {
-                // not public / not accessible => don't persist to localStorage
-            });
-    }, [boardId, isAuth, isInitialized, location.state]);
+        let cancelled = false;
+        setLoadedBoardImageSrc(null);
+        setFailedBoardImageSrc(null);
+
+        const img = new Image();
+        img.onload = () => {
+            if (cancelled) return;
+            setLoadedBoardImageSrc(src);
+        };
+        img.onerror = () => {
+            if (cancelled) return;
+            setFailedBoardImageSrc(src);
+        };
+        img.src = src;
+
+        return () => {
+            cancelled = true;
+        };
+    }, [boardInfo?.imageSrc]);
 
     useEffect(() => {
-        if (!isInitialized) return;
-        if (!isAuth) {
+        if (!hasValidBoardId) {
+            setIsBoardMetaLoading(false);
+            return;
+        }
+        setIsBoardMetaLoading(true);
+        setBoardMetaOverride(null);
+    }, [hasValidBoardId, numericBoardId]);
+
+    useEffect(() => {
+        if (!hasValidBoardId) return;
+        const id = numericBoardId;
+        if (!Number.isFinite(id) || id <= 0) return;
+
+        let cancelled = false;
+        const redirectToSpaces = () => {
+            if (cancelled) return;
+            navigate('/spaces', { replace: true });
+        };
+
+        const applyAuthBoardPatch = (patch: Partial<BoardEntity>) => {
+            useBoardsStore.setState((s) => ({
+                ...s,
+                boards: s.boards.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+                recentBoards: s.recentBoards.map((b) => (b.id === id ? { ...b, ...patch } : b)),
+            }));
+        };
+
+        (async () => {
+            try {
+                // If token exists, wait for auth bootstrap to decide auth/non-auth flow.
+                if (tokenPresent && !isInitialized) return;
+
+                if (isLoggedIn) {
+                    const tryLoadAccessibleBoard = async () => {
+                        const { data } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/${id}`);
+                        if (cancelled) return null;
+                        if (data && typeof data === 'object') {
+                            setBoardMetaOverride({ ...data, id });
+                            applyAuthBoardPatch(data);
+                            return data;
+                        }
+                        return null;
+                    };
+
+                    try {
+                        const accessible = await tryLoadAccessibleBoard();
+                        if (accessible) {
+                            try {
+                                await axiosInstance.post(`/api/boards/${id}/visit`);
+                            } catch {
+                                // ignore
+                            }
+                            void useBoardsStore.getState().loadBoards();
+                            return;
+                        }
+                    } catch (err: unknown) {
+                        const status = (err as { response?: { status?: number } })?.response?.status;
+
+                        // Not owner/guest -> maybe public; check public endpoint and join as guest
+                        if (status === 404 || status === 403) {
+                            try {
+                                const { data: publicData } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/public/${id}`);
+                                if (cancelled) return;
+                                if (!publicData || typeof publicData !== 'object') {
+                                    redirectToSpaces();
+                                    return;
+                                }
+
+                                setBoardMetaOverride({ ...publicData, id, is_public: true });
+
+                                try {
+                                    await axiosInstance.post(`/api/boards/${id}/join-public`);
+                                } catch {
+                                    redirectToSpaces();
+                                    return;
+                                }
+
+                                try {
+                                    const joined = await tryLoadAccessibleBoard();
+                                    if (!joined) {
+                                        redirectToSpaces();
+                                        return;
+                                    }
+                                } catch {
+                                    redirectToSpaces();
+                                    return;
+                                }
+
+                                try {
+                                    await axiosInstance.post(`/api/boards/${id}/visit`);
+                                } catch {
+                                    // ignore
+                                }
+                                void useBoardsStore.getState().loadBoards();
+                                return;
+                            } catch {
+                                redirectToSpaces();
+                                return;
+                            }
+                        }
+                    }
+
+                    redirectToSpaces();
+                    return;
+                }
+
+                // Non-auth: allow only public
+                try {
+                    const { data } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/public/${id}`);
+                    if (cancelled) return;
+                    if (!data || typeof data !== 'object') {
+                        redirectToSpaces();
+                        return;
+                    }
+
+                    setBoardMetaOverride({ ...data, id, is_public: true });
+
+                    const persistRecent = (entry: BoardEntity) => {
+                        const readCurrent = (): BoardEntity[] => {
+                            try {
+                                const raw = localStorage.getItem(RECENT_BOARDS_LS_KEY);
+                                if (!raw) return [];
+                                const parsed: unknown = JSON.parse(raw);
+                                return Array.isArray(parsed) ? (parsed as BoardEntity[]) : [];
+                            } catch {
+                                return [];
+                            }
+                        };
+
+                        const current = readCurrent();
+                        const withoutThis = current.filter((b) => Number(b?.id) !== entry.id);
+                        const updated = [entry, ...withoutThis].slice(0, 20);
+
+                        try {
+                            localStorage.setItem(RECENT_BOARDS_LS_KEY, JSON.stringify(updated));
+                        } catch {
+                            // ignore
+                        }
+
+                        useBoardsStore.setState({ recentBoards: updated });
+                    };
+
+                    const now = new Date().toISOString();
+                    persistRecent({
+                        id,
+                        title: typeof data?.title === 'string' && data.title.trim() ? data.title : 'Доска',
+                        description: typeof data?.description === 'string' || data?.description === null ? data.description : null,
+                        created_at: typeof data?.created_at === 'string' ? data.created_at : now,
+                        last_visited_at: now,
+                        image: typeof data?.image === 'string' || data?.image === null ? data.image : null,
+                        is_public: true,
+                    });
+                } catch {
+                    redirectToSpaces();
+                    return;
+                }
+            } finally {
+                if (cancelled) return;
+                setIsBoardMetaLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [hasValidBoardId, isInitialized, isLoggedIn, navigate, numericBoardId, tokenPresent]);
+
+    const isOwnerBoard = boardInfo?.myRole === 'owner';
+
+    useEffect(() => {
+        if (isOwnerBoard) return;
+        closeBoardSettingsModal();
+    }, [closeBoardSettingsModal, isOwnerBoard]);
+
+    useEffect(() => {
+        if (!isLoggedIn) {
             setParticipantsData(null);
             setRemoveConfirmParticipantId(null);
+            setParticipantsLoading(false);
             return;
         }
 
@@ -216,6 +348,8 @@ const Board = () => {
 
         let cancelled = false;
         setParticipantsLoading(true);
+        setParticipantsData(null);
+        setRemoveConfirmParticipantId(null);
         loadBoardParticipants(id)
             .then((data) => {
                 if (cancelled) return;
@@ -233,12 +367,14 @@ const Board = () => {
         return () => {
             cancelled = true;
         };
-    }, [boardId, isAuth, isInitialized]);
+    }, [boardId, boardInfo?.myRole, isLoggedIn]);
 
     const isOwner = participantsData?.my_role === 'owner';
     const participants = participantsData?.participants ?? [];
     const guests = participants.filter((p) => p.role !== 'owner');
     const shouldShowParticipants = participantsLoading || isOwner || guests.length > 0;
+    const canManageParticipants = isOwner || isOwnerBoard;
+    const shouldShowOwnerActions = canManageParticipants && !participantsLoading;
 
     const removeParticipant = async (participantId: number) => {
         const id = Number(boardId);
@@ -267,18 +403,38 @@ const Board = () => {
                 </button>
                 <div className={classes.board_menu_}>
                     <div className={classes.board_info}>
-                        {boardInfo?.imageSrc ? (
-                            <img src={boardInfo.imageSrc} alt={boardInfo.title} />
+                        {isBoardMetaLoading ? (
+                            <>
+                                <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
+                                <div className={`${classes.skeleton} ${classes.board_info_line_skeleton}`} />
+                                <div className={`${classes.skeleton} ${classes.board_info_line_sm_skeleton}`} />
+                            </>
                         ) : (
-                            <Default />
+                            <>
+                                {boardInfo?.imageSrc ? (
+                                    loadedBoardImageSrc === boardInfo.imageSrc ? (
+                                        <img src={boardInfo.imageSrc} alt={boardInfo.title ?? 'board'} />
+                                    ) : failedBoardImageSrc === boardInfo.imageSrc ? (
+                                        <Default />
+                                    ) : (
+                                        <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
+                                    )
+                                ) : boardInfo?.imageState === 'unknown' ? (
+                                    <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
+                                ) : (
+                                    <Default />
+                                )}
+                                {boardInfo?.title ? <span>{boardInfo.title}</span> : null}
+                                {boardInfo?.description ? <p>{boardInfo.description}</p> : null}
+                            </>
                         )}
-                        <span>{boardInfo ? boardInfo.title : 'Board'}</span>
-                        <p>{boardInfo?.description ?? ''}</p>
                     </div>
-                    <div className={classes.board_info_actions}>
-                        <Mainbtn variant="mini" kind="button" type="button" text="Настройки" onClick={openBoardSettingsModal} />
-                    </div>
-                    {!isAuth ? (
+                    {isOwnerBoard && !isBoardMetaLoading ? (
+                        <div className={classes.board_info_actions}>
+                            <Mainbtn variant="mini" kind="button" type="button" text="Настройки" onClick={openBoardSettingsModal} />
+                        </div>
+                    ) : null}
+                    {!isLoggedIn ? (
                         <div className={classes.participants}>
                             <div className={classes.participant_add}>
                                 <AuthTrigger type="login">
@@ -287,17 +443,41 @@ const Board = () => {
                             </div>
                         </div>
                     ) : null}
-                    {isAuth && shouldShowParticipants ? (
+                    {isLoggedIn && shouldShowParticipants ? (
                         <div className={classes.participants}>
-                            <span className={classes.participants_title}>Участники:</span>
+                            {participantsLoading ? (
+                                <div className={`${classes.skeleton} ${classes.participants_title_skeleton}`} />
+                            ) : (
+                                <span className={classes.participants_title}>Участники:</span>
+                            )}
                             <div className={classes.participants_list}>
-                                {isOwner ? (
-                                    <div className={classes.participant_add}>
-                                        <Mainbtn variant="mini" kind="button" type="button" text="Добавить участников" disabled />
-                                    </div>
+                                {canManageParticipants ? (
+                                    participantsLoading ? (
+                                        <div className={`${classes.skeleton} ${classes.participant_add_skeleton}`} />
+                                    ) : (
+                                        <div className={classes.participant_add}>
+                                            <Mainbtn variant="mini" kind="button" type="button" text="Добавить участников" disabled />
+                                        </div>
+                                    )
                                 ) : null}
-                                {participantsLoading ? <p>Загрузка...</p> : null}
-                                {guests.map((p) => {
+                                {participantsLoading ? (
+                                    <>
+                                        {[0, 1, 2].map((idx) => (
+                                            <div className={classes.participant_item} key={`participant-skeleton-${idx}`}>
+                                                <div className={classes.participant_link}>
+                                                    <div className={`${classes.skeleton} ${classes.participant_avatar_skeleton}`} />
+                                                    <div className={classes.participant_names}>
+                                                        <div className={`${classes.skeleton} ${classes.participant_name_skeleton}`} />
+                                                        <div className={`${classes.skeleton} ${classes.participant_username_skeleton}`} />
+                                                    </div>
+                                                </div>
+                                                <div className={`${classes.skeleton} ${classes.participant_role_skeleton}`} />
+                                                {canManageParticipants ? <div className={`${classes.skeleton} ${classes.participant_remove_skeleton}`} /> : null}
+                                            </div>
+                                        ))}
+                                    </>
+                                ) : null}
+                                {!participantsLoading ? guests.map((p) => {
                                     const avatarSrc = resolveAvatarSrc(p.avatar);
                                     const displayName = (p.nickname ?? '').trim() || p.username;
                                     const shouldShowUsername = Boolean((p.nickname ?? '').trim());
@@ -314,7 +494,7 @@ const Board = () => {
                                                 </div>
                                             </Link>
                                             <span className={classes.participant_role}>{p.role === 'owner' ? 'Владелец' : 'Гость'}</span>
-                                            {isOwner ? (
+                                            {shouldShowOwnerActions ? (
                                                 <DropdownWrapper
                                                     right
                                                     up
@@ -359,7 +539,7 @@ const Board = () => {
                                             ) : null}
                                         </div>
                                     );
-                                })}
+                                }) : null}
                             </div>
                             {false ? (
                                 <div className={classes.participants_empty}>
@@ -370,7 +550,14 @@ const Board = () => {
                     ) : null}
                 </div>
             </div>
-            <BoardSettingsModal />
+            {isOwnerBoard ? (
+                <BoardSettingsModal
+                    initialTitle={boardInfo?.title ?? null}
+                    initialDescription={boardInfo?.description ?? null}
+                    initialImageSrc={boardInfo?.imageSrc ?? null}
+                    initialIsPublic={boardInfo?.isPublic ?? null}
+                />
+            ) : null}
         </div>
     );
 };

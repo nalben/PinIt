@@ -403,6 +403,7 @@ uiStore:
 
 - `isBoardMenuOpen` controls right board menu visibility on `Board` page
 - `openBoardMenu()` / `closeBoardMenu()` / `toggleBoardMenu()` manage that visibility state
+- `boardSettingsModalOpen` / `boardSettingsModalView` control board settings modal (tabs: settings / participants+invites)
 
 notificationsStore:
 
@@ -1086,8 +1087,14 @@ These points are confirmed from current repository code and override any older c
 - Public board endpoints exist and are unauthenticated:
   - `GET /api/boards/public/popular`
   - `GET /api/boards/public/:board_id`
+- Public board endpoints do not add the viewer into `boardguests` (no implicit "become a guest" on open).
+- Authenticated join endpoint exists for public boards:
+  - `POST /api/boards/:board_id/join-public` — if `is_public=1` and user is not owner/guest, inserts into `boardguests` as `role='guest'` (idempotent).
 - Board participants endpoint exists and is authenticated:
   - `GET /api/boards/:board_id/participants` — returns `my_role` and participants (owner + guests from `boardguests`).
+- Board public toggle endpoint exists and is authenticated (owner-only):
+  - `PATCH /api/boards/:board_id/public` — updates `boards.is_public`.
+- `GET /api/boards/:board_id` includes `is_public` in its response.
 - `frontend/src/pages/board/Board.tsx`:
   - For auth users: sends `POST /api/boards/:id/visit`, then reloads boards store.
   - Loads participants for board menu via `GET /api/boards/:id/participants`.

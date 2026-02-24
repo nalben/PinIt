@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 type HeaderDropdown = 'profile' | 'notifications' | null;
 export type FriendsModalView = 'list' | 'search';
+export type BoardSettingsModalView = 'settings' | 'participants';
 
 interface UIState {
   headerDropdown: HeaderDropdown;
@@ -10,6 +11,7 @@ interface UIState {
   friendsModalView: FriendsModalView;
   isBoardMenuOpen: boolean;
   boardSettingsModalOpen: boolean;
+  boardSettingsModalView: BoardSettingsModalView;
 
   // dropdown actions
   openHeaderDropdown: (dropdown: HeaderDropdown) => void;
@@ -27,6 +29,7 @@ interface UIState {
   toggleBoardMenu: () => void;
   openBoardSettingsModal: () => void;
   closeBoardSettingsModal: () => void;
+  setBoardSettingsModalView: (view: BoardSettingsModalView) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -36,6 +39,7 @@ export const useUIStore = create<UIState>((set) => ({
   friendsModalView: 'list',
   isBoardMenuOpen: true,
   boardSettingsModalOpen: false,
+  boardSettingsModalView: 'settings',
 
   openHeaderDropdown: (dropdown) => set({ headerDropdown: dropdown }),
   closeHeaderDropdown: () => set({ headerDropdown: null }),
@@ -59,6 +63,7 @@ export const useUIStore = create<UIState>((set) => ({
       isBoardMenuOpen: !s.isBoardMenuOpen,
     })),
 
-  openBoardSettingsModal: () => set({ boardSettingsModalOpen: true }),
-  closeBoardSettingsModal: () => set({ boardSettingsModalOpen: false }),
+  openBoardSettingsModal: () => set({ boardSettingsModalOpen: true, boardSettingsModalView: 'settings' }),
+  closeBoardSettingsModal: () => set({ boardSettingsModalOpen: false, boardSettingsModalView: 'settings' }),
+  setBoardSettingsModalView: (view) => set({ boardSettingsModalView: view }),
 }));

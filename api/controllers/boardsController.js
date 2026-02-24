@@ -390,6 +390,99 @@ exports.updateDescription = async (req, res) => {
   }
 };
 
+/* Сделать доску публичной/приватной */
+exports.updateBoardPublic = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const { board_id } = req.params;
+    const raw = req.body?.is_public;
+
+    const isPublic =
+      typeof raw === 'boolean'
+        ? raw
+        : typeof raw === 'number'
+          ? raw === 1
+          : typeof raw === 'string'
+            ? raw === '1' || raw.toLowerCase() === 'true'
+            : null;
+
+    if (isPublic === null) {
+      return res.status(400).json({ message: 'Некорректный параметр is_public' });
+    }
+
+    const value = isPublic ? 1 : 0;
+    const [result] = await db.execute(
+      `UPDATE boards SET is_public = ?
+       WHERE id = ? AND owner_id = ?`,
+      [value, board_id, user_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    return res.status(200).json({ is_public: value });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления публичности' });
+  }
+};
+
+/* Войти в публичную доску как гость (если ещё нет доступа) */
+exports.joinPublicBoardAsGuest = async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(
+      `SELECT id, owner_id, is_public
+       FROM boards
+       WHERE id = ?
+       LIMIT 1`,
+      [boardId]
+    );
+
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const board = boardRows[0];
+    const isPublic = Number(board?.is_public) === 1;
+    if (!isPublic) {
+      return res.status(403).json({ message: 'Доска не публичная' });
+    }
+
+    if (Number(board?.owner_id) === Number(user_id)) {
+      return res.status(200).json({ board_id: boardId, my_role: 'owner' });
+    }
+
+    const [existing] = await db.execute(
+      `SELECT id
+       FROM boardguests
+       WHERE board_id = ? AND user_id = ?
+       LIMIT 1`,
+      [boardId, user_id]
+    );
+
+    if (!existing.length) {
+      await db.execute(
+        `INSERT INTO boardguests (board_id, user_id, role)
+         VALUES (?, ?, 'guest')`,
+        [boardId, user_id]
+      );
+    }
+
+    return res.status(200).json({ board_id: boardId, my_role: 'guest' });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка входа в доску' });
+  }
+};
+
 
 /* РР·РјРµРЅРёС‚СЊ РєР°СЂС‚РёРЅРєСѓ */
 exports.updateBoardImage = async (req, res) => {
@@ -724,7 +817,7 @@ exports.getBoardById = async (req, res) => {
     const { board_id } = req.params;
 
     const [rows] = await db.execute(
-      `SELECT b.id, b.owner_id, b.title, b.description, b.image, b.created_at,
+      `SELECT b.id, b.owner_id, b.is_public, b.title, b.description, b.image, b.created_at,
               CASE
                 WHEN b.owner_id = ? THEN 'owner'
                 WHEN bg.user_id IS NOT NULL THEN bg.role
