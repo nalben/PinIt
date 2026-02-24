@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import AuthModal from '@/components/auth/authmodal/AuthModal';
 import { useUIStore } from '@/store/uiStore';
 import classes from './BoardSettingsModal.module.scss';
@@ -19,7 +19,7 @@ const MAX_BOARD_IMAGE_SIZE_BYTES = MAX_BOARD_IMAGE_SIZE_MB * 1024 * 1024;
 const BOARD_TITLE_MAX_LENGTH = 20;
 const BOARD_DESCRIPTION_MAX_LENGTH = 80;
 
-type BoardRole = 'owner' | 'guest' | null;
+type BoardRole = 'owner' | 'guest' | 'editer' | null;
 
 interface BoardResponse {
   id: number;
@@ -32,7 +32,7 @@ interface BoardResponse {
   my_role: BoardRole;
 }
 
-type BoardParticipantRole = 'owner' | 'guest';
+type BoardParticipantRole = 'owner' | 'guest' | 'editer';
 
 type BoardParticipant = {
   id: number;
@@ -190,6 +190,8 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
   const [outgoingInvitesLoading, setOutgoingInvitesLoading] = useState(false);
   const [outgoingInvitesByUserId, setOutgoingInvitesByUserId] = useState<Record<number, { id: number; status: 'sent' | 'rejected' }>>({});
   const [inviteActionUserId, setInviteActionUserId] = useState<number | null>(null);
+  const [roleActionUserId, setRoleActionUserId] = useState<number | null>(null);
+  const [roleDropdownUserId, setRoleDropdownUserId] = useState<number | null>(null);
 
   const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
   const [inviteLinkToken, setInviteLinkToken] = useState<string | null>(null);
@@ -667,7 +669,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
   const removeGuest = async (guest: BoardParticipant) => {
     if (!numericBoardId) return;
     if (!isOwner) return;
-    if (guest.role !== 'guest') return;
+    if (guest.role === 'owner') return;
 
     setInviteActionUserId(guest.id);
     setParticipantsError(null);
@@ -695,6 +697,38 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
     } finally {
       setInviteActionUserId(null);
     }
+  };
+
+  const updateGuestRole = async (guest: BoardParticipant, nextRole: 'guest' | 'editer') => {
+    if (!numericBoardId) return;
+    if (!isOwner) return;
+    if (guest.role === 'owner') return;
+    if (!participantsByUserId[guest.id]) return;
+    if (guest.role === nextRole) {
+      setRoleDropdownUserId(null);
+      return;
+    }
+
+    setRoleActionUserId(guest.id);
+    setParticipantsError(null);
+    try {
+      await axiosInstance.patch(`/api/boards/${numericBoardId}/guests/${guest.id}/role`, { role: nextRole });
+      const nextParticipants = boardParticipants.map((p) => (p.id === guest.id ? { ...p, role: nextRole } : p));
+      setBoardParticipants(nextParticipants);
+      boardParticipantsCache.set(numericBoardId, { participants: nextParticipants, participantsByUserId });
+      setRoleDropdownUserId(null);
+    } catch {
+      setParticipantsError('Не удалось изменить роль');
+    } finally {
+      setRoleActionUserId(null);
+    }
+  };
+
+  const getRoleLabel = (role: BoardParticipantRole) => {
+    if (role === 'editer') return 'Редактор';
+    if (role === 'guest') return 'Гость';
+    if (role === 'owner') return 'Владелец';
+    return String(role);
   };
 
   useEffect(() => {
@@ -931,7 +965,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
                         if (!isOwner) e.preventDefault();
                       }}
                     >
-                      <span>изменить</span>
+                      <span>Изменить</span>
                     </label>
                     <input
                       ref={fileInputRef}
@@ -988,7 +1022,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
                   </label>
 
                   <label className={`${classes.publicToggle} ${isPublicToggleNoAnim ? classes.publicToggleNoAnim : ''}`}>
-                    <span className={classes.publicToggleText}>сделать доску публичной</span>
+                    <span className={classes.publicToggleText}>Сделать доску публичной</span>
                     <input
                       className={classes.publicToggleInput}
                       type="checkbox"
@@ -1200,7 +1234,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
 
                                 return (
                                   <div key={f.id} className={classes.friendRow}>
-                                    <div className={classes.friendInfo}>
+                                    <Link className={classes.friendInfo} to={`/user/${f.username}`}>
                                       <div className={classes.friendAvatar}>
                                         {avatarSrc ? <img src={avatarSrc} alt={f.username} /> : <DefaultUser />}
                                       </div>
@@ -1208,7 +1242,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
                                         <span className={classes.friendName}>{f.nickname || f.username}</span>
                                         {f.nickname ? <span className={classes.friendUsername}>@{f.username}</span> : null}
                                       </div>
-                                    </div>
+                                    </Link>
 
                                     <button
                                       type="button"
@@ -1285,7 +1319,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
 
                             return sorted.map((p) => {
                               const avatarSrc = resolveAvatarSrc(p.avatar);
-                              const isBusy = inviteActionUserId === p.id;
+                              const isBusy = inviteActionUserId === p.id || roleActionUserId === p.id;
                               const isOwnerRow = p.role === 'owner';
                               const isParticipant = Boolean(participantsByUserId[p.id]);
                               const inviteInfo = outgoingInvitesByUserId[p.id];
@@ -1324,7 +1358,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
 
                               return (
                                 <div key={p.id} id={`board-guests-${p.id}`} className={classes.friendRow}>
-                                  <div className={classes.friendInfo}>
+                                  <Link className={classes.friendInfo} to={`/user/${p.username}`}>
                                     <div className={classes.friendAvatar}>
                                       {avatarSrc ? <img src={avatarSrc} alt={p.username} /> : <DefaultUser />}
                                     </div>
@@ -1332,27 +1366,68 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
                                       <span className={classes.friendName}>{p.nickname || p.username}</span>
                                       {p.nickname ? <span className={classes.friendUsername}>@{p.username}</span> : null}
                                     </div>
-                                  </div>
+                                  </Link>
 
-                                  <button
-                                    type="button"
-                                    className={`${classes.friendInviteBtn} ${btnClass}`}
-                                    disabled={disabled}
-                                    onClick={() => {
-                                      if (isOwnerRow) return;
-                                      if (isParticipant) {
-                                        void removeGuest(p);
-                                        return;
-                                      }
-                                      if (inviteStatus === 'sent') {
-                                        void cancelInvite({ id: p.id, username: p.username });
-                                        return;
-                                      }
-                                      void inviteFriend({ id: p.id, username: p.username });
-                                    }}
-                                  >
-                                    {btnText}
-                                  </button>
+                                  <div className={classes.guestActions}>
+                                    {!isOwnerRow && isParticipant ? (
+                                      <DropdownWrapper
+                                        upDel
+                                        closeOnClick={false}
+                                        isOpen={roleDropdownUserId === p.id}
+                                        onClose={() => setRoleDropdownUserId(null)}
+                                      >
+                                        {[
+                                          <button
+                                            key="trigger"
+                                            type="button"
+                                            className={classes.roleBtn}
+                                            disabled={disabled}
+                                            onClick={() => setRoleDropdownUserId((prev) => (prev === p.id ? null : p.id))}
+                                          >
+                                            {getRoleLabel(p.role)}
+                                          </button>,
+                                          <div key="menu">
+                                            <button
+                                              type="button"
+                                              data-dropdown-class={classes.roleDropdownItem}
+                                              onClick={() => void updateGuestRole(p, 'guest')}
+                                              disabled={disabled}
+                                            >
+                                              Гость
+                                            </button>
+                                            <button
+                                              type="button"
+                                              data-dropdown-class={classes.roleDropdownItem}
+                                              onClick={() => void updateGuestRole(p, 'editer')}
+                                              disabled={disabled}
+                                            >
+                                              Редактор
+                                            </button>
+                                          </div>,
+                                        ]}
+                                      </DropdownWrapper>
+                                    ) : null}
+
+                                    <button
+                                      type="button"
+                                      className={`${classes.friendInviteBtn} ${btnClass}`}
+                                      disabled={disabled}
+                                      onClick={() => {
+                                        if (isOwnerRow) return;
+                                        if (isParticipant) {
+                                          void removeGuest(p);
+                                          return;
+                                        }
+                                        if (inviteStatus === 'sent') {
+                                          void cancelInvite({ id: p.id, username: p.username });
+                                          return;
+                                        }
+                                        void inviteFriend({ id: p.id, username: p.username });
+                                      }}
+                                    >
+                                      {btnText}
+                                    </button>
+                                  </div>
                                 </div>
                               );
                             });

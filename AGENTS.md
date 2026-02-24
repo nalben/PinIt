@@ -404,6 +404,8 @@ uiStore:
 - `isBoardMenuOpen` controls right board menu visibility on `Board` page
 - `openBoardMenu()` / `closeBoardMenu()` / `toggleBoardMenu()` manage that visibility state
 - `boardSettingsModalOpen` / `boardSettingsModalView` control board settings modal (tabs: settings / participants+invites)
+- `boardSettingsModalParticipantsInnerViewNext` is a one-shot "next inner view" hint for the BoardSettingsModal participants tab (friends vs participants list), consumed on open.
+- `openBoardSettingsModal(view?)` can open the modal directly on a specific tab (defaults to `settings`).
 
 notificationsStore:
 
@@ -1097,6 +1099,8 @@ These points are confirmed from current repository code and override any older c
   - `DELETE /api/boards/:board_id/invites/:invite_id` — cancels a pending invite by deleting it and emits `board_invite:removed` to invited user.
   - `GET /api/boards/:board_id/invite-link` — returns existing invite-link token (creates it if missing).
   - `POST /api/boards/:board_id/invite-link/regenerate` — regenerates invite-link token.
+  - `DELETE /api/boards/:board_id/guests/:guest_id` — removes a guest from `boardguests` and emits `boards:updated`.
+  - `PATCH /api/boards/:board_id/guests/:guest_id/role` — updates guest role in `boardguests` (`guest`/`editer`) and emits `boards:updated`.
 - Incoming invite workflow endpoints exist and are authenticated:
   - `PUT /api/boards/invites/accept/:invite_id` — adds user to `boardguests` and deletes the invite row, emits `board_invite:removed`.
   - `PUT /api/boards/invites/reject/:invite_id` — sets invite `status='rejected'` and emits `board_invite:removed`.
@@ -1113,6 +1117,7 @@ These points are confirmed from current repository code and override any older c
     - Auth users with `?invite=<token>`: when `GET /api/boards/:id` fails with 403/404, it tries `POST /api/boards/invite-link/accept` first, then retries `GET /api/boards/:id` before public fallback.
   - For accessible auth boards: sends `POST /api/boards/:id/visit`, then reloads boards store.
   - Loads participants for board menu via `GET /api/boards/:id/participants`.
+  - Auth guests can leave via `POST /api/boards/:id/leave`.
   - For non-auth users: persists recent public board info into localStorage key `pinit_recentBoards`.
 - `frontend/src/components/flow/FlowBoard.tsx` is currently a placeholder with empty `nodes`/`edges`.
 

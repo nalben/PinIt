@@ -17,7 +17,7 @@ import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
 import Deny from '@/assets/icons/monochrome/deny.svg'
 import Members from '@/assets/icons/monochrome/members.svg';
 
-type BoardParticipantRole = 'owner' | 'guest';
+type BoardParticipantRole = 'owner' | 'guest' | 'editer';
 
 interface BoardParticipant {
     id: number;
@@ -67,6 +67,10 @@ const Board = () => {
     const [debugParticipantsData, setDebugParticipantsData] = useState<BoardParticipantsResponse | null>(null);
     const [participantsLoading, setParticipantsLoading] = useState(false);
     const [removeConfirmParticipantId, setRemoveConfirmParticipantId] = useState<number | null>(null);
+    const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+    const [leaveLoading, setLeaveLoading] = useState(false);
+    const [roleDropdownParticipantId, setRoleDropdownParticipantId] = useState<number | null>(null);
+    const [roleLoadingParticipantId, setRoleLoadingParticipantId] = useState<number | null>(null);
     const participantsListRef = useRef<HTMLDivElement | null>(null);
     const [hasParticipantsListScroll, setHasParticipantsListScroll] = useState(false);
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
@@ -85,6 +89,13 @@ const Board = () => {
     const isLoggedIn = isInitialized && isAuth;
     const numericBoardId = Number(boardId);
     const hasValidBoardId = Number.isFinite(numericBoardId) && numericBoardId > 0;
+
+    useEffect(() => {
+        setLeaveConfirmOpen(false);
+        setLeaveLoading(false);
+        setRoleDropdownParticipantId(null);
+        setRoleLoadingParticipantId(null);
+    }, [boardId]);
 
     useLayoutEffect(() => {
         if (typeof window === 'undefined') return;
@@ -376,6 +387,7 @@ const Board = () => {
     }, [hasValidBoardId, inviteToken, isInitialized, isLoggedIn, navigate, numericBoardId, tokenPresent]);
 
     const isOwnerBoard = boardInfo?.myRole === 'owner';
+    const isGuestBoard = boardInfo?.myRole === 'guest' || boardInfo?.myRole === 'editer';
 
     useEffect(() => {
         if (isOwnerBoard) return;
@@ -423,6 +435,8 @@ const Board = () => {
     const shouldShowParticipants = participantsLoading || isOwner || guests.length > 0;
     const canManageParticipants = isOwner || isOwnerBoard;
     const shouldShowOwnerActions = canManageParticipants && !participantsLoading;
+    const ownerParticipant = participants.find((p) => p.role === 'owner') ?? null;
+    const ownerAvatarSrc = ownerParticipant ? resolveAvatarSrc(ownerParticipant.avatar) : null;
 
     useLayoutEffect(() => {
         const el = participantsListRef.current;
@@ -518,6 +532,61 @@ const Board = () => {
         }
     };
 
+    const updateParticipantRole = async (participantId: number, nextRole: Extract<BoardParticipantRole, 'guest' | 'editer'>) => {
+        const id = Number(boardId);
+        if (!Number.isFinite(id) || id <= 0) return;
+        if (!isOwner) return;
+
+        const current = participants.find((p) => p.id === participantId);
+        if (!current) return;
+        if (current.role === 'owner') return;
+        if (current.role === nextRole) {
+            setRoleDropdownParticipantId(null);
+            return;
+        }
+
+        setRoleLoadingParticipantId(participantId);
+        try {
+            await axiosInstance.patch(`/api/boards/${id}/guests/${participantId}/role`, { role: nextRole });
+
+            const apply = (prev: BoardParticipantsResponse | null) => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    participants: prev.participants.map((p) => (p.id === participantId ? { ...p, role: nextRole } : p)),
+                };
+            };
+
+            setParticipantsData(apply);
+            setDebugParticipantsData(apply);
+            setRoleDropdownParticipantId(null);
+        } catch {
+            // ignore
+        } finally {
+            setRoleLoadingParticipantId(null);
+        }
+    };
+
+    const leaveBoard = async () => {
+        const id = Number(boardId);
+        if (!Number.isFinite(id) || id <= 0) return;
+        if (!isLoggedIn) return;
+        if (!isGuestBoard) return;
+
+        setLeaveLoading(true);
+        try {
+            await axiosInstance.post(`/api/boards/${id}/leave`);
+            setLeaveConfirmOpen(false);
+            void useBoardsStore.getState().loadBoards();
+            void useSpacesBoardsStore.getState().refreshGuestBoards();
+            navigate('/spaces', { replace: true });
+        } catch {
+            // ignore
+        } finally {
+            setLeaveLoading(false);
+        }
+    };
+
     return (
         <div className={classes.board_container}>
             <FlowBoard />
@@ -553,6 +622,65 @@ const Board = () => {
                             </>
                         )}
                     </div>
+                    {isLoggedIn && !isOwnerBoard && ownerParticipant ? (
+                        <div>
+                            <div className={classes.owner_block}>
+                                <span className={classes.owner_title}>Владелец:</span>
+                                <div className={classes.owner_row}>
+                                    <Link className={classes.owner_link} to={`/user/${ownerParticipant.username}`}>
+                                        <div className={classes.owner_avatar}>
+                                            {ownerAvatarSrc ? (
+                                                <img src={ownerAvatarSrc} alt={ownerParticipant.nickname || ownerParticipant.username} />
+                                            ) : (
+                                                <DefaultUser />
+                                            )}
+                                        </div>
+                                        <div className={classes.owner_names}>
+                                            <span className={classes.owner_name}>{ownerParticipant.nickname || ownerParticipant.username}</span>
+                                            <span className={classes.owner_username}>@{ownerParticipant.username}</span>
+                                        </div>
+                                    </Link>
+                                    <Mainbtn variant="mini" kind="navlink" href={`/user/${ownerParticipant.username}`} text="Открыть" />
+                                </div>
+                            </div>
+                        </div>
+                    ) : null}
+                    {isLoggedIn && !isOwnerBoard && isGuestBoard ? (
+                        <div className={classes.leave_board_row}>
+                            <DropdownWrapper upDel closeOnClick={false} isOpen={leaveConfirmOpen} onClose={() => setLeaveConfirmOpen(false)}>
+                                {[
+                                    <button
+                                        key="trigger"
+                                        type="button"
+                                        className={classes.leave_board_trigger}
+                                        onClick={() => setLeaveConfirmOpen((v) => !v)}
+                                        disabled={leaveLoading || participantsLoading}
+                                        aria-label="Покинуть доску"
+                                    >
+                                        Покинуть доску
+                                    </button>,
+                                    <div key="menu">
+                                        <button
+                                            type="button"
+                                            data-dropdown-class={classes.participant_confirm_danger}
+                                            onClick={leaveBoard}
+                                            disabled={leaveLoading || participantsLoading}
+                                        >
+                                            {leaveLoading ? 'Выход...' : 'Покинуть'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            data-dropdown-class={classes.participant_confirm_cancel}
+                                            onClick={() => setLeaveConfirmOpen(false)}
+                                            disabled={leaveLoading || participantsLoading}
+                                        >
+                                            Отмена
+                                        </button>
+                                    </div>,
+                                ]}
+                            </DropdownWrapper>
+                        </div>
+                    ) : null}
                     {isOwnerBoard && !isBoardMetaLoading ? (
                         <div className={classes.board_info_actions}>
                             <Mainbtn variant="mini" kind="button" type="button" text="Настройки" onClick={() => openBoardSettingsModal()} />
@@ -632,6 +760,8 @@ const Board = () => {
                                     const avatarSrc = resolveAvatarSrc(p.avatar);
                                     const displayName = (p.nickname ?? '').trim() || p.username;
                                     const shouldShowUsername = Boolean((p.nickname ?? '').trim());
+                                    const isRoleBusy = roleLoadingParticipantId === p.id;
+                                    const roleLabel = p.role === 'editer' ? 'Редактор' : 'Гость';
 
                                     return (
                                         <div className={classes.participant_item} key={p.id}>
@@ -644,7 +774,46 @@ const Board = () => {
                                                     {shouldShowUsername ? <span className={classes.participant_username}>{p.username}</span> : null}
                                                 </div>
                                             </Link>
-                                            <span className={classes.participant_role}>{p.role === 'owner' ? 'Владелец' : 'Гость'}</span>
+                                            {isOwner ? (
+                                                <DropdownWrapper
+                                                    upDel
+                                                    closeOnClick={false}
+                                                    isOpen={roleDropdownParticipantId === p.id}
+                                                    onClose={() => setRoleDropdownParticipantId(null)}
+                                                >
+                                                    {[
+                                                        <button
+                                                            key="trigger"
+                                                            type="button"
+                                                            className={classes.participant_role_btn}
+                                                            onClick={() => setRoleDropdownParticipantId((prev) => (prev === p.id ? null : p.id))}
+                                                            disabled={participantsLoading || isRoleBusy}
+                                                        >
+                                                            {roleLabel}
+                                                        </button>,
+                                                        <div key="menu">
+                                                            <button
+                                                                type="button"
+                                                                data-dropdown-class={classes.participant_role_item}
+                                                                onClick={() => updateParticipantRole(p.id, 'guest')}
+                                                                disabled={participantsLoading || isRoleBusy}
+                                                            >
+                                                                Гость
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                data-dropdown-class={classes.participant_role_item}
+                                                                onClick={() => updateParticipantRole(p.id, 'editer')}
+                                                                disabled={participantsLoading || isRoleBusy}
+                                                            >
+                                                                Редактор
+                                                            </button>
+                                                        </div>,
+                                                    ]}
+                                                </DropdownWrapper>
+                                            ) : (
+                                                <span className={classes.participant_role}>{p.role === 'editer' ? 'Редактор' : 'Гость'}</span>
+                                            )}
                                             {shouldShowOwnerActions ? (
                                                 <DropdownWrapper
                                                     right

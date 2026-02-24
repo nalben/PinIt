@@ -139,7 +139,6 @@
 .participants{
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
     margin-top: auto;
 }
 .participants_title{
@@ -154,6 +153,7 @@
 .participants_list{
     display: flex;
     flex-direction: column;
+    padding-top: 1rem;
     gap: 0.5rem;
     max-height: 200px;
     overflow: auto;
@@ -276,7 +276,7 @@
 .participant_name{
     font-size: fluid-prop(18,13,1920,320);
     overflow: hidden;
-    max-width: fluid-prop(180,60,550,320);
+    max-width: fluid-prop(180,45,550,320);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -302,6 +302,40 @@
     font-size: fluid-prop(16,12,1920,320);
     opacity:  0.85;
     white-space: nowrap;
+}
+
+.participant_role_btn{
+    border: var(--border);
+    border-color: var(--pink);
+    background-color: transparent;
+    color: var(--pink);
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    white-space: nowrap;
+    font-family: "Nata Sans", sans-serif;
+    font-size: fluid-prop(16,12,1920,320);
+
+    &:hover{
+        opacity: 0.8;
+    }
+
+    &:disabled{
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+.participant_role_item{
+    & > button{
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--pink);
+        font-family: "Nata Sans", sans-serif;
+        font-size: fluid-prop(16,12,1920,320);
+        cursor: pointer;
+    }
 }
 .participant_role_skeleton{
     width: 70px;
@@ -367,4 +401,109 @@
 .participants_empty{
     display: flex;
     width: 100%;
+}
+
+.owner_block{
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.owner_title{
+    color: var(--pink);
+    font-size: fluid-prop(20,14,1920,320);
+}
+
+.owner_row{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: var(--border);
+    padding: 0.5rem;
+}
+
+.owner_link{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.3s;
+    flex: 1;
+    &:hover{
+        opacity: 0.75;
+    }
+}
+
+.owner_avatar{
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    & img{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    & svg{
+        width: 100%;
+        height: 100%;
+    }
+}
+
+.owner_names{
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.owner_name{
+    font-size: fluid-prop(18,13,1920,320);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.owner_username{
+    font-size: fluid-prop(16,12,1920,320);
+    opacity: 0.75;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.leave_board_row{
+    display: flex;
+    width: 100%;
+    & div, button{
+        width: 100%;
+    }
+}
+
+.leave_board_trigger{
+    width: 100%;
+    border: var(--border);
+    border-color: var(--error);
+    background-color: transparent;
+    color: var(--error);
+    padding: 10px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    font-family: "Nata Sans", sans-serif;
+    font-size: fluid-prop(18, 13, 1920, 320);
+
+    &:hover{
+        opacity: 0.75;
+    }
+    &:disabled{
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
 }

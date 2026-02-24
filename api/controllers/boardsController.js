@@ -756,6 +756,67 @@ exports.removeGuestFromBoard = async (req, res) => {
 
 
 /* Покинуть доску (для гостя) */
+/* Обновить роль гостя (только владелец) */
+exports.updateGuestRole = async (req, res) => {
+  try {
+    const owner_id = req.user.id;
+    const boardId = Number(req.params?.board_id);
+    const guestId = Number(req.params?.guest_id);
+    const nextRole = String(req.body?.role || '').trim();
+
+    if (!Number.isFinite(boardId) || !Number.isFinite(guestId)) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    if (nextRole !== 'guest' && nextRole !== 'editer') {
+      return res.status(400).json({ message: 'Некорректная роль' });
+    }
+
+    const [boardRows] = await db.execute(
+      `SELECT owner_id FROM boards WHERE id = ? LIMIT 1`,
+      [boardId]
+    );
+
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    if (boardRows[0].owner_id !== owner_id) {
+      return res.status(403).json({ message: 'Только владелец может менять роли' });
+    }
+
+    if (guestId === owner_id) {
+      return res.status(400).json({ message: 'Нельзя менять роль владельца' });
+    }
+
+    const [guestRows] = await db.execute(
+      `SELECT 1 FROM boardguests WHERE board_id = ? AND user_id = ? LIMIT 1`,
+      [boardId, guestId]
+    );
+
+    if (!guestRows.length) {
+      return res.status(404).json({ message: 'Гость не найден' });
+    }
+
+    await db.execute(
+      `UPDATE boardguests SET role = ? WHERE board_id = ? AND user_id = ?`,
+      [nextRole, boardId, guestId]
+    );
+
+    try {
+      const io = req.app.get('io');
+      io.to(`user:${guestId}`).emit('boards:updated', { reason: 'role', board_id: boardId });
+    } catch {
+      // ignore
+    }
+
+    return res.status(204).end();
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка изменения роли' });
+  }
+};
+
 exports.leaveBoard = async (req, res) => {
   try {
     const user_id = req.user.id;

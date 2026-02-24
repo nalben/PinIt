@@ -66,6 +66,7 @@ router.get('/friends', boardsController.getFriendsBoards);
   router.get('/:board_id/invite-link', boardsController.getBoardInviteLink);
   router.post('/:board_id/invite-link/regenerate', boardsController.regenerateBoardInviteLink);
   router.delete('/:board_id/guests/:guest_id', boardsController.removeGuestFromBoard);
+  router.patch('/:board_id/guests/:guest_id/role', boardsController.updateGuestRole);
   router.post('/:board_id/leave', boardsController.leaveBoard);
   router.post('/:board_id/join-public', boardsController.joinPublicBoardAsGuest);
 

@@ -90,12 +90,12 @@
 .friendsInvitesBlock{
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
 }
 
 .participantsInnerToggle{
   display: flex;
   width: 100%;
+  margin-bottom: 0.75rem;
   & button{
     width: 100%;
     background-color: transparent;
@@ -156,6 +156,7 @@
   max-height: 220px;
   overflow: auto;
   padding-right: 5px;
+  padding-top: 0.75rem;
   &::-webkit-scrollbar {
     width: 10px;
   }
@@ -185,6 +186,12 @@
   align-items: center;
   gap: 0.5rem;
   min-width: 0;
+  text-decoration: none;
+  color: inherit;
+
+  &:hover{
+    opacity: 0.85;
+  }
 }
 
 .friendAvatar{
@@ -277,6 +284,46 @@
   background-color: var(--grey20);
   border-color: var(--pink);
   color: var(--pink);
+}
+
+.guestActions{
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.roleBtn{
+  border: var(--border);
+  border-color: var(--pink);
+  background-color: transparent;
+  color: var(--pink);
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+  font-family: "Nata Sans", sans-serif;
+  font-size: fluid-prop(16,12,1920,320);
+
+  &:hover{
+    opacity: 0.8;
+  }
+
+  &:disabled{
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.roleDropdownItem{
+  & > button{
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: var(--pink);
+    font-family: "Nata Sans", sans-serif;
+    font-size: fluid-prop(16,12,1920,320);
+    cursor: pointer;
+  }
 }
 
 .friendInviteBtnCancel{
