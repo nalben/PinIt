@@ -11,6 +11,10 @@ import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import BoardSettingsModal from '@/components/boards/boardsettingsmodal/BoardSettingsModal';
 import AuthTrigger from '@/components/auth/AuthTrigger';
+import AuthModal from '@/components/auth/authmodal/AuthModal';
+import LoginForm from '@/components/auth/login/Login';
+import RegisterForm from '@/components/auth/register/Register';
+import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
 import Close from '@/assets/icons/monochrome/back.svg';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
@@ -18,6 +22,9 @@ import Deny from '@/assets/icons/monochrome/deny.svg'
 import Members from '@/assets/icons/monochrome/members.svg';
 
 type BoardParticipantRole = 'owner' | 'guest' | 'editer';
+
+const PENDING_INVITE_LS_KEY = 'pinit_pendingInviteUrl';
+type AuthView = 'login' | 'register' | 'reset';
 
 interface BoardParticipant {
     id: number;
@@ -62,6 +69,8 @@ const Board = () => {
     const openBoardSettingsModal = useUIStore((s) => s.openBoardSettingsModal);
     const closeBoardSettingsModal = useUIStore((s) => s.closeBoardSettingsModal);
     const setBoardSettingsModalParticipantsInnerViewNext = useUIStore((s) => s.setBoardSettingsModalParticipantsInnerViewNext);
+    const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
+    const [forcedAuthView, setForcedAuthView] = useState<AuthView>('login');
 
     const [participantsData, setParticipantsData] = useState<BoardParticipantsResponse | null>(null);
     const [debugParticipantsData, setDebugParticipantsData] = useState<BoardParticipantsResponse | null>(null);
@@ -89,6 +98,143 @@ const Board = () => {
     const isLoggedIn = isInitialized && isAuth;
     const numericBoardId = Number(boardId);
     const hasValidBoardId = Number.isFinite(numericBoardId) && numericBoardId > 0;
+
+    const getPendingInviteUrlForThisBoard = () => {
+        if (!hasValidBoardId) return null;
+
+        let raw: string | null = null;
+        try {
+            raw = localStorage.getItem(PENDING_INVITE_LS_KEY);
+        } catch {
+            raw = null;
+        }
+
+        if (!raw) return null;
+
+        const normalizeToRelative = (value: string) => {
+            const trimmed = value.trim();
+            if (!trimmed) return null;
+            if (trimmed.startsWith('/')) return trimmed;
+            try {
+                const u = new URL(trimmed);
+                return `${u.pathname}${u.search}`;
+            } catch {
+                return null;
+            }
+        };
+
+        const relative = normalizeToRelative(raw);
+        if (!relative) return null;
+
+        try {
+            const u = new URL(relative, window.location.origin);
+            if (u.pathname !== `/spaces/${numericBoardId}`) return null;
+            const invite = u.searchParams.get('invite');
+            if (!invite) return null;
+            return `${u.pathname}${u.search}`;
+        } catch {
+            return null;
+        }
+    };
+
+    const abortInviteAuth = () => {
+        try {
+            localStorage.removeItem(PENDING_INVITE_LS_KEY);
+        } catch {
+            // ignore
+        }
+        setForcedAuthOpen(false);
+        navigate('/spaces', { replace: true });
+    };
+
+    const closeInviteAuthAfterSuccess = () => {
+        setForcedAuthOpen(false);
+    };
+
+    useEffect(() => {
+        if (!hasValidBoardId) return;
+        if (isLoggedIn) {
+            setForcedAuthOpen(false);
+            return;
+        }
+
+        const currentUrl = `${location.pathname}${location.search}`;
+        const pendingUrl = getPendingInviteUrlForThisBoard();
+
+        const tokenFromPendingUrl = (() => {
+            if (!pendingUrl) return null;
+            try {
+                const u = new URL(pendingUrl, window.location.origin);
+                const v = u.searchParams.get('invite');
+                return typeof v === 'string' && v.trim() ? v.trim() : null;
+            } catch {
+                return null;
+            }
+        })();
+
+        const tokenToValidate = inviteToken || tokenFromPendingUrl;
+        if (!tokenToValidate) {
+            if (forcedAuthOpen) setForcedAuthOpen(false);
+            return;
+        }
+
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const { data } = await axiosInstance.get<{ board_id: number }>(`/api/boards/invite-link/resolve`, {
+                    params: { token: tokenToValidate },
+                });
+                if (cancelled) return;
+
+                const resolvedBoardId = Number(data?.board_id);
+                if (!Number.isFinite(resolvedBoardId) || resolvedBoardId <= 0) {
+                    throw new Error('Invalid resolve response');
+                }
+
+                if (resolvedBoardId !== numericBoardId) {
+                    navigate(`/spaces/${resolvedBoardId}?invite=${encodeURIComponent(tokenToValidate)}`, { replace: true });
+                    return;
+                }
+
+                if (inviteToken) {
+                    try {
+                        localStorage.setItem(PENDING_INVITE_LS_KEY, currentUrl);
+                    } catch {
+                        // ignore
+                    }
+                } else if (pendingUrl && pendingUrl !== currentUrl) {
+                    navigate(pendingUrl, { replace: true });
+                    return;
+                }
+
+                if (!forcedAuthOpen) setForcedAuthView('login');
+                setForcedAuthOpen(true);
+            } catch (err: unknown) {
+                if (cancelled) return;
+                const status = (err as { response?: { status?: number } })?.response?.status;
+
+                if (status === 404) {
+                    try {
+                        localStorage.removeItem(PENDING_INVITE_LS_KEY);
+                    } catch {
+                        // ignore
+                    }
+
+                    if (inviteToken) {
+                        navigate('/spaces', { replace: true });
+                    } else {
+                        setForcedAuthOpen(false);
+                    }
+                    return;
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [forcedAuthOpen, hasValidBoardId, inviteToken, isLoggedIn, location.pathname, location.search, navigate, numericBoardId]);
 
     useEffect(() => {
         setLeaveConfirmOpen(false);
@@ -215,15 +361,60 @@ const Board = () => {
         (async () => {
             try {
                 // If token exists, wait for auth bootstrap to decide auth/non-auth flow.
-                if (tokenPresent && !isInitialized) return;
+                if (tokenPresent && !isInitialized) {
+                    if (inviteToken) {
+                        try {
+                            const { data } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/invite-link/preview`, {
+                                params: { token: inviteToken },
+                            });
+                            if (cancelled) return;
+                            if (data && typeof data === 'object') {
+                                const payload = data as Partial<BoardEntity>;
+                                const resolvedId = Number((payload as { board_id?: unknown }).board_id ?? payload.id);
+                                if (Number.isFinite(resolvedId) && resolvedId > 0 && resolvedId !== id) {
+                                    navigate(`/spaces/${resolvedId}?invite=${encodeURIComponent(inviteToken)}`, { replace: true });
+                                    return;
+                                }
+                                setBoardMetaOverride({ ...payload, id });
+                            }
+                        } catch {
+                            // ignore
+                        }
+                    }
+                    return;
+                }
 
                 if (isLoggedIn) {
+                    if (inviteToken) {
+                        try {
+                            const { data } = await axiosInstance.get<{ board_id: number }>(`/api/boards/invite-link/resolve`, {
+                                params: { token: inviteToken },
+                            });
+                            if (cancelled) return;
+
+                            const resolvedBoardId = Number(data?.board_id);
+                            if (Number.isFinite(resolvedBoardId) && resolvedBoardId > 0 && resolvedBoardId !== id) {
+                                navigate(`/spaces/${resolvedBoardId}?invite=${encodeURIComponent(inviteToken)}`, { replace: true });
+                                return;
+                            }
+                        } catch (err: unknown) {
+                            const status = (err as { response?: { status?: number } })?.response?.status;
+                            if (status === 404) {
+                                redirectToSpaces();
+                                return;
+                            }
+                        }
+                    }
+
                     const tryLoadAccessibleBoard = async () => {
                         const { data } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/${id}`);
                         if (cancelled) return null;
                         if (data && typeof data === 'object') {
                             setBoardMetaOverride({ ...data, id });
                             applyAuthBoardPatch(data);
+                            if (inviteToken) {
+                                navigate(`/spaces/${id}`, { replace: true });
+                            }
                             return data;
                         }
                         return null;
@@ -327,10 +518,31 @@ const Board = () => {
 
                 // Non-auth: allow only public
                 try {
+                    const inviteGate = Boolean(inviteToken || getPendingInviteUrlForThisBoard());
+                    if (inviteToken) {
+                        try {
+                            const { data: preview } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/invite-link/preview`, {
+                                params: { token: inviteToken },
+                            });
+                            if (cancelled) return;
+                            if (preview && typeof preview === 'object') {
+                                const payload = preview as Partial<BoardEntity>;
+                                const resolvedId = Number((payload as { board_id?: unknown }).board_id ?? payload.id);
+                                if (Number.isFinite(resolvedId) && resolvedId > 0 && resolvedId !== id) {
+                                    navigate(`/spaces/${resolvedId}?invite=${encodeURIComponent(inviteToken)}`, { replace: true });
+                                    return;
+                                }
+                                setBoardMetaOverride({ ...payload, id });
+                            }
+                        } catch {
+                            // ignore
+                        }
+                    }
+
                     const { data } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/public/${id}`);
                     if (cancelled) return;
                     if (!data || typeof data !== 'object') {
-                        redirectToSpaces();
+                        if (!inviteGate) redirectToSpaces();
                         return;
                     }
 
@@ -372,7 +584,8 @@ const Board = () => {
                         is_public: true,
                     });
                 } catch {
-                    redirectToSpaces();
+                    const inviteGate = Boolean(inviteToken || getPendingInviteUrlForThisBoard());
+                    if (!inviteGate) redirectToSpaces();
                     return;
                 }
             } finally {
@@ -878,6 +1091,34 @@ const Board = () => {
                     initialIsPublic={boardInfo?.isPublic ?? null}
                 />
             ) : null}
+
+            <AuthModal isOpen={forcedAuthOpen && forcedAuthView === 'login'} onClose={abortInviteAuth} closeOnOverlayClick={false}>
+                <div className={classes.invite_auth_hint}>Войдите в аккаунт, чтобы присоединиться к доске</div>
+                <LoginForm
+                    onOpenReset={() => setForcedAuthView('reset')}
+                    onOpenRegister={() => setForcedAuthView('register')}
+                    onClose={closeInviteAuthAfterSuccess}
+                />
+            </AuthModal>
+
+            <AuthModal
+                isOpen={forcedAuthOpen && forcedAuthView === 'register'}
+                onClose={abortInviteAuth}
+                closeOnOverlayClick={false}
+            >
+                <div className={classes.invite_auth_hint}>Войдите в аккаунт, чтобы присоединиться к доске</div>
+                <RegisterForm onClose={closeInviteAuthAfterSuccess} />
+            </AuthModal>
+
+            <AuthModal
+                isOpen={forcedAuthOpen && forcedAuthView === 'reset'}
+                onClose={abortInviteAuth}
+                closeOnOverlayClick={false}
+                onBack={() => setForcedAuthView('login')}
+            >
+                <div className={classes.invite_auth_hint}>Войдите в аккаунт, чтобы присоединиться к доске</div>
+                <ResetPasswordForm onClose={closeInviteAuthAfterSuccess} />
+            </AuthModal>
         </div>
     );
 };

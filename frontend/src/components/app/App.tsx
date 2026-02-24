@@ -1,5 +1,6 @@
 ﻿import React, { useEffect } from 'react';
-import { matchPath, Outlet, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { matchPath, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import classes from './App.module.scss';
 import "@/styles/general.scss";
 import "@/styles/fonts.scss";
@@ -13,6 +14,51 @@ import { useFriendsStore } from '@/store/friendsStore';
 import Appitit from './AppInit'
 import FriendsModal from '@/components/friends/friendsmodal/FriendsModal';
 import CreateBoardModal from '@/components/boards/createboardmodal/CreateBoardModal';
+import { useUIStore } from '@/store/uiStore';
+import AuthModal from '@/components/auth/authmodal/AuthModal';
+import LoginForm from '@/components/auth/login/Login';
+import RegisterForm from '@/components/auth/register/Register';
+import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
+
+const PENDING_INVITE_LS_KEY = 'pinit_pendingInviteUrl';
+
+type AuthView = 'login' | 'register' | 'reset';
+
+const GlobalAuthModals = () => {
+  const authModalOpen = useUIStore((s) => s.authModalOpen);
+  const closeAuthModal = useUIStore((s) => s.closeAuthModal);
+  const [view, setView] = useState<AuthView>('login');
+
+  useEffect(() => {
+    if (!authModalOpen) return;
+    setView('login');
+  }, [authModalOpen]);
+
+  const close = () => {
+    closeAuthModal();
+  };
+
+  return (
+    <>
+      <AuthModal isOpen={authModalOpen && view === 'login'} onClose={close}>
+        <LoginForm onOpenReset={() => setView('reset')} onOpenRegister={() => setView('register')} onClose={close} />
+      </AuthModal>
+
+      <AuthModal isOpen={authModalOpen && view === 'register'} onClose={close} closeOnOverlayClick={false}>
+        <RegisterForm onClose={close} />
+      </AuthModal>
+
+      <AuthModal
+        isOpen={authModalOpen && view === 'reset'}
+        onClose={close}
+        closeOnOverlayClick={false}
+        onBack={() => setView('login')}
+      >
+        <ResetPasswordForm onClose={close} />
+      </AuthModal>
+    </>
+  );
+};
 
 const Root = () => {
   const { addRequest, removeRequest, updateRequestStatus } = useNotificationsStore();
@@ -22,6 +68,8 @@ const Root = () => {
   const isInitialized = useAuthStore(state => state.isInitialized);
   const userId = useAuthStore(state => state.user?.id);
   const location = useLocation();
+  const navigate = useNavigate();
+  const closeAuthModal = useUIStore((s) => s.closeAuthModal);
   const isBoardPage = Boolean(matchPath('/spaces/:boardId', location.pathname));
 
   useEffect(() => {
@@ -76,6 +124,88 @@ const Root = () => {
     };
   }, [addInvite, addRequest, removeInvite, removeRequest, updateRequestStatus, fetchFriends, userId, isAuth, isInitialized]);
 
+  useEffect(() => {
+    if (!isInitialized) return;
+    if (!isAuth) return;
+
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(PENDING_INVITE_LS_KEY);
+    } catch {
+      return;
+    }
+
+    if (!raw) return;
+
+    const normalizeToRelative = (value: string) => {
+      const trimmed = value.trim();
+      if (!trimmed) return null;
+
+      if (trimmed.startsWith('/')) return trimmed;
+
+      try {
+        const u = new URL(trimmed);
+        return `${u.pathname}${u.search}`;
+      } catch {
+        return null;
+      }
+    };
+
+    const relative = normalizeToRelative(raw);
+    if (!relative) {
+      try {
+        localStorage.removeItem(PENDING_INVITE_LS_KEY);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    let parsed: URL | null = null;
+    try {
+      parsed = new URL(relative, window.location.origin);
+    } catch {
+      parsed = null;
+    }
+
+    if (!parsed) {
+      try {
+        localStorage.removeItem(PENDING_INVITE_LS_KEY);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    if (!parsed.pathname.startsWith('/spaces/')) {
+      try {
+        localStorage.removeItem(PENDING_INVITE_LS_KEY);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    const invite = parsed.searchParams.get('invite');
+    if (!invite) {
+      try {
+        localStorage.removeItem(PENDING_INVITE_LS_KEY);
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    try {
+      localStorage.removeItem(PENDING_INVITE_LS_KEY);
+    } catch {
+      // ignore
+    }
+
+    closeAuthModal();
+    navigate(`${parsed.pathname}${parsed.search}`, { replace: true });
+  }, [closeAuthModal, isAuth, isInitialized, navigate]);
+
   return (
     <div className={classes.sitecon}>
       <Appitit />
@@ -85,6 +215,7 @@ const Root = () => {
         <Outlet />
         <CreateBoardModal />
         <FriendsModal />
+        <GlobalAuthModals />
       </main>
     </div>
   );

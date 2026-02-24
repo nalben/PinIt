@@ -1530,3 +1530,78 @@ exports.acceptBoardInviteLink = async (req, res) => {
     connection.release();
   }
 };
+
+exports.resolveBoardInviteLink = async (req, res) => {
+  const token = typeof req.query?.token === 'string' ? req.query.token.trim() : '';
+
+  if (!token) {
+    return res.status(400).json({ message: 'token required' });
+  }
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT bil.board_id
+       FROM board_invite_links bil
+       JOIN boards b ON b.id = bil.board_id
+       WHERE bil.token = ?
+       LIMIT 1`,
+      [token]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Invite link not found' });
+    }
+
+    const board_id = Number(rows[0].board_id);
+    if (!Number.isFinite(board_id) || board_id <= 0) {
+      return res.status(404).json({ message: 'Invite link not found' });
+    }
+
+    return res.status(200).json({ board_id });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.previewBoardInviteLink = async (req, res) => {
+  const token = typeof req.query?.token === 'string' ? req.query.token.trim() : '';
+
+  if (!token) {
+    return res.status(400).json({ message: 'token required' });
+  }
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT b.id, b.title, b.description, b.image, b.created_at, b.is_public
+       FROM board_invite_links bil
+       JOIN boards b ON b.id = bil.board_id
+       WHERE bil.token = ?
+       LIMIT 1`,
+      [token]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Invite link not found' });
+    }
+
+    const row = rows[0];
+    const board_id = Number(row.id);
+    if (!Number.isFinite(board_id) || board_id <= 0) {
+      return res.status(404).json({ message: 'Invite link not found' });
+    }
+
+    return res.status(200).json({
+      id: board_id,
+      board_id,
+      title: row.title,
+      description: row.description ?? null,
+      image: row.image ?? null,
+      created_at: row.created_at,
+      is_public: row.is_public,
+    });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};

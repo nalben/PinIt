@@ -45,6 +45,8 @@ const maybeUploadSingleImage = (req, res, next) => {
 // Public routes (no auth)
 router.get('/public/popular', boardsController.getPopularPublicBoards);
 router.get('/public/:board_id', boardsController.getPublicBoardById);
+router.get('/invite-link/resolve', boardsController.resolveBoardInviteLink);
+router.get('/invite-link/preview', boardsController.previewBoardInviteLink);
 
 // All routes below require auth
 router.use(authMiddleware);

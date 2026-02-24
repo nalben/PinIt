@@ -326,6 +326,13 @@
     }
 }
 
+.invite_auth_hint{
+    font-size: 18px;
+    font-weight: 600;
+    text-wrap: balance;
+    margin-bottom: 12px;
+}
+
 .participant_role_item{
     & > button{
         width: 100%;

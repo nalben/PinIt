@@ -1094,6 +1094,10 @@ These points are confirmed from current repository code and override any older c
   - `POST /api/boards/:board_id/join-public` — if `is_public=1` and user is not owner/guest, inserts into `boardguests` as `role='guest'` (idempotent).
 - Invite-link join endpoint exists and is authenticated:
   - `POST /api/boards/invite-link/accept` — body `{ token }`, inserts into `boardguests` as `role='guest'` for the linked board (idempotent).
+- Public invite-link resolve endpoint exists:
+  - `GET /api/boards/invite-link/resolve?token=<token>` — returns `{ board_id }` if token exists, иначе 404.
+- Public invite-link preview endpoint exists:
+  - `GET /api/boards/invite-link/preview?token=<token>` — returns board meta (`id`, `title`, `description`, `image`, `created_at`, `is_public`) if token exists, иначе 404.
 - Owner-only invite management endpoints exist and are authenticated:
   - `GET /api/boards/:board_id/invites/outgoing` — outgoing invites for the board with `status IN ('sent','rejected')`.
   - `DELETE /api/boards/:board_id/invites/:invite_id` — cancels a pending invite by deleting it and emits `board_invite:removed` to invited user.
