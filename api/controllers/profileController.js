@@ -116,7 +116,7 @@ exports.getMe = async (req, res) => {
 exports.generateFriendCode = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'РќРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ' });
+    if (!token) return res.status(401).json({ message: 'Не авторизован' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     const userId = decoded.id;
@@ -127,7 +127,7 @@ exports.generateFriendCode = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(404).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+      return res.status(404).json({ message: 'Пользователь не найден' });
     }
 
     if (rows[0].friend_code) {
@@ -157,14 +157,14 @@ exports.generateFriendCode = async (req, res) => {
       } catch (err) {
         if (err?.code === 'ER_DUP_ENTRY' || err?.errno === 1062) continue;
         console.error(err);
-        return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
+        return res.status(500).json({ message: 'Ошибка сервера' });
       }
     }
 
-    return res.status(500).json({ message: 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РєРѕРґ' });
+    return res.status(500).json({ message: 'Не удалось сгенерировать код' });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
+    return res.status(500).json({ message: 'Ошибка сервера' });
   }
 };
 
@@ -174,7 +174,7 @@ exports.generateFriendCode = async (req, res) => {
 exports.regenerateFriendCode = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'РќРµ Р°РІС‚РѕСЂРёР·РѕРІР°РЅ' });
+    if (!token) return res.status(401).json({ message: 'Не авторизован' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     const userId = decoded.id;
@@ -185,7 +185,7 @@ exports.regenerateFriendCode = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(404).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+      return res.status(404).json({ message: 'Пользователь не найден' });
     }
 
     const currentCode = rows[0].friend_code;
@@ -204,14 +204,14 @@ exports.regenerateFriendCode = async (req, res) => {
       } catch (err) {
         if (err?.code === 'ER_DUP_ENTRY' || err?.errno === 1062) continue;
         console.error(err);
-        return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
+        return res.status(500).json({ message: 'Ошибка сервера' });
       }
     }
 
-    return res.status(500).json({ message: 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ РєРѕРґ' });
+    return res.status(500).json({ message: 'Не удалось сгенерировать код' });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРµСЂРІРµСЂР°' });
+    return res.status(500).json({ message: 'Ошибка сервера' });
   }
 };
 

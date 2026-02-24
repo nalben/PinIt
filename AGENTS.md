@@ -1090,16 +1090,40 @@ These points are confirmed from current repository code and override any older c
 - Public board endpoints do not add the viewer into `boardguests` (no implicit "become a guest" on open).
 - Authenticated join endpoint exists for public boards:
   - `POST /api/boards/:board_id/join-public` — if `is_public=1` and user is not owner/guest, inserts into `boardguests` as `role='guest'` (idempotent).
+- Invite-link join endpoint exists and is authenticated:
+  - `POST /api/boards/invite-link/accept` — body `{ token }`, inserts into `boardguests` as `role='guest'` for the linked board (idempotent).
+- Owner-only invite management endpoints exist and are authenticated:
+  - `GET /api/boards/:board_id/invites/outgoing` — outgoing invites for the board with `status IN ('sent','rejected')`.
+  - `DELETE /api/boards/:board_id/invites/:invite_id` — cancels a pending invite by deleting it and emits `board_invite:removed` to invited user.
+  - `GET /api/boards/:board_id/invite-link` — returns existing invite-link token (creates it if missing).
+  - `POST /api/boards/:board_id/invite-link/regenerate` — regenerates invite-link token.
+- Incoming invite workflow endpoints exist and are authenticated:
+  - `PUT /api/boards/invites/accept/:invite_id` — adds user to `boardguests` and deletes the invite row, emits `board_invite:removed`.
+  - `PUT /api/boards/invites/reject/:invite_id` — sets invite `status='rejected'` and emits `board_invite:removed`.
+- API now depends on DB table `board_invite_links` for invite-link tokens.
 - Board participants endpoint exists and is authenticated:
   - `GET /api/boards/:board_id/participants` — returns `my_role` and participants (owner + guests from `boardguests`).
 - Board public toggle endpoint exists and is authenticated (owner-only):
   - `PATCH /api/boards/:board_id/public` — updates `boards.is_public`.
 - `GET /api/boards/:board_id` includes `is_public` in its response.
 - `frontend/src/pages/board/Board.tsx`:
-  - For auth users: sends `POST /api/boards/:id/visit`, then reloads boards store.
+  - Access/redirect logic:
+    - Non-auth users are redirected to `/spaces` unless `GET /api/boards/public/:id` succeeds.
+    - Auth users first try `GET /api/boards/:id`; if no access, they try `GET /api/boards/public/:id` and (if public) join via `POST /api/boards/:id/join-public`, then retry `GET /api/boards/:id`.
+    - Auth users with `?invite=<token>`: when `GET /api/boards/:id` fails with 403/404, it tries `POST /api/boards/invite-link/accept` first, then retries `GET /api/boards/:id` before public fallback.
+  - For accessible auth boards: sends `POST /api/boards/:id/visit`, then reloads boards store.
   - Loads participants for board menu via `GET /api/boards/:id/participants`.
-  - For guests: persists recent public board info into localStorage key `pinit_recentBoards`.
+  - For non-auth users: persists recent public board info into localStorage key `pinit_recentBoards`.
 - `frontend/src/components/flow/FlowBoard.tsx` is currently a placeholder with empty `nodes`/`edges`.
+
+6. Frontend UI components (current code)
+
+- `frontend/src/components/_UI/dropdownwrapper/DropdownWrapper.tsx`:
+  - Supports `up` (menu renders above trigger) and `upDel` (menu above with tighter `bottom` offset) variants.
+- `frontend/src/components/boards/boardsettingsmodal/BoardSettingsModal.tsx`:
+  - Owner can edit board image/title/description and toggle `is_public`.
+  - Owner can delete a board via `DELETE /api/boards/:id` with confirmation dropdown.
+  - Participants tab supports inviting friends and managing an invite-link token.
 
 6. API URL / environment behavior (current code)
 

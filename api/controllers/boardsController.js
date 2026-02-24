@@ -1,6 +1,7 @@
 const db = require('../db');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const isUploadPath = p => typeof p === 'string' && p.startsWith('/uploads/');
 
@@ -18,7 +19,9 @@ const safeUnlinkUpload = async uploadPath => {
   }
 };
 
-/* РџРѕР»СѓС‡РёС‚СЊ РІСЃРµ РґРѕСЃРєРё С‚РµРєСѓС‰РµРіРѕ СЋР·РµСЂР° */
+const generateInviteToken = () => crypto.randomBytes(24).toString('hex');
+
+/* Получить все доски текущего пользователя */
 exports.getMyBoards = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -34,12 +37,12 @@ exports.getMyBoards = async (req, res) => {
     return res.status(200).json(boards);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ РґРѕСЃРѕРє' });
+    return res.status(500).json({ message: 'Ошибка получения досок' });
   }
 };
 
 
-/* РџРѕР»СѓС‡РёС‚СЊ РІСЃРµ РґРѕСЃРєРё, РіРґРµ СЋР·РµСЂ РіРѕСЃС‚СЊ */
+/* Получить все доски, где пользователь гость */
 exports.getGuestBoards = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -59,7 +62,7 @@ exports.getGuestBoards = async (req, res) => {
     return res.status(200).json(boards);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ РіРѕСЃС‚РµРІС‹С… РґРѕСЃРѕРє' });
+    return res.status(500).json({ message: 'Ошибка получения гостевых досок' });
   }
 };
 
@@ -143,7 +146,7 @@ exports.getPublicBoardById = async (req, res) => {
   }
 };
 
-/* РџРѕСЃР»РµРґРЅРёРµ РїРѕСЃРµС‰С‘РЅРЅС‹Рµ РґРѕСЃРєРё */
+/* Последние посещённые доски */
 exports.getRecentBoards = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -169,13 +172,13 @@ exports.getRecentBoards = async (req, res) => {
     return res.status(200).json(boards);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ РїРѕСЃР»РµРґРЅРёС… РґРѕСЃРѕРє' });
+    return res.status(500).json({ message: 'Ошибка получения последних досок' });
   }
 };
 
 
 
-/* РЎРѕР·РґР°С‚СЊ РґРѕСЃРєСѓ */
+/* Создать доску */
 exports.createBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -193,19 +196,19 @@ exports.createBoard = async (req, res) => {
 
     if (!title) {
       if (req.file) await safeUnlinkUpload(image);
-      return res.status(400).json({ message: 'РќР°Р·РІР°РЅРёРµ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ' });
+      return res.status(400).json({ message: 'Название обязательно' });
     }
     if (title.length > 20) {
       if (req.file) await safeUnlinkUpload(image);
-      return res.status(400).json({ message: 'РќР°Р·РІР°РЅРёРµ СЃР»РёС€РєРѕРј РґР»РёРЅРЅРѕРµ (max 20)' });
+      return res.status(400).json({ message: 'Название слишком длинное (max 20)' });
     }
     if (description && description.length > 80) {
       if (req.file) await safeUnlinkUpload(image);
-      return res.status(400).json({ message: 'РћРїРёСЃР°РЅРёРµ СЃР»РёС€РєРѕРј РґР»РёРЅРЅРѕРµ (max 80)' });
+      return res.status(400).json({ message: 'Описание слишком длинное (max 80)' });
     }
     if (image && image.length > 255) {
       if (req.file) await safeUnlinkUpload(image);
-      return res.status(400).json({ message: 'РЎР»РёС€РєРѕРј РґР»РёРЅРЅС‹Р№ РїСѓС‚СЊ Рє РєР°СЂС‚РёРЅРєРµ (max 255)' });
+      return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
     }
 
     const connection = await db.getConnection();
@@ -247,12 +250,12 @@ exports.createBoard = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ РґРѕСЃРєРё' });
+    return res.status(500).json({ message: 'Ошибка создания доски' });
   }
 };
 
 
-/* РЈРґР°Р»РёС‚СЊ РґРѕСЃРєСѓ */
+/* Удалить доску */
 exports.deleteBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -269,7 +272,7 @@ exports.deleteBoard = async (req, res) => {
 
       if (!boardRows.length) {
         await connection.rollback();
-        return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+        return res.status(404).json({ message: 'Доска не найдена' });
       }
 
       const boardImage = boardRows[0]?.image ?? null;
@@ -304,7 +307,7 @@ exports.deleteBoard = async (req, res) => {
 
       if (result.affectedRows === 0) {
         await connection.rollback();
-        return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+        return res.status(404).json({ message: 'Доска не найдена' });
       }
 
       await connection.commit();
@@ -313,18 +316,18 @@ exports.deleteBoard = async (req, res) => {
         safeUnlinkUpload(boardImage);
       }
 
-      return res.status(200).json({ message: 'Р”РѕСЃРєР° СѓРґР°Р»РµРЅР°' });
+      return res.status(200).json({ message: 'Доска удалена' });
     } finally {
       connection.release();
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ РґРѕСЃРєРё' });
+    return res.status(500).json({ message: 'Ошибка удаления доски' });
   }
 };
 
 
-/* РџРµСЂРµРёРјРµРЅРѕРІР°С‚СЊ РґРѕСЃРєСѓ */
+/* Переименовать доску */
 exports.renameBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -332,10 +335,10 @@ exports.renameBoard = async (req, res) => {
     const title = String(req.body?.title ?? '').trim();
 
     if (!title) {
-      return res.status(400).json({ message: 'РќР°Р·РІР°РЅРёРµ РѕР±СЏР·Р°С‚РµР»СЊРЅРѕ' });
+      return res.status(400).json({ message: 'Название обязательно' });
     }
     if (title.length > 20) {
-      return res.status(400).json({ message: 'РќР°Р·РІР°РЅРёРµ СЃР»РёС€РєРѕРј РґР»РёРЅРЅРѕРµ (max 20)' });
+      return res.status(400).json({ message: 'Название слишком длинное (max 20)' });
     }
 
     const [result] = await db.execute(
@@ -345,18 +348,18 @@ exports.renameBoard = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Доска не найдена' });
     }
 
     return res.status(200).json({ title });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РїРµСЂРµРёРјРµРЅРѕРІР°РЅРёСЏ' });
+    return res.status(500).json({ message: 'Ошибка переименования' });
   }
 };
 
 
-/* РР·РјРµРЅРёС‚СЊ РѕРїРёСЃР°РЅРёРµ */
+/* Изменить описание */
 exports.updateDescription = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -370,7 +373,7 @@ exports.updateDescription = async (req, res) => {
           : (String(descriptionRaw ?? '').trim() || null);
 
     if (description && description.length > 80) {
-      return res.status(400).json({ message: 'РћРїРёСЃР°РЅРёРµ СЃР»РёС€РєРѕРј РґР»РёРЅРЅРѕРµ (max 80)' });
+      return res.status(400).json({ message: 'Описание слишком длинное (max 80)' });
     }
 
     const [result] = await db.execute(
@@ -380,13 +383,13 @@ exports.updateDescription = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Доска не найдена' });
     }
 
     return res.status(200).json({ description });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ РѕРїРёСЃР°РЅРёСЏ' });
+    return res.status(500).json({ message: 'Ошибка обновления описания' });
   }
 };
 
@@ -484,7 +487,7 @@ exports.joinPublicBoardAsGuest = async (req, res) => {
 };
 
 
-/* РР·РјРµРЅРёС‚СЊ РєР°СЂС‚РёРЅРєСѓ */
+/* Изменить картинку */
 exports.updateBoardImage = async (req, res) => {
   let newImage = null;
 
@@ -499,12 +502,12 @@ exports.updateBoardImage = async (req, res) => {
     } else if (req.body?.image === null) {
       newImage = null;
     } else {
-      return res.status(400).json({ message: 'РљР°СЂС‚РёРЅРєР° РѕР±СЏР·Р°С‚РµР»СЊРЅР°' });
+      return res.status(400).json({ message: 'Картинка обязательна' });
     }
 
     if (newImage && newImage.length > 255) {
       if (req.file) await safeUnlinkUpload(newImage);
-      return res.status(400).json({ message: 'РЎР»РёС€РєРѕРј РґР»РёРЅРЅС‹Р№ РїСѓС‚СЊ Рє РєР°СЂС‚РёРЅРєРµ (max 255)' });
+      return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
     }
 
     const [rows] = await db.execute(
@@ -516,7 +519,7 @@ exports.updateBoardImage = async (req, res) => {
 
     if (!rows.length) {
       if (req.file) await safeUnlinkUpload(newImage);
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Доска не найдена' });
     }
 
     const oldImage = rows[0]?.image ?? null;
@@ -537,19 +540,19 @@ exports.updateBoardImage = async (req, res) => {
       await safeUnlinkUpload(newImage);
     }
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ РєР°СЂС‚РёРЅРєРё' });
+    return res.status(500).json({ message: 'Ошибка обновления картинки' });
   }
 };
 
 
-/* РџСЂРёРіР»Р°СЃРёС‚СЊ РІ РґРѕСЃРєСѓ РїРѕ username/friend_code (С‚РѕР»СЊРєРѕ РІР»Р°РґРµР»РµС†) */
+/* Пригласить в доску по username/friend_code (только владелец) */
 exports.inviteToBoard = async (req, res) => {
   try {
     const inviter_id = req.user.id;
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(boardId)) {
-      return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ board_id' });
+      return res.status(400).json({ message: 'Некорректный board_id' });
     }
 
     const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
@@ -559,7 +562,7 @@ exports.inviteToBoard = async (req, res) => {
       return res.status(400).json({ message: 'РќСѓР¶РµРЅ username РёР»Рё friend_code' });
     }
     if (username && friend_code) {
-      return res.status(400).json({ message: 'РЈРєР°Р¶Рё С‚РѕР»СЊРєРѕ РѕРґРЅРѕ: username РёР»Рё friend_code' });
+      return res.status(400).json({ message: 'Укажи только одно: username или friend_code' });
     }
 
     const [boardRows] = await db.execute(
@@ -571,12 +574,12 @@ exports.inviteToBoard = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Доска не найдена' });
     }
 
     const boardOwnerId = boardRows[0].owner_id;
     if (boardOwnerId !== inviter_id) {
-      return res.status(403).json({ message: 'РўРѕР»СЊРєРѕ РІР»Р°РґРµР»РµС† РјРѕР¶РµС‚ РїСЂРёРіР»Р°С€Р°С‚СЊ' });
+      return res.status(403).json({ message: 'Только владелец может приглашать' });
     }
 
     let invited_id = null;
@@ -588,13 +591,13 @@ exports.inviteToBoard = async (req, res) => {
       );
 
       if (!userRows.length) {
-        return res.status(404).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+        return res.status(404).json({ message: 'Пользователь не найден' });
       }
 
       invited_id = userRows[0].id;
     } else {
       if (!/^\d{8}$/.test(friend_code)) {
-        return res.status(400).json({ message: 'РќРµРІРµСЂРЅС‹Р№ friend_code' });
+        return res.status(400).json({ message: 'Неверный friend_code' });
       }
 
       const [userRows] = await db.execute(
@@ -603,18 +606,18 @@ exports.inviteToBoard = async (req, res) => {
       );
 
       if (!userRows.length) {
-        return res.status(404).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+        return res.status(404).json({ message: 'Пользователь не найден' });
       }
 
       invited_id = userRows[0].id;
     }
 
     if (invited_id === inviter_id) {
-      return res.status(400).json({ message: 'РќРµР»СЊР·СЏ РїСЂРёРіР»Р°СЃРёС‚СЊ СЃРµР±СЏ' });
+      return res.status(400).json({ message: 'Нельзя пригласить себя' });
     }
 
     if (invited_id === boardOwnerId) {
-      return res.status(400).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СѓР¶Рµ РІР»Р°РґРµР»РµС† СЌС‚РѕР№ РґРѕСЃРєРё' });
+      return res.status(400).json({ message: 'Пользователь уже владелец этой доски' });
     }
 
     const [guestRows] = await db.execute(
@@ -623,19 +626,26 @@ exports.inviteToBoard = async (req, res) => {
     );
 
     if (guestRows.length) {
-      return res.status(409).json({ message: 'РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СѓР¶Рµ РіРѕСЃС‚СЊ СЌС‚РѕР№ РґРѕСЃРєРё' });
+      return res.status(409).json({ message: 'Пользователь уже гость этой доски' });
     }
 
     const [existingInvites] = await db.execute(
-      `SELECT id
+      `SELECT id, status
        FROM board_invites
-       WHERE board_id = ? AND invited_id = ? AND status = 'sent'
+       WHERE board_id = ? AND invited_id = ? AND status IN ('sent', 'rejected')
+       ORDER BY FIELD(status, 'sent', 'rejected')
        LIMIT 1`,
       [boardId, invited_id]
     );
 
     if (existingInvites.length) {
-      return res.status(409).json({ message: 'РџСЂРёРіР»Р°С€РµРЅРёРµ СѓР¶Рµ РѕС‚РїСЂР°РІР»РµРЅРѕ', invite_id: existingInvites[0].id });
+      const existing = existingInvites[0];
+      if (existing.status === 'sent') {
+        return res.status(409).json({ message: 'Приглашение уже отправлено', invite_id: existing.id, status: 'sent' });
+      }
+      if (existing.status === 'rejected') {
+        return res.status(409).json({ message: 'Пользователь отклонил приглашение', invite_id: existing.id, status: 'rejected' });
+      }
     }
 
     const [result] = await db.execute(
@@ -677,12 +687,12 @@ exports.inviteToBoard = async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РѕС‚РїСЂР°РІРєРё РїСЂРёРіР»Р°С€РµРЅРёСЏ' });
+    return res.status(500).json({ message: 'Ошибка отправки приглашения' });
   }
 };
 
 
-/* РЈРґР°Р»РёС‚СЊ РіРѕСЃС‚СЏ РёР· РґРѕСЃРєРё (С‚РѕР»СЊРєРѕ РІР»Р°РґРµР»РµС†) */
+/* Удалить гостя из доски (только владелец) */
 exports.removeGuestFromBoard = async (req, res) => {
   try {
     const owner_id = req.user.id;
@@ -690,7 +700,7 @@ exports.removeGuestFromBoard = async (req, res) => {
     const guestId = Number(req.params?.guest_id);
 
     if (!Number.isFinite(boardId) || !Number.isFinite(guestId)) {
-      return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹' });
+      return res.status(400).json({ message: 'Некорректные параметры' });
     }
 
     const [boardRows] = await db.execute(
@@ -699,15 +709,15 @@ exports.removeGuestFromBoard = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Доска не найдена' });
     }
 
     if (boardRows[0].owner_id !== owner_id) {
-      return res.status(403).json({ message: 'РўРѕР»СЊРєРѕ РІР»Р°РґРµР»РµС† РјРѕР¶РµС‚ СѓРґР°Р»СЏС‚СЊ РіРѕСЃС‚РµР№' });
+      return res.status(403).json({ message: 'Только владелец может удалять гостей' });
     }
 
     if (guestId === owner_id) {
-      return res.status(400).json({ message: 'РќРµР»СЊР·СЏ СѓРґР°Р»РёС‚СЊ РІР»Р°РґРµР»СЊС†Р°' });
+      return res.status(400).json({ message: 'Нельзя удалить владельца' });
     }
 
     const [result] = await db.execute(
@@ -721,8 +731,15 @@ exports.removeGuestFromBoard = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Р“РѕСЃС‚СЊ РЅРµ РЅР°Р№РґРµРЅ' });
+      return res.status(404).json({ message: 'Гость не найден' });
     }
+
+    await db.execute(
+      `DELETE FROM board_invites
+       WHERE board_id = ? AND invited_id = ? AND status != 'rejected'`,
+      [boardId, guestId]
+    );
+
     try {
       const io = req.app.get('io');
       io.to(`user:${guestId}`).emit('boards:updated', { reason: 'removed', board_id: boardId });
@@ -730,22 +747,22 @@ exports.removeGuestFromBoard = async (req, res) => {
       // ignore
     }
 
-    return res.status(200).json({ message: 'Р“РѕСЃС‚СЊ СѓРґР°Р»С‘РЅ' });
+    return res.status(200).json({ message: 'Гость удалён' });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ РіРѕСЃС‚СЏ' });
+    return res.status(500).json({ message: 'Ошибка удаления гостя' });
   }
 };
 
 
-/* РџРѕРєРёРЅСѓС‚СЊ РґРѕСЃРєСѓ (РґР»СЏ РіРѕСЃС‚СЏ) */
+/* Покинуть доску (для гостя) */
 exports.leaveBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(boardId)) {
-      return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ board_id' });
+      return res.status(400).json({ message: 'Некорректный board_id' });
     }
 
     const [boardRows] = await db.execute(
@@ -754,11 +771,11 @@ exports.leaveBoard = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Доска не найдена' });
     }
 
     if (boardRows[0].owner_id === user_id) {
-      return res.status(400).json({ message: 'Р’Р»Р°РґРµР»РµС† РЅРµ РјРѕР¶РµС‚ РїРѕРєРёРЅСѓС‚СЊ РґРѕСЃРєСѓ' });
+      return res.status(400).json({ message: 'Владелец не может покинуть доску' });
     }
 
     const [result] = await db.execute(
@@ -784,12 +801,12 @@ exports.leaveBoard = async (req, res) => {
     return res.status(204).end();
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РІС‹С…РѕРґР° РёР· РґРѕСЃРєРё' });
+    return res.status(500).json({ message: 'Ошибка выхода из доски' });
   }
 };
 
 
-/* Р—Р°С„РёРєСЃРёСЂРѕРІР°С‚СЊ РїРѕСЃРµС‰РµРЅРёРµ РґРѕСЃРєРё */
+/* Зафиксировать посещение доски */
 exports.visitBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -805,7 +822,7 @@ exports.visitBoard = async (req, res) => {
     return res.status(204).end();
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° С„РёРєСЃР°С†РёРё РїРѕСЃРµС‰РµРЅРёСЏ' });
+    return res.status(500).json({ message: 'Ошибка фиксации посещения' });
   }
 };
 
@@ -831,18 +848,18 @@ exports.getBoardById = async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
-    }
+    return res.status(404).json({ message: 'Доска не найдена' });
+  }
 
     return res.status(200).json(rows[0]);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ РґРѕСЃРєРё' });
+    return res.status(500).json({ message: 'Ошибка получения доски' });
   }
 };
 
 
-/* РџРѕР»СѓС‡РёС‚СЊ РІСЃРµ РґР°РЅРЅС‹Рµ РґРѕСЃРєРё */
+/* Получить все данные доски */
 /* Participants list (owner + guests) */
 exports.getBoardParticipants = async (req, res) => {
   try {
@@ -938,7 +955,7 @@ exports.getBoardFull = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Доска не найдена' });
     }
 
     const board = boardRows[0];
@@ -1037,12 +1054,12 @@ exports.getBoardFull = async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РїРѕР»СѓС‡РµРЅРёСЏ РґР°РЅРЅС‹С… РґРѕСЃРєРё' });
+    return res.status(500).json({ message: 'Ошибка получения данных доски' });
   }
 };
 
 
-/* РџСЂРёРіР»Р°С€РµРЅРёСЏ РІ РґРѕСЃРєРё (РІС…РѕРґСЏС‰РёРµ) */
+/* Приглашения в доски (входящие) */
 exports.getIncomingBoardInvites = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -1062,7 +1079,7 @@ exports.getIncomingBoardInvites = async (req, res) => {
     return res.status(200).json(invites);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Р С›РЎв‚¬Р С‘Р В±Р С”Р В° Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С‘РЎРЏ Р С—РЎР‚Р С‘Р С–Р В»Р В°РЎв‚¬Р ВµР Р…Р С‘Р в„–' });
+    return res.status(500).json({ message: 'Ошибка получения приглашений' });
   }
 };
 
@@ -1083,17 +1100,10 @@ exports.acceptBoardInvite = async (req, res) => {
 
     if (!rows.length) {
       await connection.rollback();
-      return res.status(404).json({ message: 'РџСЂРёРіР»Р°С€РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' });
+      return res.status(404).json({ message: 'Приглашение не найдено' });
     }
 
     const board_id = rows[0].board_id;
-
-    await connection.execute(
-      `UPDATE board_invites
-       SET status = 'accepted'
-       WHERE id = ?`,
-      [invite_id]
-    );
 
     const [existing] = await connection.execute(
       `SELECT 1 FROM boardguests
@@ -1110,6 +1120,12 @@ exports.acceptBoardInvite = async (req, res) => {
       );
     }
 
+    await connection.execute(
+      `DELETE FROM board_invites
+       WHERE id = ? AND invited_id = ?`,
+      [invite_id, invited_id]
+    );
+
     await connection.commit();
     try {
       const io = req.app.get('io');
@@ -1118,7 +1134,7 @@ exports.acceptBoardInvite = async (req, res) => {
     } catch {
       // ignore
     }
-    return res.status(200).json({ message: 'РџСЂРёРіР»Р°С€РµРЅРёРµ РїСЂРёРЅСЏС‚Рѕ' });
+    return res.status(200).json({ message: 'Приглашение принято' });
   } catch (e) {
     try {
       await connection.rollback();
@@ -1126,7 +1142,7 @@ exports.acceptBoardInvite = async (req, res) => {
       // ignore
     }
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РїСЂРёРЅСЏС‚РёСЏ РїСЂРёРіР»Р°С€РµРЅРёСЏ' });
+    return res.status(500).json({ message: 'Ошибка принятия приглашения' });
   } finally {
     connection.release();
   }
@@ -1145,7 +1161,7 @@ exports.rejectBoardInvite = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(404).json({ message: 'РџСЂРёРіР»Р°С€РµРЅРёРµ РЅРµ РЅР°Р№РґРµРЅРѕ' });
+      return res.status(404).json({ message: 'Приглашение не найдено' });
     }
 
     await db.execute(
@@ -1162,10 +1178,294 @@ exports.rejectBoardInvite = async (req, res) => {
       // ignore
     }
 
-    return res.status(200).json({ message: 'РџСЂРёРіР»Р°С€РµРЅРёРµ РѕС‚РєР»РѕРЅРµРЅРѕ' });
+    return res.status(200).json({ message: 'Приглашение отклонено' });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РѕС‚РєР»РѕРЅРµРЅРёСЏ РїСЂРёРіР»Р°С€РµРЅРёСЏ' });
+    return res.status(500).json({ message: 'Ошибка отклонения приглашения' });
   }
 };
 
+
+exports.getOutgoingBoardInvites = async (req, res) => {
+  try {
+    const owner_id = req.user.id;
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(boardId)) {
+      return res.status(400).json({ message: 'Invalid board_id' });
+    }
+
+    const [boardRows] = await db.execute(
+      `SELECT owner_id FROM boards WHERE id = ? LIMIT 1`,
+      [boardId]
+    );
+
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
+
+    if (Number(boardRows[0].owner_id) !== owner_id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const [invites] = await db.execute(
+      `SELECT id, invited_id, status, created_at
+       FROM board_invites
+       WHERE board_id = ? AND status IN ('sent', 'rejected')
+       ORDER BY created_at DESC`,
+      [boardId]
+    );
+
+    return res.status(200).json(Array.isArray(invites) ? invites : []);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+exports.cancelBoardInvite = async (req, res) => {
+  try {
+    const owner_id = req.user.id;
+    const boardId = Number(req.params?.board_id);
+    const inviteId = Number(req.params?.invite_id);
+
+    if (!Number.isFinite(boardId) || !Number.isFinite(inviteId)) {
+      return res.status(400).json({ message: 'Invalid params' });
+    }
+
+    const [boardRows] = await db.execute(
+      `SELECT owner_id FROM boards WHERE id = ? LIMIT 1`,
+      [boardId]
+    );
+
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
+
+    if (Number(boardRows[0].owner_id) !== owner_id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT invited_id, status
+       FROM board_invites
+       WHERE id = ? AND board_id = ?
+       LIMIT 1`,
+      [inviteId, boardId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Invite not found' });
+    }
+
+    if (rows[0].status !== 'sent') {
+      return res.status(409).json({ message: 'Invite is not active' });
+    }
+
+    await db.execute(
+      `DELETE FROM board_invites
+       WHERE id = ?`,
+      [inviteId]
+    );
+
+    try {
+      const io = req.app.get('io');
+      io.to(`user:${Number(rows[0].invited_id)}`).emit('board_invite:removed', { id: inviteId });
+    } catch {
+      // ignore
+    }
+
+    return res.status(200).json({ message: 'OK' });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+exports.getBoardInviteLink = async (req, res) => {
+  try {
+    const owner_id = req.user.id;
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(boardId)) {
+      return res.status(400).json({ message: 'Invalid board_id' });
+    }
+
+    const [boardRows] = await db.execute(
+      `SELECT owner_id FROM boards WHERE id = ? LIMIT 1`,
+      [boardId]
+    );
+
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
+
+    if (Number(boardRows[0].owner_id) !== owner_id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT token, updated_at
+       FROM board_invite_links
+       WHERE board_id = ?
+       LIMIT 1`,
+      [boardId]
+    );
+
+    if (rows.length) {
+      return res.status(200).json({ token: rows[0].token, updated_at: rows[0].updated_at });
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = generateInviteToken();
+      try {
+        await db.execute(
+          `INSERT INTO board_invite_links (board_id, token, created_by)
+           VALUES (?, ?, ?)`,
+          [boardId, token, owner_id]
+        );
+        return res.status(201).json({ token });
+      } catch (e) {
+        if (e && e.code === 'ER_DUP_ENTRY') continue;
+        throw e;
+      }
+    }
+
+    return res.status(500).json({ message: 'Token generation failed' });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+exports.regenerateBoardInviteLink = async (req, res) => {
+  try {
+    const owner_id = req.user.id;
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(boardId)) {
+      return res.status(400).json({ message: 'Invalid board_id' });
+    }
+
+    const [boardRows] = await db.execute(
+      `SELECT owner_id FROM boards WHERE id = ? LIMIT 1`,
+      [boardId]
+    );
+
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
+
+    if (Number(boardRows[0].owner_id) !== owner_id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const [existing] = await db.execute(
+      `SELECT 1 FROM board_invite_links WHERE board_id = ? LIMIT 1`,
+      [boardId]
+    );
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const token = generateInviteToken();
+      try {
+        if (existing.length) {
+          await db.execute(
+            `UPDATE board_invite_links
+             SET token = ?, created_by = ?
+             WHERE board_id = ?`,
+            [token, owner_id, boardId]
+          );
+        } else {
+          await db.execute(
+            `INSERT INTO board_invite_links (board_id, token, created_by)
+             VALUES (?, ?, ?)`,
+            [boardId, token, owner_id]
+          );
+        }
+
+        return res.status(200).json({ token });
+      } catch (e) {
+        if (e && e.code === 'ER_DUP_ENTRY') continue;
+        throw e;
+      }
+    }
+
+    return res.status(500).json({ message: 'Token generation failed' });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
+exports.acceptBoardInviteLink = async (req, res) => {
+  const user_id = req.user.id;
+  const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
+
+  if (!token) {
+    return res.status(400).json({ message: 'token required' });
+  }
+
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const [rows] = await connection.execute(
+      `SELECT bil.board_id, b.owner_id
+       FROM board_invite_links bil
+       JOIN boards b ON b.id = bil.board_id
+       WHERE bil.token = ?
+       LIMIT 1`,
+      [token]
+    );
+
+    if (!rows.length) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Invite link not found' });
+    }
+
+    const board_id = Number(rows[0].board_id);
+    const owner_id = Number(rows[0].owner_id);
+
+    if (owner_id !== user_id) {
+      const [existing] = await connection.execute(
+        `SELECT 1 FROM boardguests
+         WHERE board_id = ? AND user_id = ?
+         LIMIT 1`,
+        [board_id, user_id]
+      );
+
+      if (!existing.length) {
+        await connection.execute(
+          `INSERT INTO boardguests (board_id, user_id, role)
+           VALUES (?, ?, 'guest')`,
+          [board_id, user_id]
+        );
+      }
+    }
+
+    await connection.commit();
+
+    try {
+      const io = req.app.get('io');
+      io.to(`user:${user_id}`).emit('boards:updated', { reason: 'invite_link_accepted', board_id });
+    } catch {
+      // ignore
+    }
+
+    return res.status(200).json({ board_id });
+  } catch (e) {
+    try {
+      await connection.rollback();
+    } catch {
+      // ignore
+    }
+    console.error(e);
+    return res.status(500).json({ message: 'Server error' });
+  } finally {
+    connection.release();
+  }
+};

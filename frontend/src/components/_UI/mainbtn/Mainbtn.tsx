@@ -7,7 +7,7 @@ export type Variant = 'auth' | 'none' | 'mini';             // можно доб
 export type Type = 'button' | 'link' | 'navlink';
 
 export interface MainbtnProps {
-  text: string;
+  text: React.ReactNode;
   variant?: Variant;
   kind?: Type;
   type?: ButtonType;
@@ -15,6 +15,7 @@ export interface MainbtnProps {
   state?: unknown;
   onClick?: React.MouseEventHandler<HTMLElement>;
   disabled?: boolean;
+  className?: string;
 }
 
 const Mainbtn: React.FC<MainbtnProps> = ({
@@ -26,8 +27,9 @@ const Mainbtn: React.FC<MainbtnProps> = ({
   state,
   onClick,
   disabled = false,
+  className: classNameProp,
 }) => {
-  const className = `${classes.mainBtn} ${classes[variant]}`;
+  const className = `${classes.mainBtn} ${classes[variant]} ${classNameProp ?? ''}`.trim();
 
   if (kind === 'button') {
   return (

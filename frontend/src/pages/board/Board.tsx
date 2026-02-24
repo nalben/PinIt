@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import classes from './Board.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
@@ -15,6 +15,7 @@ import Close from '@/assets/icons/monochrome/back.svg';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
 import Deny from '@/assets/icons/monochrome/deny.svg'
+import Members from '@/assets/icons/monochrome/members.svg';
 
 type BoardParticipantRole = 'owner' | 'guest';
 
@@ -60,15 +61,27 @@ const Board = () => {
     const closeBoardMenu = useUIStore((s) => s.closeBoardMenu);
     const openBoardSettingsModal = useUIStore((s) => s.openBoardSettingsModal);
     const closeBoardSettingsModal = useUIStore((s) => s.closeBoardSettingsModal);
+    const setBoardSettingsModalParticipantsInnerViewNext = useUIStore((s) => s.setBoardSettingsModalParticipantsInnerViewNext);
 
     const [participantsData, setParticipantsData] = useState<BoardParticipantsResponse | null>(null);
+    const [debugParticipantsData, setDebugParticipantsData] = useState<BoardParticipantsResponse | null>(null);
     const [participantsLoading, setParticipantsLoading] = useState(false);
     const [removeConfirmParticipantId, setRemoveConfirmParticipantId] = useState<number | null>(null);
+    const participantsListRef = useRef<HTMLDivElement | null>(null);
+    const [hasParticipantsListScroll, setHasParticipantsListScroll] = useState(false);
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
     const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<BoardEntity> | null>(null);
     const [loadedBoardImageSrc, setLoadedBoardImageSrc] = useState<string | null>(null);
     const [failedBoardImageSrc, setFailedBoardImageSrc] = useState<string | null>(null);
     const tokenPresent = Boolean(localStorage.getItem('token'));
+    const inviteToken = useMemo(() => {
+        try {
+            const value = new URLSearchParams(location.search).get('invite');
+            return typeof value === 'string' && value.trim() ? value.trim() : null;
+        } catch {
+            return null;
+        }
+    }, [location.search]);
     const isLoggedIn = isInitialized && isAuth;
     const numericBoardId = Number(boardId);
     const hasValidBoardId = Number.isFinite(numericBoardId) && numericBoardId > 0;
@@ -221,6 +234,40 @@ const Board = () => {
 
                         // Not owner/guest -> maybe public; check public endpoint and join as guest
                         if (status === 404 || status === 403) {
+                            if (inviteToken) {
+                                try {
+                                    const { data: acceptData } = await axiosInstance.post<{ board_id: number }>(`/api/boards/invite-link/accept`, {
+                                        token: inviteToken,
+                                    });
+                                    if (cancelled) return;
+
+                                    const acceptedBoardId = Number(acceptData?.board_id);
+                                    if (Number.isFinite(acceptedBoardId) && acceptedBoardId > 0) {
+                                        if (acceptedBoardId !== id) {
+                                            navigate(`/spaces/${acceptedBoardId}`, { replace: true });
+                                            return;
+                                        }
+
+                                        try {
+                                            const joined = await tryLoadAccessibleBoard();
+                                            if (joined) {
+                                                try {
+                                                    await axiosInstance.post(`/api/boards/${id}/visit`);
+                                                } catch {
+                                                    // ignore
+                                                }
+                                                void useBoardsStore.getState().loadBoards();
+                                                return;
+                                            }
+                                        } catch {
+                                            // ignore
+                                        }
+                                    }
+                                } catch {
+                                    // ignore
+                                }
+                            }
+
                             try {
                                 const { data: publicData } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/public/${id}`);
                                 if (cancelled) return;
@@ -326,7 +373,7 @@ const Board = () => {
         return () => {
             cancelled = true;
         };
-    }, [hasValidBoardId, isInitialized, isLoggedIn, navigate, numericBoardId, tokenPresent]);
+    }, [hasValidBoardId, inviteToken, isInitialized, isLoggedIn, navigate, numericBoardId, tokenPresent]);
 
     const isOwnerBoard = boardInfo?.myRole === 'owner';
 
@@ -369,12 +416,89 @@ const Board = () => {
         };
     }, [boardId, boardInfo?.myRole, isLoggedIn]);
 
-    const isOwner = participantsData?.my_role === 'owner';
-    const participants = participantsData?.participants ?? [];
+    const effectiveParticipantsData = debugParticipantsData ?? participantsData;
+    const isOwner = effectiveParticipantsData?.my_role === 'owner';
+    const participants = effectiveParticipantsData?.participants ?? [];
     const guests = participants.filter((p) => p.role !== 'owner');
     const shouldShowParticipants = participantsLoading || isOwner || guests.length > 0;
     const canManageParticipants = isOwner || isOwnerBoard;
     const shouldShowOwnerActions = canManageParticipants && !participantsLoading;
+
+    useLayoutEffect(() => {
+        const el = participantsListRef.current;
+        if (!el) return;
+        const next = el.scrollHeight > el.clientHeight + 1;
+        setHasParticipantsListScroll((prev) => (prev === next ? prev : next));
+    });
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const onResize = () => {
+            const el = participantsListRef.current;
+            if (!el) return;
+            const next = el.scrollHeight > el.clientHeight + 1;
+            setHasParticipantsListScroll((prev) => (prev === next ? prev : next));
+        };
+
+        window.addEventListener('resize', onResize);
+        return () => {
+            window.removeEventListener('resize', onResize);
+        };
+    }, []);
+
+    useEffect(() => {
+        if (__ENV__ !== 'development') return;
+        if (typeof window === 'undefined') return;
+
+        const w = window as unknown as {
+            addFakeBoardParticipants?: (count?: number) => void;
+            setFakeBoardParticipants?: (participants: BoardParticipant[]) => void;
+            clearFakeBoardParticipants?: () => void;
+        };
+
+        w.addFakeBoardParticipants = (count = 8) => {
+            const fakeGuests: BoardParticipant[] = Array.from({ length: count }).map((_, i) => ({
+                id: 900000 + i + 1,
+                username: `debug_participant_${i + 1}`,
+                nickname: `Debug Participant ${i + 1}`,
+                role: 'guest',
+            }));
+
+            setDebugParticipantsData({
+                board_id: Number(boardId) || 0,
+                my_role: 'owner',
+                participants: [
+                    {
+                        id: 1,
+                        username: 'debug_owner',
+                        nickname: 'Debug Owner',
+                        avatar: null,
+                        role: 'owner',
+                    },
+                    ...fakeGuests,
+                ],
+            });
+        };
+
+        w.setFakeBoardParticipants = (nextParticipants) => {
+            setDebugParticipantsData({
+                board_id: Number(boardId) || 0,
+                my_role: 'owner',
+                participants: Array.isArray(nextParticipants) ? nextParticipants : [],
+            });
+        };
+
+        w.clearFakeBoardParticipants = () => {
+            setDebugParticipantsData(null);
+        };
+
+        return () => {
+            delete w.addFakeBoardParticipants;
+            delete w.setFakeBoardParticipants;
+            delete w.clearFakeBoardParticipants;
+        };
+    }, [boardId]);
 
     const removeParticipant = async (participantId: number) => {
         const id = Number(boardId);
@@ -431,7 +555,7 @@ const Board = () => {
                     </div>
                     {isOwnerBoard && !isBoardMetaLoading ? (
                         <div className={classes.board_info_actions}>
-                            <Mainbtn variant="mini" kind="button" type="button" text="Настройки" onClick={openBoardSettingsModal} />
+                            <Mainbtn variant="mini" kind="button" type="button" text="Настройки" onClick={() => openBoardSettingsModal()} />
                         </div>
                     ) : null}
                     {!isLoggedIn ? (
@@ -450,13 +574,40 @@ const Board = () => {
                             ) : (
                                 <span className={classes.participants_title}>Участники:</span>
                             )}
-                            <div className={classes.participants_list}>
+                            <div
+                                ref={participantsListRef}
+                                className={`${classes.participants_list} ${hasParticipantsListScroll ? classes.participants_list_scroll : ''}`}
+                            >
                                 {canManageParticipants ? (
                                     participantsLoading ? (
                                         <div className={`${classes.skeleton} ${classes.participant_add_skeleton}`} />
                                     ) : (
                                         <div className={classes.participant_add}>
-                                            <Mainbtn variant="mini" kind="button" type="button" text="Добавить участников" disabled />
+                                                <div className={classes.participant_add_row}>
+                                                    <div className={classes.participant_add_main}>
+                                                    <Mainbtn
+                                                        variant="mini"
+                                                        kind="button"
+                                                        type="button"
+                                                        text="Добавить участников"
+                                                        onClick={() => {
+                                                            setBoardSettingsModalParticipantsInnerViewNext('friends');
+                                                            openBoardSettingsModal('participants');
+                                                        }}
+                                                    />
+                                                    </div>
+                                                <Mainbtn
+                                                    variant="mini"
+                                                    kind="button"
+                                                    type="button"
+                                                    className={classes.participant_add_icon}
+                                                    text={<Members />}
+                                                    onClick={() => {
+                                                        setBoardSettingsModalParticipantsInnerViewNext('guests');
+                                                        openBoardSettingsModal('participants');
+                                                    }}
+                                                />
+                                            </div>
                                         </div>
                                     )
                                 ) : null}
@@ -497,7 +648,7 @@ const Board = () => {
                                             {shouldShowOwnerActions ? (
                                                 <DropdownWrapper
                                                     right
-                                                    up
+                                                    middleleft
                                                     closeOnClick={false}
                                                     isOpen={removeConfirmParticipantId === p.id}
                                                     onClose={() => setRemoveConfirmParticipantId(null)}

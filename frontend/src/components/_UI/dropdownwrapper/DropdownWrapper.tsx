@@ -7,6 +7,7 @@ type DropdownWrapperProps = {
   profile?: boolean;
   noti?: boolean;
   middle?: boolean;
+  middleleft?: boolean;
   up?: boolean;
   upDel?: boolean;
   children: [React.ReactNode, React.ReactNode];
@@ -19,6 +20,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   left,
   right,
   middle,
+  middleleft,
   profile,
   noti,
   up,
@@ -52,7 +54,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 
   const handleItemClick = (event: React.MouseEvent, child: React.ReactNode) => {
     if (
-      (up || upDel) &&
+      (middleleft || up || upDel) &&
       event.target === event.currentTarget &&
       React.isValidElement(child) &&
       typeof (child.props as { onClick?: unknown }).onClick === "function"
@@ -80,6 +82,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       if (middle) classes.push(styles.middle);
       if (!left && !right && !middle) classes.push(styles.middle);
     }
+    if (middleleft) classes.push(styles.middleleft);
     if (up || upDel) classes.push(styles.up);
     if (upDel) classes.push(styles.upDel);
 
@@ -138,7 +141,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 
   useLayoutEffect(() => {
     if (open) updatePosition();
-  }, [left, right, middle, profile, noti, up, upDel, open]);
+  }, [left, right, middle, middleleft, profile, noti, up, upDel, open]);
 
   useEffect(() => {
     updatePosition();
@@ -148,7 +151,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       window.removeEventListener("resize", updatePosition);
       document.removeEventListener("pointerdown", handleClickOutside, true);
     };
-  }, [left, right, middle, profile, noti, up, upDel, open]);
+  }, [left, right, middle, middleleft, profile, noti, up, upDel, open]);
 
   return (
     <div ref={wrapperRef} className={styles.wrapper}>

@@ -52,17 +52,22 @@ router.use(authMiddleware);
 router.get('/', boardsController.getMyBoards);
 router.get('/guest', boardsController.getGuestBoards);
 router.get('/friends', boardsController.getFriendsBoards);
-router.get('/recent', boardsController.getRecentBoards);
-router.get('/invites/incoming', boardsController.getIncomingBoardInvites);
-router.put('/invites/accept/:invite_id', boardsController.acceptBoardInvite);
-router.put('/invites/reject/:invite_id', boardsController.rejectBoardInvite);
-
-router.post('/', maybeUploadSingleImage, boardsController.createBoard);
-
-router.post('/:board_id/invites', boardsController.inviteToBoard);
-router.delete('/:board_id/guests/:guest_id', boardsController.removeGuestFromBoard);
-router.post('/:board_id/leave', boardsController.leaveBoard);
-router.post('/:board_id/join-public', boardsController.joinPublicBoardAsGuest);
+  router.get('/recent', boardsController.getRecentBoards);
+  router.get('/invites/incoming', boardsController.getIncomingBoardInvites);
+  router.put('/invites/accept/:invite_id', boardsController.acceptBoardInvite);
+  router.put('/invites/reject/:invite_id', boardsController.rejectBoardInvite);
+  router.post('/invite-link/accept', boardsController.acceptBoardInviteLink);
+ 
+  router.post('/', maybeUploadSingleImage, boardsController.createBoard);
+ 
+  router.post('/:board_id/invites', boardsController.inviteToBoard);
+  router.get('/:board_id/invites/outgoing', boardsController.getOutgoingBoardInvites);
+  router.delete('/:board_id/invites/:invite_id', boardsController.cancelBoardInvite);
+  router.get('/:board_id/invite-link', boardsController.getBoardInviteLink);
+  router.post('/:board_id/invite-link/regenerate', boardsController.regenerateBoardInviteLink);
+  router.delete('/:board_id/guests/:guest_id', boardsController.removeGuestFromBoard);
+  router.post('/:board_id/leave', boardsController.leaveBoard);
+  router.post('/:board_id/join-public', boardsController.joinPublicBoardAsGuest);
 
 router.patch('/:board_id/title', boardsController.renameBoard);
 router.patch('/:board_id/description', boardsController.updateDescription);
