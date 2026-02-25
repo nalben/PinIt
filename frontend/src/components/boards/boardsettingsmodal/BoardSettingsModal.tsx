@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import AuthModal from '@/components/auth/authmodal/AuthModal';
 import { useUIStore } from '@/store/uiStore';
@@ -13,6 +13,7 @@ import { useBoardsStore } from '@/store/boardsStore';
 import { useSpacesBoardsStore } from '@/store/spacesBoardsStore';
 import { useAuthStore } from '@/store/authStore';
 import { Friend, useFriendsStore } from '@/store/friendsStore';
+import { connectSocket } from '@/services/socketManager';
 
 const MAX_BOARD_IMAGE_SIZE_MB = 5;
 const MAX_BOARD_IMAGE_SIZE_BYTES = MAX_BOARD_IMAGE_SIZE_MB * 1024 * 1024;
@@ -151,9 +152,16 @@ type BoardSettingsModalProps = {
   initialDescription?: string | null;
   initialImageSrc?: string | null;
   initialIsPublic?: boolean | null;
+  preRenderAllTabs?: boolean;
 };
 
-const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, initialDescription, initialImageSrc, initialIsPublic }) => {
+const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
+  initialTitle,
+  initialDescription,
+  initialImageSrc,
+  initialIsPublic,
+  preRenderAllTabs,
+}) => {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
   const isOpen = useUIStore((s) => s.boardSettingsModalOpen);
@@ -181,6 +189,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const boardLoadSeqRef = useRef(0);
 
   const [participantsError, setParticipantsError] = useState<string | null>(null);
   const [participantsLoading, setParticipantsLoading] = useState(false);
@@ -213,9 +222,69 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
     return Number.isFinite(id) && id > 0 ? id : null;
   }, [boardId]);
 
+  const shouldWarmAllTabs = Boolean(preRenderAllTabs);
   const isOwner = board?.my_role === 'owner';
   const currentImageSrc = resolveBoardImageSrc(board?.image ?? null);
   const imageSrc = imagePreview ?? currentImageSrc ?? initialImageSrc ?? null;
+
+  const loadBoard = useCallback(async (boardId: number) => {
+    const seq = boardLoadSeqRef.current + 1;
+    boardLoadSeqRef.current = seq;
+
+    setError(null);
+    try {
+      const cached = boardCache.get(boardId);
+      if (cached) {
+        setBoard(cached ?? null);
+        setTitle(typeof cached?.title === 'string' ? cached.title : '');
+        setDescription(typeof cached?.description === 'string' ? cached.description : '');
+        setIsPublic(typeof cached?.is_public === 'boolean' ? cached.is_public : Number(cached?.is_public) === 1);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+
+      const promise =
+        boardInFlight.get(boardId) ??
+        (async () => {
+          const { data } = await axiosInstance.get<BoardResponse>(`/api/boards/${boardId}`);
+          const entry = (data ?? null) as BoardCacheEntry | null;
+          if (entry) boardCache.set(boardId, entry);
+          return entry;
+        })();
+
+      if (!boardInFlight.has(boardId)) {
+        boardInFlight.set(
+          boardId,
+          promise.then(
+            (v) => {
+              boardInFlight.delete(boardId);
+              return v;
+            },
+            (err) => {
+              boardInFlight.delete(boardId);
+              throw err;
+            }
+          )
+        );
+      }
+
+      const data = await boardInFlight.get(boardId)!;
+      if (boardLoadSeqRef.current !== seq) return;
+      setBoard(data ?? null);
+      setTitle(typeof data?.title === 'string' ? data.title : '');
+      setDescription(typeof data?.description === 'string' ? data.description : '');
+      setIsPublic(typeof data?.is_public === 'boolean' ? data.is_public : Number(data?.is_public) === 1);
+    } catch {
+      if (boardLoadSeqRef.current !== seq) return;
+      setError('Не удалось загрузить доску');
+      setBoard(null);
+    } finally {
+      if (boardLoadSeqRef.current !== seq) return;
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -227,10 +296,8 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
     didSeedFromInitialRef.current = true;
 
     if (typeof initialTitle === 'string') setTitle(initialTitle);
-    if (initialTitle === null || initialTitle === undefined) setTitle('');
 
     if (typeof initialDescription === 'string') setDescription(initialDescription);
-    if (initialDescription === null || initialDescription === undefined) setDescription('');
 
     if (typeof initialIsPublic === 'boolean') setIsPublic(initialIsPublic);
   }, [initialDescription, initialIsPublic, initialTitle, isOpen]);
@@ -253,71 +320,44 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
   }, [isLoading, isOpen]);
 
   useEffect(() => {
-    if (!isOpen) return;
     if (!numericBoardId) return;
+    if (!isOpen && !shouldWarmAllTabs) return;
+    void loadBoard(numericBoardId);
+  }, [isOpen, loadBoard, numericBoardId, shouldWarmAllTabs]);
 
-    let cancelled = false;
-    setError(null);
+  useEffect(() => {
+    if (!numericBoardId) return;
+    if (!isOpen && !shouldWarmAllTabs) return;
 
-    (async () => {
-      try {
-        const cached = boardCache.get(numericBoardId);
-        if (cached) {
-          setBoard(cached ?? null);
-          setTitle(typeof cached?.title === 'string' ? cached.title : '');
-          setDescription(typeof cached?.description === 'string' ? cached.description : '');
-          setIsPublic(typeof cached?.is_public === 'boolean' ? cached.is_public : Number(cached?.is_public) === 1);
-          setIsLoading(false);
-          return;
+    const unsubscribe = connectSocket({
+      onBoardsUpdate: (data) => {
+        const rawBoardId = (data as { board_id?: unknown } | null)?.board_id;
+        const updatedBoardId = typeof rawBoardId === 'number' ? rawBoardId : Number(rawBoardId);
+        if (Number.isFinite(updatedBoardId) && updatedBoardId > 0 && updatedBoardId !== numericBoardId) return;
+
+        boardCache.delete(numericBoardId);
+        boardParticipantsCache.delete(numericBoardId);
+        outgoingInvitesCache.delete(numericBoardId);
+        inviteLinkCache.delete(numericBoardId);
+        boardInFlight.delete(numericBoardId);
+        boardParticipantsInFlight.delete(numericBoardId);
+        outgoingInvitesInFlight.delete(numericBoardId);
+        inviteLinkInFlight.delete(numericBoardId);
+
+        void loadBoard(numericBoardId);
+        if (isOwner) {
+          if (userId) void ensureFriendsLoaded(userId);
+          void loadParticipants(numericBoardId);
+          void loadOutgoingInvites(numericBoardId);
+          void loadInviteLink(numericBoardId);
         }
-
-        setIsLoading(true);
-
-        const promise =
-          boardInFlight.get(numericBoardId) ??
-          (async () => {
-            const { data } = await axiosInstance.get<BoardResponse>(`/api/boards/${numericBoardId}`);
-            const entry = (data ?? null) as BoardCacheEntry | null;
-            if (entry) boardCache.set(numericBoardId, entry);
-            return entry;
-          })();
-
-        if (!boardInFlight.has(numericBoardId)) {
-          boardInFlight.set(
-            numericBoardId,
-            promise.then(
-              (v) => {
-                boardInFlight.delete(numericBoardId);
-                return v;
-              },
-              (err) => {
-                boardInFlight.delete(numericBoardId);
-                throw err;
-              }
-            )
-          );
-        }
-
-        const data = await boardInFlight.get(numericBoardId)!;
-        if (cancelled) return;
-        setBoard(data ?? null);
-        setTitle(typeof data?.title === 'string' ? data.title : '');
-        setDescription(typeof data?.description === 'string' ? data.description : '');
-        setIsPublic(typeof data?.is_public === 'boolean' ? data.is_public : Number(data?.is_public) === 1);
-      } catch {
-        if (cancelled) return;
-        setError('Не удалось загрузить доску');
-        setBoard(null);
-      } finally {
-        if (cancelled) return;
-        setIsLoading(false);
-      }
-    })();
+      },
+    });
 
     return () => {
-      cancelled = true;
+      unsubscribe?.();
     };
-  }, [isOpen, numericBoardId]);
+  }, [ensureFriendsLoaded, isOpen, isOwner, numericBoardId, shouldWarmAllTabs, userId]);
 
   useEffect(() => {
     if (isOpen) return;
@@ -326,21 +366,23 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
     setImagePreview(null);
     setError(null);
     setIsSaving(false);
-    setIsLoading(false);
     setIsDeleting(false);
     setDeleteConfirmOpen(false);
     setParticipantsError(null);
-    setParticipantsLoading(false);
-    setOutgoingInvitesLoading(false);
     setInviteActionUserId(null);
-    setInviteLinkLoading(false);
     setInviteLinkError(null);
     setInviteLinkCopied(false);
     if (inviteLinkCopiedTimeoutRef.current) {
       window.clearTimeout(inviteLinkCopiedTimeoutRef.current);
       inviteLinkCopiedTimeoutRef.current = null;
     }
-  }, [isOpen, imagePreview]);
+    if (!shouldWarmAllTabs) {
+      setIsLoading(false);
+      setParticipantsLoading(false);
+      setOutgoingInvitesLoading(false);
+      setInviteLinkLoading(false);
+    }
+  }, [imagePreview, isOpen, shouldWarmAllTabs]);
 
   const inviteLinkUrl = useMemo(() => {
     if (!numericBoardId || !inviteLinkToken) return '';
@@ -732,8 +774,8 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
   };
 
   useEffect(() => {
-    if (!isOpen) return;
-    if (view !== 'participants') return;
+    if (!isOpen && !shouldWarmAllTabs) return;
+    if (!shouldWarmAllTabs && view !== 'participants') return;
     if (!numericBoardId) return;
 
     setParticipantsError(null);
@@ -745,7 +787,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
     void loadParticipants(numericBoardId);
     void loadOutgoingInvites(numericBoardId);
     void loadInviteLink(numericBoardId);
-  }, [ensureFriendsLoaded, isOpen, isOwner, numericBoardId, userId, view]);
+  }, [ensureFriendsLoaded, isOpen, isOwner, numericBoardId, shouldWarmAllTabs, userId, view]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -933,12 +975,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
               {!isLoading && board && !isOwner ? <p className={classes.hint}>Только владелец может редактировать доску</p> : null}
 
               {isLoading && !board ? (
-                <div className={classes.settingsSkeleton}>
-                  <div className={`${classes.skeleton} ${classes.boardImageSkeleton}`} />
-                  <div className={`${classes.skeleton} ${classes.inputSkeleton}`} />
-                  <div className={`${classes.skeleton} ${classes.inputSkeleton}`} />
-                  <div className={`${classes.skeleton} ${classes.toggleSkeleton}`} />
-                </div>
+                <p className={classes.hint}>Загрузка...</p>
               ) : (
                 <>
                   <div className={classes.boardImageUpload}>
@@ -1173,31 +1210,21 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
                           ref={friendsListRef}
                           className={`${classes.friendsList} ${hasFriendsListScroll ? classes.friendsListScroll : ''}`}
                         >
-                          {(friendsLoading || outgoingInvitesLoading || participantsLoading) && friends.length === 0
-                            ? Array.from({ length: 3 }).map((_, i) => (
-                                <div key={`sk-${i}`} className={classes.listSkeletonRow}>
-                                  <div className={classes.listSkeletonLeft}>
-                                    <div className={`${classes.skeleton} ${classes.avatarSkeleton}`} />
-                                    <div className={`${classes.skeleton} ${classes.nameSkeleton}`} />
-                                  </div>
-                                  <div className={`${classes.skeleton} ${classes.btnSkeleton}`} />
-                                </div>
-                              ))
-                            : (() => {
-                                const query = friendsSearch.trim().toLowerCase();
-                                const filtered = query
-                                  ? friends.filter((f) => {
-                                      const username = String(f.username || '').toLowerCase();
-                                      const nickname = String(f.nickname || '').toLowerCase();
-                                      return username.includes(query) || nickname.includes(query);
-                                    })
-                                  : friends;
+                          {(() => {
+                            const query = friendsSearch.trim().toLowerCase();
+                            const filtered = query
+                              ? friends.filter((f) => {
+                                  const username = String(f.username || '').toLowerCase();
+                                  const nickname = String(f.nickname || '').toLowerCase();
+                                  return username.includes(query) || nickname.includes(query);
+                                })
+                              : friends;
 
-                                return filtered.map((f) => {
-                                const avatarSrc = resolveAvatarSrc(f.avatar);
-                                const isParticipant = Boolean(participantsByUserId[f.id]);
-                                const inviteInfo = outgoingInvitesByUserId[f.id];
-                                const isBusy = inviteActionUserId === f.id;
+                            return filtered.map((f) => {
+                                  const avatarSrc = resolveAvatarSrc(f.avatar);
+                                  const isParticipant = Boolean(participantsByUserId[f.id]);
+                                  const inviteInfo = outgoingInvitesByUserId[f.id];
+                                  const isBusy = inviteActionUserId === f.id;
 
                                 const inviteStatus =
                                   inviteInfo?.status === 'sent'
@@ -1232,7 +1259,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
                                       ? classes.friendInviteBtnRejected
                                       : classes.friendInviteBtnInvite;
 
-                                return (
+                              return (
                                   <div key={f.id} className={classes.friendRow}>
                                     <Link className={classes.friendInfo} to={`/user/${f.username}`}>
                                       <div className={classes.friendAvatar}>
@@ -1265,8 +1292,8 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
                                     </button>
                                   </div>
                                 );
-                              });
-                            })()}
+                            });
+                          })()}
                         </div>
                       </>
                     ) : (
@@ -1285,18 +1312,6 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({ initialTitle, i
                           {(() => {
                             const query = guestsSearch.trim().toLowerCase();
                             const removedGuests = Object.values(removedGuestsByUserId).filter((g) => !participantsByUserId[g.id]);
-
-                            if ((participantsLoading || outgoingInvitesLoading) && boardParticipants.length === 0 && removedGuests.length === 0) {
-                              return Array.from({ length: 3 }).map((_, i) => (
-                                <div key={`gsk-${i}`} className={classes.listSkeletonRow}>
-                                  <div className={classes.listSkeletonLeft}>
-                                    <div className={`${classes.skeleton} ${classes.avatarSkeleton}`} />
-                                    <div className={`${classes.skeleton} ${classes.nameSkeleton}`} />
-                                  </div>
-                                  <div className={`${classes.skeleton} ${classes.btnSkeleton}`} />
-                                </div>
-                              ));
-                            }
 
                             const byId = new Map<number, BoardParticipant>();
                             for (const p of boardParticipants) byId.set(p.id, p);

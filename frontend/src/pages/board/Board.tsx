@@ -15,6 +15,7 @@ import AuthModal from '@/components/auth/authmodal/AuthModal';
 import LoginForm from '@/components/auth/login/Login';
 import RegisterForm from '@/components/auth/register/Register';
 import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
+import { connectSocket } from '@/services/socketManager';
 import Close from '@/assets/icons/monochrome/back.svg';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
@@ -82,6 +83,7 @@ const Board = () => {
     const [roleLoadingParticipantId, setRoleLoadingParticipantId] = useState<number | null>(null);
     const participantsListRef = useRef<HTMLDivElement | null>(null);
     const [hasParticipantsListScroll, setHasParticipantsListScroll] = useState(false);
+    const participantsLoadSeqRef = useRef(0);
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
     const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<BoardEntity> | null>(null);
     const [loadedBoardImageSrc, setLoadedBoardImageSrc] = useState<string | null>(null);
@@ -478,8 +480,6 @@ const Board = () => {
                                     return;
                                 }
 
-                                setBoardMetaOverride({ ...publicData, id, is_public: true });
-
                                 try {
                                     await axiosInstance.post(`/api/boards/${id}/join-public`);
                                 } catch {
@@ -497,6 +497,8 @@ const Board = () => {
                                     redirectToSpaces();
                                     return;
                                 }
+
+                                setBoardMetaOverride({ ...publicData, id, is_public: true });
 
                                 try {
                                     await axiosInstance.post(`/api/boards/${id}/visit`);
@@ -618,28 +620,72 @@ const Board = () => {
         const id = Number(boardId);
         if (!Number.isFinite(id) || id <= 0) return;
 
-        let cancelled = false;
+        const seq = participantsLoadSeqRef.current + 1;
+        participantsLoadSeqRef.current = seq;
         setParticipantsLoading(true);
         setParticipantsData(null);
         setRemoveConfirmParticipantId(null);
         loadBoardParticipants(id)
             .then((data) => {
-                if (cancelled) return;
+                if (participantsLoadSeqRef.current !== seq) return;
                 setParticipantsData(data ?? null);
             })
             .catch(() => {
-                if (cancelled) return;
+                if (participantsLoadSeqRef.current !== seq) return;
                 setParticipantsData(null);
             })
             .finally(() => {
-                if (cancelled) return;
+                if (participantsLoadSeqRef.current !== seq) return;
                 setParticipantsLoading(false);
             });
 
-        return () => {
-            cancelled = true;
-        };
+        return () => {};
     }, [boardId, boardInfo?.myRole, isLoggedIn]);
+
+    useEffect(() => {
+        if (!isInitialized) return;
+        if (!isLoggedIn) return;
+
+        const id = Number(boardId);
+        if (!Number.isFinite(id) || id <= 0) return;
+
+        const unsubscribe = connectSocket({
+            onBoardsUpdate: (data) => {
+                const rawBoardId = (data as { board_id?: unknown } | null)?.board_id;
+                const updatedBoardId = typeof rawBoardId === 'number' ? rawBoardId : Number(rawBoardId);
+                if (Number.isFinite(updatedBoardId) && updatedBoardId > 0 && updatedBoardId !== id) return;
+
+                const seq = participantsLoadSeqRef.current + 1;
+                participantsLoadSeqRef.current = seq;
+
+                setRemoveConfirmParticipantId(null);
+                loadBoardParticipants(id)
+                    .then((next) => {
+                        if (participantsLoadSeqRef.current !== seq) return;
+                        setParticipantsData(next ?? null);
+                    })
+                    .catch((err) => {
+                        if (participantsLoadSeqRef.current !== seq) return;
+                        const status = Number((err as { response?: { status?: unknown } } | null)?.response?.status);
+                        if (status === 403 || status === 404) {
+                            closeBoardSettingsModal();
+                            void useBoardsStore.getState().loadBoards();
+                            void useSpacesBoardsStore.getState().refreshGuestBoards();
+                            void useSpacesBoardsStore.getState().refreshFriendsBoards();
+                            void useSpacesBoardsStore.getState().refreshPublicBoardsSilent();
+                            navigate('/spaces', { replace: true });
+                            return;
+                        }
+                        // keep previous participantsData on transient errors
+                    })
+                    .finally(() => {});
+            },
+        });
+
+        return () => {
+            unsubscribe?.();
+        };
+    }, [boardId, closeBoardSettingsModal, isInitialized, isLoggedIn, navigate]);
 
     const effectiveParticipantsData = debugParticipantsData ?? participantsData;
     const isOwner = effectiveParticipantsData?.my_role === 'owner';
@@ -792,6 +838,7 @@ const Board = () => {
             setLeaveConfirmOpen(false);
             void useBoardsStore.getState().loadBoards();
             void useSpacesBoardsStore.getState().refreshGuestBoards();
+            void useSpacesBoardsStore.getState().refreshFriendsBoards();
             navigate('/spaces', { replace: true });
         } catch {
             // ignore
@@ -1089,6 +1136,7 @@ const Board = () => {
                     initialDescription={boardInfo?.description ?? null}
                     initialImageSrc={boardInfo?.imageSrc ?? null}
                     initialIsPublic={boardInfo?.isPublic ?? null}
+                    preRenderAllTabs
                 />
             ) : null}
 

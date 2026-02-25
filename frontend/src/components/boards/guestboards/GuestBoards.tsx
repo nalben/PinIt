@@ -16,7 +16,7 @@ const GuestBoards: React.FC = () => {
   const isLoading = useSpacesBoardsStore((s) => s.isLoadingGuestBoards);
   const hasLoadedOnce = useSpacesBoardsStore((s) => s.hasLoadedOnceGuestBoards);
   const ensureLoaded = useSpacesBoardsStore((s) => s.ensureGuestBoardsLoaded);
-  const refresh = useSpacesBoardsStore((s) => s.refreshGuestBoards);
+  const refreshSilent = useSpacesBoardsStore((s) => s.refreshGuestBoardsSilent);
   const clear = useSpacesBoardsStore((s) => s.clearGuestBoards);
 
   const [debugBoards, setDebugBoards] = useState<GuestBoard[] | null>(null);
@@ -109,14 +109,14 @@ const GuestBoards: React.FC = () => {
 
     const unsubscribe = connectSocket({
       onBoardsUpdate: () => {
-        refresh();
+        refreshSilent();
       },
     });
 
     return () => {
       unsubscribe?.();
     };
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards, refresh]);
+  }, [isAuth, isInitialized, forceSkeleton, debugBoards, refreshSilent]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">

@@ -7,14 +7,17 @@ import { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 import { PublicBoard, useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import { connectSocket } from '@/services/socketManager';
 
 const PublicBoards: React.FC = () => {
   const isAuth = useAuthStore((s) => s.isAuth);
+  const isInitialized = useAuthStore((s) => s.isInitialized);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const boards = useSpacesBoardsStore((s) => s.publicBoards);
   const isLoading = useSpacesBoardsStore((s) => s.isLoadingPublicBoards);
   const hasLoadedOnce = useSpacesBoardsStore((s) => s.hasLoadedOncePublicBoards);
   const ensureLoaded = useSpacesBoardsStore((s) => s.ensurePublicBoardsLoaded);
+  const refreshSilent = useSpacesBoardsStore((s) => s.refreshPublicBoardsSilent);
 
   const [debugBoards, setDebugBoards] = useState<PublicBoard[] | null>(null);
   const boardsListRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +93,52 @@ const PublicBoards: React.FC = () => {
 
     ensureLoaded();
   }, [forceSkeleton, debugBoards, ensureLoaded]);
+
+  useEffect(() => {
+    if (forceSkeleton) return;
+    if (debugBoards !== null) return;
+    if (!isInitialized) return;
+    if (!isAuth) return;
+
+    const unsubscribe = connectSocket({
+      onBoardsUpdate: (data) => {
+        const reason = (data as { reason?: unknown } | null)?.reason;
+        const rawBoardId = (data as { board_id?: unknown } | null)?.board_id;
+        const boardId = typeof rawBoardId === 'number' ? rawBoardId : Number(rawBoardId);
+        const rawIsPublic = (data as { is_public?: unknown } | null)?.is_public;
+        const isPublic =
+          typeof rawIsPublic === 'boolean'
+            ? rawIsPublic
+            : typeof rawIsPublic === 'number'
+              ? rawIsPublic === 1
+              : typeof rawIsPublic === 'string'
+                ? rawIsPublic === '1' || rawIsPublic.toLowerCase() === 'true'
+                : null;
+
+        // If user got removed/blocked from a public board, hide it immediately.
+        if (reason === 'removed' && Number.isFinite(boardId) && boardId > 0) {
+          useSpacesBoardsStore.setState((s) => ({
+            ...s,
+            publicBoards: s.publicBoards.filter((b) => b.id !== boardId),
+          }));
+        }
+
+        // If board turned private, it should disappear from public list immediately.
+        if (reason === 'public_changed' && isPublic === false && Number.isFinite(boardId) && boardId > 0) {
+          useSpacesBoardsStore.setState((s) => ({
+            ...s,
+            publicBoards: s.publicBoards.filter((b) => b.id !== boardId),
+          }));
+        }
+
+        refreshSilent();
+      },
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [debugBoards, forceSkeleton, isAuth, isInitialized, refreshSilent]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">

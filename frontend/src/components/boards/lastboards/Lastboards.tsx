@@ -7,12 +7,14 @@ import { Board, RECENT_BOARDS_LS_KEY, useBoardsStore } from '@/store/boardsStore
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { useAuthStore } from '@/store/authStore';
+import { connectSocket } from '@/services/socketManager';
 
 // Zustand store для последних досок
 const Lastboards: React.FC = () => {
   const recentBoards = useBoardsStore(state => state.recentBoards);
   const isLoading = useBoardsStore(state => state.isLoading);
   const ensureBoardsLoaded = useBoardsStore(state => state.ensureBoardsLoaded);
+  const loadBoards = useBoardsStore(state => state.loadBoards);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
@@ -102,6 +104,22 @@ const Lastboards: React.FC = () => {
       mounted = false;
     };
   }, [ensureBoardsLoaded, forceSkeleton, isInitialized, isAuth]);
+
+  useEffect(() => {
+    if (forceSkeleton) return;
+    if (!isInitialized) return;
+    if (!isAuth) return;
+
+    const unsubscribe = connectSocket({
+      onBoardsUpdate: () => {
+        loadBoards();
+      },
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [forceSkeleton, isAuth, isInitialized, loadBoards]);
 
   if (forceSkeleton || ((isLoading || !hasLoadedOnce) && recentBoards.length === 0)) {
     return (

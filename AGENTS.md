@@ -1086,14 +1086,14 @@ These points are confirmed from current repository code and override any older c
 
 5. Board/public access and cache behavior
 
-- Public board endpoints exist and are unauthenticated:
+- Public board endpoints exist and use `optionalAuth` (auth optional); if viewer is authenticated they hide boards where `boardguests.role='blocked'`:
   - `GET /api/boards/public/popular`
   - `GET /api/boards/public/:board_id`
 - Public board endpoints do not add the viewer into `boardguests` (no implicit "become a guest" on open).
 - Authenticated join endpoint exists for public boards:
-  - `POST /api/boards/:board_id/join-public` — if `is_public=1` and user is not owner/guest, inserts into `boardguests` as `role='guest'` (idempotent).
+  - `POST /api/boards/:board_id/join-public` — if `is_public=1` and user is not owner/guest, inserts into `boardguests` as `role='guest'` (idempotent); returns 403 if `boardguests.role='blocked'`.
 - Invite-link join endpoint exists and is authenticated:
-  - `POST /api/boards/invite-link/accept` — body `{ token }`, inserts into `boardguests` as `role='guest'` for the linked board (idempotent).
+  - `POST /api/boards/invite-link/accept` — body `{ token }`, inserts into `boardguests` as `role='guest'` for the linked board (idempotent); if role was `blocked`, re-activates it by setting role to `guest`.
 - Public invite-link resolve endpoint exists:
   - `GET /api/boards/invite-link/resolve?token=<token>` — returns `{ board_id }` if token exists, иначе 404.
 - Public invite-link preview endpoint exists:
@@ -1103,23 +1103,28 @@ These points are confirmed from current repository code and override any older c
   - `DELETE /api/boards/:board_id/invites/:invite_id` — cancels a pending invite by deleting it and emits `board_invite:removed` to invited user.
   - `GET /api/boards/:board_id/invite-link` — returns existing invite-link token (creates it if missing).
   - `POST /api/boards/:board_id/invite-link/regenerate` — regenerates invite-link token.
-  - `DELETE /api/boards/:board_id/guests/:guest_id` — removes a guest from `boardguests` and emits `boards:updated`.
+  - `DELETE /api/boards/:board_id/guests/:guest_id` — removes a guest; if board is public sets `boardguests.role='blocked'` instead of deleting; emits `boards:updated`.
   - `PATCH /api/boards/:board_id/guests/:guest_id/role` — updates guest role in `boardguests` (`guest`/`editer`) and emits `boards:updated`.
 - Incoming invite workflow endpoints exist and are authenticated:
-  - `PUT /api/boards/invites/accept/:invite_id` — adds user to `boardguests` and deletes the invite row, emits `board_invite:removed`.
-  - `PUT /api/boards/invites/reject/:invite_id` — sets invite `status='rejected'` and emits `board_invite:removed`.
+  - `PUT /api/boards/invites/accept/:invite_id` — adds user to `boardguests` (if role was `blocked`, re-activates it by setting role to `guest`) and deletes the invite row, emits `board_invite:removed`.
+  - `PUT /api/boards/invites/reject/:invite_id` — sets invite `status='rejected'` and emits `board_invite:removed` and `boards:updated`.
 - API now depends on DB table `board_invite_links` for invite-link tokens.
+- DB migration script added: `api/sql/2026-02-25-boardguests-blocked.sql` extends `boardguests.role` enum with `blocked`.
 - Board participants endpoint exists and is authenticated:
   - `GET /api/boards/:board_id/participants` — returns `my_role` and participants (owner + guests from `boardguests`).
 - Board public toggle endpoint exists and is authenticated (owner-only):
-  - `PATCH /api/boards/:board_id/public` — updates `boards.is_public`.
+  - `PATCH /api/boards/:board_id/public` — updates `boards.is_public` and emits `boards:updated`.
+- Board meta update endpoints (owner-only) emit `boards:updated` (for public boards also triggers live updates for public boards listings):
+  - `PATCH /api/boards/:board_id/title`
+  - `PATCH /api/boards/:board_id/description`
+  - `PATCH /api/boards/:board_id/image`
 - `GET /api/boards/:board_id` includes `is_public` in its response.
 - `frontend/src/pages/board/Board.tsx`:
   - Access/redirect logic:
     - Non-auth users are redirected to `/spaces` unless `GET /api/boards/public/:id` succeeds.
     - Auth users first try `GET /api/boards/:id`; if no access, they try `GET /api/boards/public/:id` and (if public) join via `POST /api/boards/:id/join-public`, then retry `GET /api/boards/:id`.
     - Auth users with `?invite=<token>`: when `GET /api/boards/:id` fails with 403/404, it tries `POST /api/boards/invite-link/accept` first, then retries `GET /api/boards/:id` before public fallback.
-  - For accessible auth boards: sends `POST /api/boards/:id/visit`, then reloads boards store.
+  - For accessible auth boards: sends `POST /api/boards/:id/visit` (also clears any `board_invites` rows for that user+board with status `sent`/`rejected`), then reloads boards store.
   - Loads participants for board menu via `GET /api/boards/:id/participants`.
   - Auth guests can leave via `POST /api/boards/:id/leave`.
   - For non-auth users: persists recent public board info into localStorage key `pinit_recentBoards`.

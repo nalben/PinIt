@@ -21,6 +21,45 @@ const safeUnlinkUpload = async uploadPath => {
 
 const generateInviteToken = () => crypto.randomBytes(24).toString('hex');
 
+const emitBoardsUpdatedToBoardUsers = async (req, boardId, payload, extraUserIds = []) => {
+  try {
+    const io = req.app.get('io');
+    if (!io) return;
+
+    const [boardRows] = await db.execute(
+      `SELECT owner_id, is_public FROM boards WHERE id = ? LIMIT 1`,
+      [boardId]
+    );
+
+    if (!boardRows.length) return;
+
+    const ownerId = Number(boardRows[0]?.owner_id);
+    const [guestRows] = await db.execute(
+      `SELECT user_id FROM boardguests WHERE board_id = ? AND role IN ('guest','editer')`,
+      [boardId]
+    );
+
+    const ids = new Set();
+    if (Number.isFinite(ownerId) && ownerId > 0) ids.add(ownerId);
+
+    for (const r of guestRows || []) {
+      const id = Number(r?.user_id);
+      if (Number.isFinite(id) && id > 0) ids.add(id);
+    }
+
+    for (const idRaw of extraUserIds || []) {
+      const id = Number(idRaw);
+      if (Number.isFinite(id) && id > 0) ids.add(id);
+    }
+
+    for (const id of ids) {
+      io.to(`user:${id}`).emit('boards:updated', { board_id: Number(boardId), ...(payload || {}) });
+    }
+  } catch {
+    // ignore
+  }
+};
+
 /* Получить все доски текущего пользователя */
 exports.getMyBoards = async (req, res) => {
   try {
@@ -54,7 +93,7 @@ exports.getGuestBoards = async (req, res) => {
        FROM boardguests bg
        JOIN boards b ON b.id = bg.board_id
        LEFT JOIN board_visits bv ON bv.board_id = b.id AND bv.user_id = ?
-       WHERE bg.user_id = ?
+        WHERE bg.user_id = ? AND bg.role IN ('guest','editer')
        ORDER BY COALESCE(bv.last_visited_at, b.created_at) DESC`,
       [user_id, user_id]
     );
@@ -80,7 +119,7 @@ exports.getFriendsBoards = async (req, res) => {
        JOIN boards b ON b.id = bg.board_id
        JOIN users u ON u.id = b.owner_id
        LEFT JOIN board_visits bv ON bv.board_id = b.id AND bv.user_id = ?
-       WHERE bg.user_id = ?
+        WHERE bg.user_id = ? AND bg.role IN ('guest','editer')
        ORDER BY COALESCE(bv.last_visited_at, b.created_at) DESC`,
       [user_id, user_id]
     );
@@ -96,18 +135,35 @@ exports.getFriendsBoards = async (req, res) => {
 /* Популярные открытые доски */
 exports.getPopularPublicBoards = async (req, res) => {
   try {
+    const user_id = Number(req.user?.id);
+    const hasUser = Number.isFinite(user_id) && user_id > 0;
+
     const [boards] = await db.execute(
-      `SELECT b.id, b.title, b.description, b.image, b.created_at,
-              u.username AS owner_username, u.nickname AS owner_nickname, u.avatar AS owner_avatar,
-              COUNT(bv.user_id) AS visits
-       FROM boards b
-       JOIN users u ON u.id = b.owner_id
-       LEFT JOIN board_visits bv ON bv.board_id = b.id
-       WHERE b.is_public = 1
-       GROUP BY b.id, b.title, b.description, b.image, b.created_at,
-                u.username, u.nickname, u.avatar
-       ORDER BY visits DESC, b.created_at DESC
-       LIMIT 5`
+      hasUser
+        ? `SELECT b.id, b.title, b.description, b.image, b.created_at,
+                  u.username AS owner_username, u.nickname AS owner_nickname, u.avatar AS owner_avatar,
+                  COUNT(bv.user_id) AS visits
+           FROM boards b
+           JOIN users u ON u.id = b.owner_id
+           LEFT JOIN board_visits bv ON bv.board_id = b.id
+           LEFT JOIN boardguests bg_block ON bg_block.board_id = b.id AND bg_block.user_id = ? AND bg_block.role = 'blocked'
+           WHERE b.is_public = 1 AND bg_block.user_id IS NULL
+           GROUP BY b.id, b.title, b.description, b.image, b.created_at,
+                    u.username, u.nickname, u.avatar
+           ORDER BY visits DESC, b.created_at DESC
+           LIMIT 5`
+        : `SELECT b.id, b.title, b.description, b.image, b.created_at,
+                  u.username AS owner_username, u.nickname AS owner_nickname, u.avatar AS owner_avatar,
+                  COUNT(bv.user_id) AS visits
+           FROM boards b
+           JOIN users u ON u.id = b.owner_id
+           LEFT JOIN board_visits bv ON bv.board_id = b.id
+           WHERE b.is_public = 1
+           GROUP BY b.id, b.title, b.description, b.image, b.created_at,
+                    u.username, u.nickname, u.avatar
+           ORDER BY visits DESC, b.created_at DESC
+           LIMIT 5`,
+      hasUser ? [user_id] : []
     );
 
     return res.status(200).json(boards);
@@ -125,14 +181,25 @@ exports.getPublicBoardById = async (req, res) => {
       return res.status(400).json({ message: 'Некорректный board_id' });
     }
 
+    const user_id = Number(req.user?.id);
+    const hasUser = Number.isFinite(user_id) && user_id > 0;
+
     const [rows] = await db.execute(
-      `SELECT b.id, b.owner_id, b.is_public, b.title, b.description, b.image, b.created_at,
-              u.username AS owner_username, u.nickname AS owner_nickname, u.avatar AS owner_avatar
-       FROM boards b
-       JOIN users u ON u.id = b.owner_id
-       WHERE b.id = ? AND b.is_public = 1
-       LIMIT 1`,
-      [boardId]
+      hasUser
+        ? `SELECT b.id, b.owner_id, b.is_public, b.title, b.description, b.image, b.created_at,
+                  u.username AS owner_username, u.nickname AS owner_nickname, u.avatar AS owner_avatar
+           FROM boards b
+           JOIN users u ON u.id = b.owner_id
+           LEFT JOIN boardguests bg_block ON bg_block.board_id = b.id AND bg_block.user_id = ? AND bg_block.role = 'blocked'
+           WHERE b.id = ? AND b.is_public = 1 AND bg_block.user_id IS NULL
+           LIMIT 1`
+        : `SELECT b.id, b.owner_id, b.is_public, b.title, b.description, b.image, b.created_at,
+                  u.username AS owner_username, u.nickname AS owner_nickname, u.avatar AS owner_avatar
+           FROM boards b
+           JOIN users u ON u.id = b.owner_id
+           WHERE b.id = ? AND b.is_public = 1
+           LIMIT 1`,
+      hasUser ? [user_id, boardId] : [boardId]
     );
 
     if (!rows.length) {
@@ -161,12 +228,14 @@ exports.getRecentBoards = async (req, res) => {
               END AS my_role
        FROM board_visits bv
        JOIN boards b ON b.id = bv.board_id
-       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ?
+       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role IN ('guest','editer')
+       LEFT JOIN boardguests bg_block ON bg_block.board_id = b.id AND bg_block.user_id = ? AND bg_block.role = 'blocked'
        WHERE bv.user_id = ?
+         AND bg_block.user_id IS NULL
          AND (b.owner_id = ? OR bg.user_id IS NOT NULL OR b.is_public = 1)
        ORDER BY bv.last_visited_at DESC
        LIMIT 10`,
-      [user_id, user_id, user_id, user_id]
+      [user_id, user_id, user_id, user_id, user_id]
     );
 
     return res.status(200).json(boards);
@@ -332,6 +401,7 @@ exports.renameBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
     const { board_id } = req.params;
+    const boardId = Number(board_id);
     const title = String(req.body?.title ?? '').trim();
 
     if (!title) {
@@ -351,6 +421,21 @@ exports.renameBoard = async (req, res) => {
       return res.status(404).json({ message: 'Доска не найдена' });
     }
 
+    try {
+      const [rows] = await db.execute(`SELECT is_public FROM boards WHERE id = ? LIMIT 1`, [board_id]);
+      const isPublic = Number(rows?.[0]?.is_public) === 1 || rows?.[0]?.is_public === true;
+
+      if (Number.isFinite(boardId) && boardId > 0) {
+        const io = req.app.get('io');
+        if (io && isPublic) {
+          io.emit('boards:updated', { reason: 'title_changed', board_id: boardId, title, is_public: 1 });
+        }
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'title_changed', board_id: boardId, title }, [user_id]);
+      }
+    } catch {
+      // ignore
+    }
+
     return res.status(200).json({ title });
   } catch (e) {
     console.error(e);
@@ -364,6 +449,7 @@ exports.updateDescription = async (req, res) => {
   try {
     const user_id = req.user.id;
     const { board_id } = req.params;
+    const boardId = Number(board_id);
     const descriptionRaw = req.body?.description;
     const description =
       typeof descriptionRaw === 'string'
@@ -386,6 +472,21 @@ exports.updateDescription = async (req, res) => {
       return res.status(404).json({ message: 'Доска не найдена' });
     }
 
+    try {
+      const [rows] = await db.execute(`SELECT is_public FROM boards WHERE id = ? LIMIT 1`, [board_id]);
+      const isPublic = Number(rows?.[0]?.is_public) === 1 || rows?.[0]?.is_public === true;
+
+      if (Number.isFinite(boardId) && boardId > 0) {
+        const io = req.app.get('io');
+        if (io && isPublic) {
+          io.emit('boards:updated', { reason: 'description_changed', board_id: boardId, description, is_public: 1 });
+        }
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'description_changed', board_id: boardId, description }, [user_id]);
+      }
+    } catch {
+      // ignore
+    }
+
     return res.status(200).json({ description });
   } catch (e) {
     console.error(e);
@@ -398,6 +499,7 @@ exports.updateBoardPublic = async (req, res) => {
   try {
     const user_id = req.user.id;
     const { board_id } = req.params;
+    const boardId = Number(board_id);
     const raw = req.body?.is_public;
 
     const isPublic =
@@ -422,6 +524,20 @@ exports.updateBoardPublic = async (req, res) => {
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    try {
+      if (Number.isFinite(boardId) && boardId > 0) {
+        // Board public status affects global "public boards" listings, so notify all connected clients.
+        const io = req.app.get('io');
+        if (io) {
+          io.emit('boards:updated', { reason: 'public_changed', board_id: boardId, is_public: value });
+        }
+
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'public_changed', board_id: boardId, is_public: value }, [user_id]);
+      }
+    } catch {
+      // ignore
     }
 
     return res.status(200).json({ is_public: value });
@@ -464,12 +580,16 @@ exports.joinPublicBoardAsGuest = async (req, res) => {
     }
 
     const [existing] = await db.execute(
-      `SELECT id
+      `SELECT role
        FROM boardguests
        WHERE board_id = ? AND user_id = ?
        LIMIT 1`,
       [boardId, user_id]
     );
+
+    if (existing.length && String(existing[0]?.role) === 'blocked') {
+      return res.status(403).json({ message: 'Р”РѕСЃС‚СѓРї Р·Р°РїСЂРµС‰С‘РЅ' });
+    }
 
     if (!existing.length) {
       await db.execute(
@@ -479,6 +599,7 @@ exports.joinPublicBoardAsGuest = async (req, res) => {
       );
     }
 
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'join_public', board_id: boardId }, [user_id]);
     return res.status(200).json({ board_id: boardId, my_role: 'guest' });
   } catch (e) {
     console.error(e);
@@ -494,6 +615,7 @@ exports.updateBoardImage = async (req, res) => {
   try {
     const user_id = req.user.id;
     const { board_id } = req.params;
+    const boardId = Number(board_id);
 
     if (req.file) {
       newImage = `/uploads/${req.file.filename}`;
@@ -511,7 +633,7 @@ exports.updateBoardImage = async (req, res) => {
     }
 
     const [rows] = await db.execute(
-      `SELECT image
+      `SELECT image, is_public
        FROM boards
        WHERE id = ? AND owner_id = ?`,
       [board_id, user_id]
@@ -523,6 +645,7 @@ exports.updateBoardImage = async (req, res) => {
     }
 
     const oldImage = rows[0]?.image ?? null;
+    const isPublic = Number(rows[0]?.is_public) === 1 || rows[0]?.is_public === true;
 
     await db.execute(
       `UPDATE boards SET image = ?
@@ -532,6 +655,18 @@ exports.updateBoardImage = async (req, res) => {
 
     if (oldImage && oldImage !== newImage) {
       safeUnlinkUpload(oldImage);
+    }
+
+    try {
+      if (Number.isFinite(boardId) && boardId > 0) {
+        const io = req.app.get('io');
+        if (io && isPublic) {
+          io.emit('boards:updated', { reason: 'image_changed', board_id: boardId, image: newImage, is_public: 1 });
+        }
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'image_changed', board_id: boardId, image: newImage }, [user_id]);
+      }
+    } catch {
+      // ignore
     }
 
     return res.status(200).json({ image: newImage });
@@ -621,11 +756,11 @@ exports.inviteToBoard = async (req, res) => {
     }
 
     const [guestRows] = await db.execute(
-      `SELECT 1 FROM boardguests WHERE board_id = ? AND user_id = ? LIMIT 1`,
+      `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? LIMIT 1`,
       [boardId, invited_id]
     );
 
-    if (guestRows.length) {
+    if (guestRows.length && String(guestRows[0]?.role || '') !== 'blocked') {
       return res.status(409).json({ message: 'Пользователь уже гость этой доски' });
     }
 
@@ -704,7 +839,7 @@ exports.removeGuestFromBoard = async (req, res) => {
     }
 
     const [boardRows] = await db.execute(
-      `SELECT owner_id FROM boards WHERE id = ? LIMIT 1`,
+      `SELECT owner_id, is_public FROM boards WHERE id = ? LIMIT 1`,
       [boardId]
     );
 
@@ -720,19 +855,34 @@ exports.removeGuestFromBoard = async (req, res) => {
       return res.status(400).json({ message: 'Нельзя удалить владельца' });
     }
 
-    const [result] = await db.execute(
-      `DELETE FROM boardguests WHERE board_id = ? AND user_id = ?`,
-      [boardId, guestId]
-    );
+    const isPublic = Number(boardRows[0]?.is_public) === 1 || boardRows[0]?.is_public === true;
+
+    let affectedRows = 0;
+    if (isPublic) {
+      const [result] = await db.execute(
+        `UPDATE boardguests
+         SET role = 'blocked'
+         WHERE board_id = ? AND user_id = ? AND role IN ('guest','editer')`,
+        [boardId, guestId]
+      );
+      affectedRows = result.affectedRows ?? 0;
+    } else {
+      const [result] = await db.execute(
+        `DELETE FROM boardguests
+         WHERE board_id = ? AND user_id = ? AND role IN ('guest','editer')`,
+        [boardId, guestId]
+      );
+      affectedRows = result.affectedRows ?? 0;
+    }
+
+    if (affectedRows === 0) {
+      return res.status(404).json({ message: 'Гость не найден' });
+    }
 
     await db.execute(
       `DELETE FROM board_visits WHERE board_id = ? AND user_id = ?`,
       [boardId, guestId]
     );
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Гость не найден' });
-    }
 
     await db.execute(
       `DELETE FROM board_invites
@@ -741,8 +891,7 @@ exports.removeGuestFromBoard = async (req, res) => {
     );
 
     try {
-      const io = req.app.get('io');
-      io.to(`user:${guestId}`).emit('boards:updated', { reason: 'removed', board_id: boardId });
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'removed', board_id: boardId }, [guestId, owner_id]);
     } catch {
       // ignore
     }
@@ -790,7 +939,7 @@ exports.updateGuestRole = async (req, res) => {
     }
 
     const [guestRows] = await db.execute(
-      `SELECT 1 FROM boardguests WHERE board_id = ? AND user_id = ? LIMIT 1`,
+      `SELECT 1 FROM boardguests WHERE board_id = ? AND user_id = ? AND role IN ('guest','editer') LIMIT 1`,
       [boardId, guestId]
     );
 
@@ -799,13 +948,12 @@ exports.updateGuestRole = async (req, res) => {
     }
 
     await db.execute(
-      `UPDATE boardguests SET role = ? WHERE board_id = ? AND user_id = ?`,
+      `UPDATE boardguests SET role = ? WHERE board_id = ? AND user_id = ? AND role IN ('guest','editer')`,
       [nextRole, boardId, guestId]
     );
 
     try {
-      const io = req.app.get('io');
-      io.to(`user:${guestId}`).emit('boards:updated', { reason: 'role', board_id: boardId });
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'role', board_id: boardId }, [guestId, owner_id]);
     } catch {
       // ignore
     }
@@ -840,7 +988,7 @@ exports.leaveBoard = async (req, res) => {
     }
 
     const [result] = await db.execute(
-      `DELETE FROM boardguests WHERE board_id = ? AND user_id = ?`,
+      `DELETE FROM boardguests WHERE board_id = ? AND user_id = ? AND role IN ('guest','editer')`,
       [boardId, user_id]
     );
 
@@ -853,8 +1001,7 @@ exports.leaveBoard = async (req, res) => {
       return res.status(404).json({ message: 'Р’С‹ РЅРµ РіРѕСЃС‚СЊ СЌС‚РѕР№ РґРѕСЃРєРё' });
     }
     try {
-      const io = req.app.get('io');
-      io.to(`user:${user_id}`).emit('boards:updated', { reason: 'left', board_id: boardId });
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'left', board_id: boardId }, [user_id, boardRows[0]?.owner_id]);
     } catch {
       // ignore
     }
@@ -872,13 +1019,54 @@ exports.visitBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
     const { board_id } = req.params;
+    const boardId = Number(board_id);
+
+    if (!Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
 
     await db.execute(
       `INSERT INTO board_visits (user_id, board_id)
        VALUES (?, ?)
        ON DUPLICATE KEY UPDATE last_visited_at = CURRENT_TIMESTAMP`,
-      [user_id, board_id]
+      [user_id, boardId]
     );
+
+    // Remove stale invites (including rejected) if the user is already entering the board.
+    const [inviteRows] = await db.execute(
+      `SELECT id
+       FROM board_invites
+       WHERE board_id = ? AND invited_id = ? AND status IN ('sent','rejected')`,
+      [boardId, user_id]
+    );
+
+    if (Array.isArray(inviteRows) && inviteRows.length) {
+      await db.execute(
+        `DELETE FROM board_invites
+         WHERE board_id = ? AND invited_id = ? AND status IN ('sent','rejected')`,
+        [boardId, user_id]
+      );
+
+      try {
+        const io = req.app.get('io');
+        if (io) {
+          for (const r of inviteRows) {
+            const id = Number(r?.id);
+            if (Number.isFinite(id) && id > 0) {
+              io.to(`user:${user_id}`).emit('board_invite:removed', { id });
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+
+      try {
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'invite_cleared', board_id: boardId }, [user_id]);
+      } catch {
+        // ignore
+      }
+    }
 
     return res.status(204).end();
   } catch (e) {
@@ -902,9 +1090,9 @@ exports.getBoardById = async (req, res) => {
                 ELSE NULL
               END AS my_role
        FROM boards b
-       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ?
-       WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
-       LIMIT 1`,
+        LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role IN ('guest','editer')
+        WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
+        LIMIT 1`,
       [user_id, user_id, board_id, user_id]
     );
 
@@ -941,7 +1129,7 @@ exports.getBoardParticipants = async (req, res) => {
               END AS my_role
        FROM boards b
        JOIN users o ON o.id = b.owner_id
-       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ?
+       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role IN ('guest','editer')
        WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
        LIMIT 1`,
       [user_id, user_id, boardId, user_id]
@@ -957,7 +1145,7 @@ exports.getBoardParticipants = async (req, res) => {
       `SELECT bg.user_id AS id, u.username, u.nickname, u.avatar, bg.role, bg.added_at
        FROM boardguests bg
        JOIN users u ON u.id = bg.user_id
-       WHERE bg.board_id = ?
+       WHERE bg.board_id = ? AND bg.role IN ('guest','editer')
        ORDER BY bg.added_at ASC`,
       [boardId]
     );
@@ -1009,9 +1197,9 @@ exports.getBoardFull = async (req, res) => {
               END AS my_role
        FROM boards b
        JOIN users o ON o.id = b.owner_id
-       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ?
-       WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
-       LIMIT 1`,
+       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role IN ('guest','editer')
+        WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
+        LIMIT 1`,
       [user_id, user_id, board_id, user_id]
     );
 
@@ -1033,7 +1221,7 @@ exports.getBoardFull = async (req, res) => {
       `SELECT bg.user_id AS id, u.username, u.nickname, u.avatar, bg.role, bg.added_at
        FROM boardguests bg
        JOIN users u ON u.id = bg.user_id
-       WHERE bg.board_id = ?
+       WHERE bg.board_id = ? AND bg.role IN ('guest','editer')
        ORDER BY bg.added_at ASC`,
       [board_id]
     );
@@ -1167,11 +1355,20 @@ exports.acceptBoardInvite = async (req, res) => {
     const board_id = rows[0].board_id;
 
     const [existing] = await connection.execute(
-      `SELECT 1 FROM boardguests
+      `SELECT role FROM boardguests
        WHERE board_id = ? AND user_id = ?
        LIMIT 1`,
       [board_id, invited_id]
     );
+
+    if (existing.length && String(existing[0]?.role) === 'blocked') {
+      await connection.execute(
+        `UPDATE boardguests
+         SET role = 'guest'
+         WHERE board_id = ? AND user_id = ? AND role = 'blocked'`,
+        [board_id, invited_id]
+      );
+    }
 
     if (!existing.length) {
       await connection.execute(
@@ -1190,7 +1387,7 @@ exports.acceptBoardInvite = async (req, res) => {
     await connection.commit();
     try {
       const io = req.app.get('io');
-      io.to(`user:${invited_id}`).emit('boards:updated', { reason: 'invite_accepted', board_id: Number(board_id) });
+      emitBoardsUpdatedToBoardUsers(req, Number(board_id), { reason: 'invite_accepted', board_id: Number(board_id) }, [invited_id]);
       io.to(`user:${invited_id}`).emit('board_invite:removed', { id: Number(invite_id) });
     } catch {
       // ignore
@@ -1216,7 +1413,7 @@ exports.rejectBoardInvite = async (req, res) => {
     const { invite_id } = req.params;
 
     const [rows] = await db.execute(
-      `SELECT id FROM board_invites
+      `SELECT id, board_id, user_id FROM board_invites
        WHERE id = ? AND invited_id = ? AND status = 'sent'`,
       [invite_id, invited_id]
     );
@@ -1235,6 +1432,10 @@ exports.rejectBoardInvite = async (req, res) => {
     try {
       const io = req.app.get('io');
       io.to(`user:${invited_id}`).emit('board_invite:removed', { id: Number(invite_id) });
+      emitBoardsUpdatedToBoardUsers(req, Number(rows[0].board_id), { reason: 'invite_rejected', board_id: Number(rows[0].board_id) }, [
+        Number(rows[0].user_id),
+        invited_id,
+      ]);
     } catch {
       // ignore
     }
@@ -1493,11 +1694,20 @@ exports.acceptBoardInviteLink = async (req, res) => {
 
     if (owner_id !== user_id) {
       const [existing] = await connection.execute(
-        `SELECT 1 FROM boardguests
+        `SELECT role FROM boardguests
          WHERE board_id = ? AND user_id = ?
          LIMIT 1`,
         [board_id, user_id]
       );
+
+      if (existing.length && String(existing[0]?.role) === 'blocked') {
+        await connection.execute(
+          `UPDATE boardguests
+           SET role = 'guest'
+           WHERE board_id = ? AND user_id = ? AND role = 'blocked'`,
+          [board_id, user_id]
+        );
+      }
 
       if (!existing.length) {
         await connection.execute(
@@ -1511,8 +1721,7 @@ exports.acceptBoardInviteLink = async (req, res) => {
     await connection.commit();
 
     try {
-      const io = req.app.get('io');
-      io.to(`user:${user_id}`).emit('boards:updated', { reason: 'invite_link_accepted', board_id });
+      emitBoardsUpdatedToBoardUsers(req, board_id, { reason: 'invite_link_accepted', board_id }, [user_id, owner_id]);
     } catch {
       // ignore
     }

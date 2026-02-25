@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const boardsController = require('../controllers/boardsController');
 const authMiddleware = require('../middleware/authMiddleware');
+const optionalAuth = require('../middleware/optionalAuth');
 const multer = require('multer');
 const path = require('path');
 
@@ -42,9 +43,9 @@ const maybeUploadSingleImage = (req, res, next) => {
   });
 };
 
-// Public routes (no auth)
-router.get('/public/popular', boardsController.getPopularPublicBoards);
-router.get('/public/:board_id', boardsController.getPublicBoardById);
+// Public routes (optional auth for per-user filtering)
+router.get('/public/popular', optionalAuth, boardsController.getPopularPublicBoards);
+router.get('/public/:board_id', optionalAuth, boardsController.getPublicBoardById);
 router.get('/invite-link/resolve', boardsController.resolveBoardInviteLink);
 router.get('/invite-link/preview', boardsController.previewBoardInviteLink);
 

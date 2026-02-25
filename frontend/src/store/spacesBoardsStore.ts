@@ -42,14 +42,17 @@ interface SpacesBoardsState {
 
   ensureFriendsBoardsLoaded: () => void;
   refreshFriendsBoards: () => void;
+  refreshFriendsBoardsSilent: () => void;
   clearFriendsBoards: () => void;
 
   ensureGuestBoardsLoaded: () => void;
   refreshGuestBoards: () => void;
+  refreshGuestBoardsSilent: () => void;
   clearGuestBoards: () => void;
 
   ensurePublicBoardsLoaded: () => void;
   refreshPublicBoards: () => void;
+  refreshPublicBoardsSilent: () => void;
   clearPublicBoards: () => void;
 }
 
@@ -58,7 +61,7 @@ export const useSpacesBoardsStore = create<SpacesBoardsState>((set, get) => {
   let guestInFlight = false;
   let publicInFlight = false;
 
-  const fetchFriendsBoards = async (force: boolean) => {
+  const fetchFriendsBoards = async (force: boolean, silent?: boolean) => {
     if (friendsInFlight) return;
     const token = localStorage.getItem('token');
     if (!token) {
@@ -70,14 +73,14 @@ export const useSpacesBoardsStore = create<SpacesBoardsState>((set, get) => {
       if (get().hasLoadedOnceFriendsBoards) return;
     }
 
-    set({ isLoadingFriendsBoards: true });
+    if (!silent) set({ isLoadingFriendsBoards: true });
     friendsInFlight = true;
     axiosInstance.get<FriendsBoard[]>('/api/boards/friends')
       .then(({ data }) => {
         set({ friendsBoards: Array.isArray(data) ? data : [] });
       })
       .catch(() => {
-        set({ friendsBoards: [] });
+        if (!silent) set({ friendsBoards: [] });
       })
       .then(() => {
         friendsInFlight = false;
@@ -85,7 +88,7 @@ export const useSpacesBoardsStore = create<SpacesBoardsState>((set, get) => {
       });
   };
 
-  const fetchGuestBoards = async (force: boolean) => {
+  const fetchGuestBoards = async (force: boolean, silent?: boolean) => {
     if (guestInFlight) return;
     const token = localStorage.getItem('token');
     if (!token) {
@@ -97,14 +100,14 @@ export const useSpacesBoardsStore = create<SpacesBoardsState>((set, get) => {
       if (get().hasLoadedOnceGuestBoards) return;
     }
 
-    set({ isLoadingGuestBoards: true });
+    if (!silent) set({ isLoadingGuestBoards: true });
     guestInFlight = true;
     axiosInstance.get<GuestBoard[]>('/api/boards/guest')
       .then(({ data }) => {
         set({ guestBoards: Array.isArray(data) ? data : [] });
       })
       .catch(() => {
-        set({ guestBoards: [] });
+        if (!silent) set({ guestBoards: [] });
       })
       .then(() => {
         guestInFlight = false;
@@ -112,20 +115,20 @@ export const useSpacesBoardsStore = create<SpacesBoardsState>((set, get) => {
       });
   };
 
-  const fetchPublicBoards = async (force: boolean) => {
+  const fetchPublicBoards = async (force: boolean, silent?: boolean) => {
     if (publicInFlight) return;
     if (!force) {
       if (get().hasLoadedOncePublicBoards) return;
     }
 
-    set({ isLoadingPublicBoards: true });
+    if (!silent) set({ isLoadingPublicBoards: true });
     publicInFlight = true;
     axiosInstance.get<PublicBoard[]>('/api/boards/public/popular')
       .then(({ data }) => {
         set({ publicBoards: Array.isArray(data) ? data : [] });
       })
       .catch(() => {
-        set({ publicBoards: [] });
+        if (!silent) set({ publicBoards: [] });
       })
       .then(() => {
         publicInFlight = false;
@@ -148,14 +151,17 @@ export const useSpacesBoardsStore = create<SpacesBoardsState>((set, get) => {
 
     ensureFriendsBoardsLoaded: () => { void fetchFriendsBoards(false); },
     refreshFriendsBoards: () => { void fetchFriendsBoards(true); },
+    refreshFriendsBoardsSilent: () => { void fetchFriendsBoards(true, true); },
     clearFriendsBoards: () => set({ friendsBoards: [], isLoadingFriendsBoards: false, hasLoadedOnceFriendsBoards: false }),
 
     ensureGuestBoardsLoaded: () => { void fetchGuestBoards(false); },
     refreshGuestBoards: () => { void fetchGuestBoards(true); },
+    refreshGuestBoardsSilent: () => { void fetchGuestBoards(true, true); },
     clearGuestBoards: () => set({ guestBoards: [], isLoadingGuestBoards: false, hasLoadedOnceGuestBoards: false }),
 
     ensurePublicBoardsLoaded: () => { void fetchPublicBoards(false); },
     refreshPublicBoards: () => { void fetchPublicBoards(true); },
+    refreshPublicBoardsSilent: () => { void fetchPublicBoards(true, true); },
     clearPublicBoards: () => set({ publicBoards: [], isLoadingPublicBoards: false, hasLoadedOncePublicBoards: false }),
   };
 });

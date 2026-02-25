@@ -121,6 +121,9 @@
   max-height: 150px;
   overflow: auto;
   padding-right: 0;
+  .friendRow:first-child{
+    border-top: none;
+  }
   &::-webkit-scrollbar {
     width: 10px;
   }

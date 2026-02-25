@@ -10,7 +10,14 @@ type Callbacks = {
   onRemoveRequest?: (data: any) => void;
   onNewBoardInvite?: (data: any) => void;
   onRemoveBoardInvite?: (data: any) => void;
-  onBoardsUpdate?: (data: { reason?: string; board_id?: number }) => void;
+  onBoardsUpdate?: (data: {
+    reason?: string;
+    board_id?: number;
+    is_public?: number | boolean;
+    title?: string;
+    description?: string | null;
+    image?: string | null;
+  }) => void;
 };
 
 export const connectSocket = (callbacks?: Callbacks) => {
