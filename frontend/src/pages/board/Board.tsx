@@ -630,12 +630,14 @@ const Board = () => {
             return;
         }
 
+        if (!isOwnerBoard && !isGuestBoard) return;
+
         const id = Number(boardId);
         if (!Number.isFinite(id) || id <= 0) return;
         useBoardDetailsStore.getState().ensureParticipantsLoaded(id);
 
         return () => {};
-    }, [boardId, isInitialized, isLoggedIn]);
+    }, [boardId, isGuestBoard, isInitialized, isLoggedIn, isOwnerBoard]);
 
     useEffect(() => {
         if (!hasValidBoardId) return;

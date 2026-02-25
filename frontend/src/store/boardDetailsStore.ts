@@ -406,6 +406,11 @@ export const useBoardDetailsStore = create<BoardDetailsState>((set, get) => ({
       set((s) => ({
         participantsByBoardId: { ...s.participantsByBoardId, [id]: data },
         participantsHasLoadedOnce: { ...s.participantsHasLoadedOnce, [id]: true },
+        accessLostBoards: data ? (() => {
+          const al = { ...s.accessLostBoards };
+          delete al[id];
+          return al;
+        })() : s.accessLostBoards,
       }));
     });
   },
