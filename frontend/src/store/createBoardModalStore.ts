@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import axiosInstance from '@/api/axiosInstance';
-import { useBoardsStore } from '@/store/boardsStore';
+import { useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 
 export const CREATE_BOARD_TITLE_MAX_LENGTH = 20;
 
@@ -72,7 +72,9 @@ export const useCreateBoardModalStore = create<CreateBoardModalState>((set, get)
       const { data } = await axiosInstance.post<CreateBoardResponse>('/api/boards', { title });
       const boardId = Number(data?.id);
 
-      await useBoardsStore.getState().loadBoards();
+      void useBoardsUnifiedStore.getState().refreshMySilent();
+      void useBoardsUnifiedStore.getState().refreshRecentSilent();
+      void useBoardsUnifiedStore.getState().refreshPublicSilent();
 
       set({ isOpen: false, title: '', isSubmitting: false, error: null });
       return data ?? null;

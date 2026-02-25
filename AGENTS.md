@@ -417,14 +417,11 @@ highlight logic
 
 dev fake injection
 
-boardsStore:
+boardsUnifiedStore:
 
-boards + recentBoards
-
-request dedup + caching:
-
-- `loadBoards()` guarded by `isLoading`
-- `ensureBoardsLoaded()` uses `hasLoadedOnce` and token-change detection to avoid refetch on route switch
+- Single source of truth for board entities + lists: my / recent / guest / friends / public.
+- Each list has `hasLoadedOnce*` + in-flight guards and supports silent refresh (no skeleton on socket-driven updates).
+- Socket `boards:updated` is treated as a command; `frontend/src/components/app/App.tsx` subscribes once and calls `handleBoardsUpdated()`.
 
 friendsStore:
 
@@ -436,9 +433,9 @@ boardsInvitesStore:
 
 - `hasLoadedOnce` + `ensureInvitesLoaded()` to prevent repeated fetch on remount
 
-spacesBoardsStore:
+Legacy note:
 
-- Caches `/api/boards/friends`, `/api/boards/guest`, `/api/boards/public/popular` with `hasLoadedOnce*` + in-flight guards
+- `boardsStore` and `spacesBoardsStore` are superseded by `boardsUnifiedStore` for boards lists/state.
 
 CACHING (FRONTEND, IN-MEMORY)
 
@@ -1124,7 +1121,7 @@ These points are confirmed from current repository code and override any older c
     - Non-auth users are redirected to `/spaces` unless `GET /api/boards/public/:id` succeeds.
     - Auth users first try `GET /api/boards/:id`; if no access, they try `GET /api/boards/public/:id` and (if public) join via `POST /api/boards/:id/join-public`, then retry `GET /api/boards/:id`.
     - Auth users with `?invite=<token>`: when `GET /api/boards/:id` fails with 403/404, it tries `POST /api/boards/invite-link/accept` first, then retries `GET /api/boards/:id` before public fallback.
-  - For accessible auth boards: sends `POST /api/boards/:id/visit` (also clears any `board_invites` rows for that user+board with status `sent`/`rejected`), then reloads boards store.
+  - For accessible auth boards: sends `POST /api/boards/:id/visit` (also clears any `board_invites` rows for that user+board with status `sent`/`rejected`), then silently refreshes `boardsUnifiedStore` lists.
   - Loads participants for board menu via `GET /api/boards/:id/participants`.
   - Auth guests can leave via `POST /api/boards/:id/leave`.
   - For non-auth users: persists recent public board info into localStorage key `pinit_recentBoards`.

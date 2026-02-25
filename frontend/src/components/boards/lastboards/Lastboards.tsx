@@ -3,22 +3,20 @@ import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import classes from './Lastboards.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
-import { Board, RECENT_BOARDS_LS_KEY, useBoardsStore } from '@/store/boardsStore';
+import { RECENT_BOARDS_LS_KEY, UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { useAuthStore } from '@/store/authStore';
-import { connectSocket } from '@/services/socketManager';
 
 // Zustand store для последних досок
 const Lastboards: React.FC = () => {
-  const recentBoards = useBoardsStore(state => state.recentBoards);
-  const isLoading = useBoardsStore(state => state.isLoading);
-  const ensureBoardsLoaded = useBoardsStore(state => state.ensureBoardsLoaded);
-  const loadBoards = useBoardsStore(state => state.loadBoards);
+  const recentBoards = useBoardsUnifiedStore((s) => s.recentBoards);
+  const isLoading = useBoardsUnifiedStore((s) => s.isLoadingRecent);
+  const hasLoadedOnce = useBoardsUnifiedStore((s) => s.hasLoadedOnceRecent);
+  const ensureRecentLoaded = useBoardsUnifiedStore((s) => s.ensureRecentLoaded);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
@@ -28,12 +26,12 @@ const Lastboards: React.FC = () => {
     if (!isInitialized) return;
     if (isAuth) return;
 
-    const readCurrent = (): Board[] => {
+    const readCurrent = (): UnifiedBoard[] => {
       try {
         const raw = localStorage.getItem(RECENT_BOARDS_LS_KEY);
         if (!raw) return [];
         const parsed: unknown = JSON.parse(raw);
-        return Array.isArray(parsed) ? (parsed as Board[]) : [];
+        return Array.isArray(parsed) ? (parsed as UnifiedBoard[]) : [];
       } catch {
         return [];
       }
@@ -43,7 +41,7 @@ const Lastboards: React.FC = () => {
     const current = readCurrent();
     if (current.length === 0) return;
 
-    const normalizePublicEntry = (existing: Board, patch: Partial<Board>): Board => ({
+    const normalizePublicEntry = (existing: UnifiedBoard, patch: Partial<UnifiedBoard>): UnifiedBoard => ({
       ...existing,
       ...patch,
       id: existing.id,
@@ -56,7 +54,7 @@ const Lastboards: React.FC = () => {
         if (!Number.isFinite(id) || id <= 0) return null;
 
         try {
-          const { data } = await axiosInstance.get<Partial<Board>>(`/api/boards/public/${id}`);
+          const { data } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/public/${id}`);
           const title = typeof data?.title === 'string' && data.title.trim() ? data.title : b.title;
           if (!title) return null;
 
@@ -71,7 +69,7 @@ const Lastboards: React.FC = () => {
       })
     ).then((results) => {
       if (cancelled) return;
-      const publicOnly = results.filter((x): x is Board => Boolean(x));
+      const publicOnly = results.filter((x): x is UnifiedBoard => Boolean(x));
 
       try {
         localStorage.setItem(RECENT_BOARDS_LS_KEY, JSON.stringify(publicOnly));
@@ -79,7 +77,24 @@ const Lastboards: React.FC = () => {
         // ignore
       }
 
-      useBoardsStore.setState({ recentBoards: publicOnly });
+      useBoardsUnifiedStore.setState((s) => {
+        const nextEntities = { ...s.entitiesById };
+        const nextIds: number[] = [];
+        for (const b of publicOnly) {
+          const id = Number(b.id);
+          if (!Number.isFinite(id) || id <= 0) continue;
+          nextIds.push(id);
+          nextEntities[id] = { ...(nextEntities[id] ?? b), ...b, id };
+        }
+        return {
+          ...s,
+          entitiesById: nextEntities,
+          recentIds: nextIds,
+          recentBoards: publicOnly,
+          hasLoadedOnceRecent: true,
+          isLoadingRecent: false,
+        };
+      });
     });
 
     return () => {
@@ -88,38 +103,10 @@ const Lastboards: React.FC = () => {
   }, [isAuth, isInitialized]);
 
   useEffect(() => {
-    if (forceSkeleton) {
-      setHasLoadedOnce(false);
-      return;
-    }
     if (!isInitialized) return;
-    let mounted = true;
-    setHasLoadedOnce(false);
-    ensureBoardsLoaded().finally(() => {
-      if (!mounted) return;
-      setHasLoadedOnce(true);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [ensureBoardsLoaded, forceSkeleton, isInitialized, isAuth]);
-
-  useEffect(() => {
     if (forceSkeleton) return;
-    if (!isInitialized) return;
-    if (!isAuth) return;
-
-    const unsubscribe = connectSocket({
-      onBoardsUpdate: () => {
-        loadBoards();
-      },
-    });
-
-    return () => {
-      unsubscribe?.();
-    };
-  }, [forceSkeleton, isAuth, isInitialized, loadBoards]);
+    ensureRecentLoaded();
+  }, [ensureRecentLoaded, forceSkeleton, isInitialized]);
 
   if (forceSkeleton || ((isLoading || !hasLoadedOnce) && recentBoards.length === 0)) {
     return (

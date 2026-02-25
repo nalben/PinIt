@@ -9,8 +9,7 @@ import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Edit from '@/assets/icons/monochrome/edit.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
-import { useBoardsStore } from '@/store/boardsStore';
-import { useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import { useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import { useAuthStore } from '@/store/authStore';
 import { Friend, useFriendsStore } from '@/store/friendsStore';
 import { connectSocket } from '@/services/socketManager';
@@ -820,17 +819,18 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     try {
       await axiosInstance.delete(`/api/boards/${numericBoardId}`);
 
-      useBoardsStore.setState((s) => ({
+      useBoardsUnifiedStore.setState((s) => ({
         ...s,
-        boards: s.boards.filter((b) => b.id !== numericBoardId),
+        myIds: s.myIds.filter((id) => id !== numericBoardId),
+        recentIds: s.recentIds.filter((id) => id !== numericBoardId),
+        guestIds: s.guestIds.filter((id) => id !== numericBoardId),
+        friendsIds: s.friendsIds.filter((id) => id !== numericBoardId),
+        publicIds: s.publicIds.filter((id) => id !== numericBoardId),
+        myBoards: s.myBoards.filter((b) => b.id !== numericBoardId),
         recentBoards: s.recentBoards.filter((b) => b.id !== numericBoardId),
-      }));
-
-      useSpacesBoardsStore.setState((s) => ({
-        ...s,
-        publicBoards: s.publicBoards.filter((b) => b.id !== numericBoardId),
-        friendsBoards: s.friendsBoards.filter((b) => b.id !== numericBoardId),
         guestBoards: s.guestBoards.filter((b) => b.id !== numericBoardId),
+        friendsBoards: s.friendsBoards.filter((b) => b.id !== numericBoardId),
+        publicBoards: s.publicBoards.filter((b) => b.id !== numericBoardId),
       }));
 
       boardCache.delete(numericBoardId);
@@ -853,13 +853,21 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     if (!isOwner) return;
 
     const updateBoardsStore = (patch: Partial<Pick<BoardResponse, 'title' | 'description' | 'image' | 'is_public'>>) => {
-      const current = useBoardsStore.getState();
-      const apply = <T extends { id: number }>(list: T[]) =>
-        list.map((b) => (b.id === numericBoardId ? ({ ...b, ...patch } as T) : b));
-
-      useBoardsStore.setState({
-        boards: apply(current.boards),
-        recentBoards: apply(current.recentBoards),
+      useBoardsUnifiedStore.setState((s) => {
+        const nextEntities = { ...s.entitiesById };
+        const prev = nextEntities[numericBoardId];
+        if (prev) {
+          nextEntities[numericBoardId] = { ...prev, ...(patch as any), id: numericBoardId };
+        }
+        return {
+          ...s,
+          entitiesById: nextEntities,
+          myBoards: s.myBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+          recentBoards: s.recentBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+          guestBoards: s.guestBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+          friendsBoards: s.friendsBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+          publicBoards: s.publicBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+        };
       });
     };
 
@@ -975,7 +983,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
               {!isLoading && board && !isOwner ? <p className={classes.hint}>Только владелец может редактировать доску</p> : null}
 
               {isLoading && !board ? (
-                <p className={classes.hint}>Загрузка...</p>
+                <p className={classes.hint} />
               ) : (
                 <>
                   <div className={classes.boardImageUpload}>
@@ -1136,7 +1144,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                       <input
                         className={classes.inviteLinkInput}
                         type="text"
-                        value={inviteLinkLoading ? '...' : inviteLinkUrl}
+                        value={inviteLinkUrl}
                         readOnly
                       />
                       <button
@@ -1181,7 +1189,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
 
                     {participantsInnerView === 'friends' ? (
                       <>
-                        {friendsLoading || outgoingInvitesLoading || participantsLoading ? <p className={classes.hint}>Загрузка...</p> : null}
+                        {friendsLoading || outgoingInvitesLoading || participantsLoading ? <p className={classes.hint} /> : null}
                         {!friendsLoading && friends.length === 0 ? <p className={classes.hint}>Список друзей пуст</p> : null}
                         {!friendsLoading && friends.length === 0 ? (
                           <Mainbtn
@@ -1298,7 +1306,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                       </>
                     ) : (
                       <>
-                        {participantsLoading || outgoingInvitesLoading ? <p className={classes.hint}>Загрузка...</p> : null}
+                        {participantsLoading || outgoingInvitesLoading ? <p className={classes.hint} /> : null}
 
                         <input
                           className={classes.guestsSearchInput}

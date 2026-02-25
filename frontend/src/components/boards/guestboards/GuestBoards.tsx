@@ -4,22 +4,19 @@ import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { API_URL } from '@/api/axiosInstance';
-import { connectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
-import { GuestBoard, useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import { UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 
 const GuestBoards: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
-  const boards = useSpacesBoardsStore((s) => s.guestBoards);
-  const isLoading = useSpacesBoardsStore((s) => s.isLoadingGuestBoards);
-  const hasLoadedOnce = useSpacesBoardsStore((s) => s.hasLoadedOnceGuestBoards);
-  const ensureLoaded = useSpacesBoardsStore((s) => s.ensureGuestBoardsLoaded);
-  const refreshSilent = useSpacesBoardsStore((s) => s.refreshGuestBoardsSilent);
-  const clear = useSpacesBoardsStore((s) => s.clearGuestBoards);
+  const boards = useBoardsUnifiedStore((s) => s.guestBoards);
+  const isLoading = useBoardsUnifiedStore((s) => s.isLoadingGuest);
+  const hasLoadedOnce = useBoardsUnifiedStore((s) => s.hasLoadedOnceGuest);
+  const ensureLoaded = useBoardsUnifiedStore((s) => s.ensureGuestLoaded);
 
-  const [debugBoards, setDebugBoards] = useState<GuestBoard[] | null>(null);
+  const [debugBoards, setDebugBoards] = useState<UnifiedBoard[] | null>(null);
   const boardsListRef = useRef<HTMLDivElement | null>(null);
   const [hasListScroll, setHasListScroll] = useState(false);
   const forceSkeleton =
@@ -56,13 +53,13 @@ const GuestBoards: React.FC = () => {
 
     const w = window as unknown as {
       addFakeGuestBoards?: () => void;
-      setFakeGuestBoards?: (boards: GuestBoard[]) => void;
+      setFakeGuestBoards?: (boards: UnifiedBoard[]) => void;
       clearFakeGuestBoards?: () => void;
     };
 
     w.addFakeGuestBoards = () => {
       const now = new Date().toISOString();
-      const fakeBoards: GuestBoard[] = Array.from({ length: 6 }).map((_, i) => ({
+      const fakeBoards: UnifiedBoard[] = Array.from({ length: 6 }).map((_, i) => ({
         id: i + 1,
         title: `Fake guest board ${i + 1}`,
         description: `Fake description ${i + 1}`,
@@ -93,30 +90,9 @@ const GuestBoards: React.FC = () => {
     if (forceSkeleton) return;
     if (debugBoards !== null) return;
     if (!isInitialized) return;
-    if (!isAuth) {
-      clear();
-      return;
-    }
-
-    ensureLoaded();
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards, ensureLoaded, clear]);
-
-  useEffect(() => {
-    if (forceSkeleton) return;
-    if (debugBoards !== null) return;
-    if (!isInitialized) return;
     if (!isAuth) return;
-
-    const unsubscribe = connectSocket({
-      onBoardsUpdate: () => {
-        refreshSilent();
-      },
-    });
-
-    return () => {
-      unsubscribe?.();
-    };
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards, refreshSilent]);
+    ensureLoaded();
+  }, [debugBoards, ensureLoaded, forceSkeleton, isAuth, isInitialized]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">

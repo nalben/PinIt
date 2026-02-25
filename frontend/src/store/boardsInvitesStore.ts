@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import axiosInstance from '@/api/axiosInstance';
-import { useBoardsStore } from '@/store/boardsStore';
-import { useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import { useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 
 export interface BoardInvite {
   id: number;
@@ -89,50 +88,31 @@ export const useBoardsInvitesStore = create<BoardsInvitesState>((set, get) => ({
       await axiosInstance.put(`/api/boards/invites/accept/${inviteId}`);
       get().removeInvite(inviteId);
       if (invite) {
-        useSpacesBoardsStore.setState((s) => {
-          const alreadyInGuest = s.guestBoards.some((b) => b.id === invite.board_id);
-          const alreadyInFriends = s.friendsBoards.some((b) => b.id === invite.board_id);
+        useBoardsUnifiedStore.getState().upsertFromInvite(
+          {
+            id: invite.board_id,
+            title: invite.title,
+            description: invite.description ?? null,
+            created_at: invite.created_at,
+            image: invite.image ?? null,
+          },
+          'guest'
+        );
+        useBoardsUnifiedStore.getState().upsertFromInvite(
+          {
+            id: invite.board_id,
+            title: invite.title,
+            description: invite.description ?? null,
+            created_at: invite.created_at,
+            image: invite.image ?? null,
+          },
+          'friends'
+        );
 
-          const nextGuest = alreadyInGuest
-            ? s.guestBoards
-            : [
-                {
-                  id: invite.board_id,
-                  title: invite.title,
-                  description: invite.description ?? null,
-                  created_at: invite.created_at,
-                  image: invite.image ?? null,
-                  my_role: 'guest',
-                  last_visited_at: null,
-                },
-                ...s.guestBoards,
-              ];
-
-          const nextFriends = alreadyInFriends
-            ? s.friendsBoards
-            : [
-                {
-                  id: invite.board_id,
-                  title: invite.title,
-                  description: invite.description ?? null,
-                  created_at: invite.created_at,
-                  image: invite.image ?? null,
-                },
-                ...s.friendsBoards,
-              ];
-
-          return {
-            ...s,
-            guestBoards: nextGuest,
-            friendsBoards: nextFriends,
-            hasLoadedOnceGuestBoards: true,
-            hasLoadedOnceFriendsBoards: true,
-          };
-        });
-
-        void useBoardsStore.getState().loadBoards();
-        void useSpacesBoardsStore.getState().refreshGuestBoardsSilent();
-        void useSpacesBoardsStore.getState().refreshFriendsBoardsSilent();
+        void useBoardsUnifiedStore.getState().refreshGuestSilent();
+        void useBoardsUnifiedStore.getState().refreshFriendsSilent();
+        void useBoardsUnifiedStore.getState().refreshRecentSilent();
+        void useBoardsUnifiedStore.getState().refreshPublicSilent();
       }
     } catch (e) {
       console.error(e);

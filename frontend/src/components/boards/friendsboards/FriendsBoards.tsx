@@ -4,22 +4,19 @@ import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { API_URL } from '@/api/axiosInstance';
-import { connectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
-import { FriendsBoard, useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import { UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 
 const FriendsBoards: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
   const openFriendsModal = useUIStore((s) => s.openFriendsModal);
-  const boards = useSpacesBoardsStore((s) => s.friendsBoards);
-  const isLoading = useSpacesBoardsStore((s) => s.isLoadingFriendsBoards);
-  const hasLoadedOnce = useSpacesBoardsStore((s) => s.hasLoadedOnceFriendsBoards);
-  const ensureLoaded = useSpacesBoardsStore((s) => s.ensureFriendsBoardsLoaded);
-  const refreshSilent = useSpacesBoardsStore((s) => s.refreshFriendsBoardsSilent);
-  const clear = useSpacesBoardsStore((s) => s.clearFriendsBoards);
+  const boards = useBoardsUnifiedStore((s) => s.friendsBoards);
+  const isLoading = useBoardsUnifiedStore((s) => s.isLoadingFriends);
+  const hasLoadedOnce = useBoardsUnifiedStore((s) => s.hasLoadedOnceFriends);
+  const ensureLoaded = useBoardsUnifiedStore((s) => s.ensureFriendsLoaded);
 
-  const [debugBoards, setDebugBoards] = useState<FriendsBoard[] | null>(null);
+  const [debugBoards, setDebugBoards] = useState<UnifiedBoard[] | null>(null);
   const boardsListRef = useRef<HTMLDivElement | null>(null);
   const [hasListScroll, setHasListScroll] = useState(false);
   const forceSkeleton =
@@ -56,13 +53,13 @@ const FriendsBoards: React.FC = () => {
 
     const w = window as unknown as {
       addFakeFriendsBoards?: () => void;
-      setFakeFriendsBoards?: (boards: FriendsBoard[]) => void;
+      setFakeFriendsBoards?: (boards: UnifiedBoard[]) => void;
       clearFakeFriendsBoards?: () => void;
     };
 
     w.addFakeFriendsBoards = () => {
       const now = new Date().toISOString();
-      const fakeBoards: FriendsBoard[] = Array.from({ length: 6 }).map((_, i) => ({
+      const fakeBoards: UnifiedBoard[] = Array.from({ length: 6 }).map((_, i) => ({
         id: i + 1,
         title: `Fake friend board ${i + 1}`,
         description: `Fake description ${i + 1}`,
@@ -91,30 +88,9 @@ const FriendsBoards: React.FC = () => {
     if (forceSkeleton) return;
     if (debugBoards !== null) return;
     if (!isInitialized) return;
-    if (!isAuth) {
-      clear();
-      return;
-    }
-
-    ensureLoaded();
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards, ensureLoaded, clear]);
-
-  useEffect(() => {
-    if (forceSkeleton) return;
-    if (debugBoards !== null) return;
-    if (!isInitialized) return;
     if (!isAuth) return;
-
-    const unsubscribe = connectSocket({
-      onBoardsUpdate: () => {
-        refreshSilent();
-      },
-    });
-
-    return () => {
-      unsubscribe?.();
-    };
-  }, [isAuth, isInitialized, forceSkeleton, debugBoards, refreshSilent]);
+    ensureLoaded();
+  }, [debugBoards, ensureLoaded, forceSkeleton, isAuth, isInitialized]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">

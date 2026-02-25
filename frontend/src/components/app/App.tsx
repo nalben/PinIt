@@ -11,8 +11,7 @@ import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { connectSocket, disconnectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import { useFriendsStore } from '@/store/friendsStore';
-import { Board, useBoardsStore } from '@/store/boardsStore';
-import { useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import { useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import Appitit from './AppInit'
 import FriendsModal from '@/components/friends/friendsmodal/FriendsModal';
 import CreateBoardModal from '@/components/boards/createboardmodal/CreateBoardModal';
@@ -66,7 +65,7 @@ const Root = () => {
   const { addRequest, removeRequest, updateRequestStatus } = useNotificationsStore();
   const { addInvite, removeInvite } = useBoardsInvitesStore();
   const fetchFriends = useFriendsStore((s) => s.fetchFriends);
-  const refreshPublicBoardsSilent = useSpacesBoardsStore((s) => s.refreshPublicBoardsSilent);
+  const handleBoardsUpdated = useBoardsUnifiedStore((s) => s.handleBoardsUpdated);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
   const userId = useAuthStore(state => state.user?.id);
@@ -79,6 +78,7 @@ const Root = () => {
     if (!isInitialized) return;
     if (!isAuth) {
       disconnectSocket();
+      useBoardsUnifiedStore.getState().clearAuthBoards();
       return;
     }
 
@@ -121,85 +121,14 @@ const Root = () => {
         }
       },
       onBoardsUpdate: (data) => {
-        const rawBoardId = (data as { board_id?: unknown } | null)?.board_id;
-        const boardId = typeof rawBoardId === 'number' ? rawBoardId : Number(rawBoardId);
-        if (!Number.isFinite(boardId) || boardId <= 0) return;
-
-        const title = typeof (data as { title?: unknown } | null)?.title === 'string' ? (data as { title: string }).title : undefined;
-        const descriptionRaw = (data as { description?: unknown } | null)?.description;
-        const description =
-          typeof descriptionRaw === 'string' || descriptionRaw === null ? (descriptionRaw as string | null) : undefined;
-        const imageRaw = (data as { image?: unknown } | null)?.image;
-        const image = typeof imageRaw === 'string' || imageRaw === null ? (imageRaw as string | null) : undefined;
-
-        const rawIsPublic = (data as { is_public?: unknown } | null)?.is_public;
-        const isPublic =
-          typeof rawIsPublic === 'boolean'
-            ? rawIsPublic
-            : typeof rawIsPublic === 'number'
-              ? rawIsPublic === 1
-              : typeof rawIsPublic === 'string'
-                ? rawIsPublic === '1' || rawIsPublic.toLowerCase() === 'true'
-                : null;
-
-        const metaPatch: Partial<Pick<Board, 'title' | 'description' | 'image'>> = {};
-        if (title !== undefined) metaPatch.title = title;
-        if (description !== undefined) metaPatch.description = description;
-        if (image !== undefined) metaPatch.image = image;
-
-        const hasMetaPatch = Object.keys(metaPatch).length > 0;
-
-        if (hasMetaPatch || isPublic !== null) {
-          useBoardsStore.setState((s) => ({
-            ...s,
-            boards: s.boards.map((b) =>
-              b.id === boardId
-                ? {
-                    ...b,
-                    ...metaPatch,
-                    ...(isPublic === null ? null : { is_public: isPublic ? 1 : 0 }),
-                  }
-                : b
-            ),
-            recentBoards: s.recentBoards.map((b) =>
-              b.id === boardId
-                ? {
-                    ...b,
-                    ...metaPatch,
-                    ...(isPublic === null ? null : { is_public: isPublic ? 1 : 0 }),
-                  }
-                : b
-            ),
-          }));
-
-          useSpacesBoardsStore.setState((s) => ({
-            ...s,
-            friendsBoards: s.friendsBoards.map((b) => (b.id === boardId ? { ...b, ...metaPatch } : b)),
-            guestBoards: s.guestBoards.map((b) => (b.id === boardId ? { ...b, ...metaPatch } : b)),
-            publicBoards:
-              isPublic === false
-                ? s.publicBoards.filter((b) => b.id !== boardId)
-                : s.publicBoards.map((b) => (b.id === boardId ? { ...b, ...metaPatch } : b)),
-          }));
-        }
-
-        const reason = (data as { reason?: unknown } | null)?.reason;
-        if (reason === 'public_changed') {
-          if (isPublic === true) {
-            refreshPublicBoardsSilent();
-          }
-          if (isPublic === false) {
-            // keep lists in sync silently (component handlers may do it too; in-flight guards prevent spam)
-            refreshPublicBoardsSilent();
-          }
-        }
+        handleBoardsUpdated(data as { reason?: string; board_id?: number });
       }
     });
 
     return () => {
       unsubscribe?.();
     };
-  }, [addInvite, addRequest, fetchFriends, isAuth, isInitialized, refreshPublicBoardsSilent, removeInvite, removeRequest, updateRequestStatus, userId]);
+  }, [addInvite, addRequest, fetchFriends, handleBoardsUpdated, isAuth, isInitialized, removeInvite, removeRequest, updateRequestStatus, userId]);
 
   useEffect(() => {
     if (!isInitialized) return;

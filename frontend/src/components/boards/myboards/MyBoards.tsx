@@ -3,19 +3,19 @@ import classes from './MyBoards.module.scss';
 import { API_URL } from '@/api/axiosInstance';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
-import { Board, useBoardsStore } from '@/store/boardsStore';
+import { UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 import { useAuthStore } from '@/store/authStore';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 
 const MyBoards: React.FC = () => {
-  const boards = useBoardsStore(state => state.boards);
-  const isLoading = useBoardsStore(state => state.isLoading);
-  const ensureBoardsLoaded = useBoardsStore(state => state.ensureBoardsLoaded);
+  const boards = useBoardsUnifiedStore((s) => s.myBoards);
+  const isLoading = useBoardsUnifiedStore((s) => s.isLoadingMy);
+  const hasLoadedOnce = useBoardsUnifiedStore((s) => s.hasLoadedOnceMy);
+  const ensureLoaded = useBoardsUnifiedStore((s) => s.ensureMyLoaded);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const { isAuth, isInitialized } = useAuthStore();
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [debugBoards, setDebugBoards] = useState<Board[] | null>(null);
+  const [debugBoards, setDebugBoards] = useState<UnifiedBoard[] | null>(null);
   const boardsListRef = useRef<HTMLDivElement | null>(null);
   const [hasListScroll, setHasListScroll] = useState(false);
   const forceSkeleton =
@@ -52,25 +52,23 @@ const MyBoards: React.FC = () => {
 
     const w = window as unknown as {
       addFakeMyBoards?: () => void;
-      setFakeMyBoards?: (boards: Board[]) => void;
+      setFakeMyBoards?: (boards: UnifiedBoard[]) => void;
       clearFakeMyBoards?: () => void;
     };
 
     w.addFakeMyBoards = () => {
       const now = new Date().toISOString();
-      const fakeBoards: Board[] = Array.from({ length: 6 }).map((_, i) => ({
+      const fakeBoards: UnifiedBoard[] = Array.from({ length: 6 }).map((_, i) => ({
         id: i + 1,
         title: `Fake board ${i + 1}`,
         description: `Fake description ${i + 1}`,
         created_at: now
       }));
       setDebugBoards(fakeBoards);
-      setHasLoadedOnce(true);
     };
 
     w.setFakeMyBoards = (nextBoards) => {
       setDebugBoards(Array.isArray(nextBoards) ? nextBoards : []);
-      setHasLoadedOnce(true);
     };
 
     w.clearFakeMyBoards = () => {
@@ -88,22 +86,9 @@ const MyBoards: React.FC = () => {
     if (forceSkeleton) return;
     if (debugBoards !== null) return;
     if (!isInitialized) return;
-    if (!isAuth) {
-      setHasLoadedOnce(false);
-      return;
-    }
-
-    let mounted = true;
-    setHasLoadedOnce(false);
-    ensureBoardsLoaded().finally(() => {
-      if (!mounted) return;
-      setHasLoadedOnce(true);
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [ensureBoardsLoaded, forceSkeleton, isInitialized, isAuth, debugBoards]);
+    if (!isAuth) return;
+    ensureLoaded();
+  }, [debugBoards, ensureLoaded, forceSkeleton, isAuth, isInitialized]);
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">

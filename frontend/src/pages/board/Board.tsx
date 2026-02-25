@@ -3,8 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import classes from './Board.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
-import { Board as BoardEntity, RECENT_BOARDS_LS_KEY, useBoardsStore } from '@/store/boardsStore';
-import { useSpacesBoardsStore } from '@/store/spacesBoardsStore';
+import { RECENT_BOARDS_LS_KEY, UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import { useUIStore } from '@/store/uiStore';
 import FlowBoard from '@/components/flow/FlowBoard';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
@@ -58,11 +57,11 @@ const Board = () => {
     const navigate = useNavigate();
     const isAuth = useAuthStore((s) => s.isAuth);
     const isInitialized = useAuthStore((s) => s.isInitialized);
-    const boards = useBoardsStore((s) => s.boards);
-    const recentBoards = useBoardsStore((s) => s.recentBoards);
-    const publicBoards = useSpacesBoardsStore((s) => s.publicBoards);
-    const friendsBoards = useSpacesBoardsStore((s) => s.friendsBoards);
-    const guestBoards = useSpacesBoardsStore((s) => s.guestBoards);
+    const boards = useBoardsUnifiedStore((s) => s.myBoards);
+    const recentBoards = useBoardsUnifiedStore((s) => s.recentBoards);
+    const publicBoards = useBoardsUnifiedStore((s) => s.publicBoards);
+    const friendsBoards = useBoardsUnifiedStore((s) => s.friendsBoards);
+    const guestBoards = useBoardsUnifiedStore((s) => s.guestBoards);
     const isBoardMenuOpen = useUIStore((s) => s.isBoardMenuOpen);
     const toggleBoardMenu = useUIStore((s) => s.toggleBoardMenu);
     const openBoardMenu = useUIStore((s) => s.openBoardMenu);
@@ -84,8 +83,9 @@ const Board = () => {
     const participantsListRef = useRef<HTMLDivElement | null>(null);
     const [hasParticipantsListScroll, setHasParticipantsListScroll] = useState(false);
     const participantsLoadSeqRef = useRef(0);
+    const participantsBoardIdRef = useRef<number | null>(null);
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
-    const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<BoardEntity> | null>(null);
+    const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<UnifiedBoard> | null>(null);
     const [loadedBoardImageSrc, setLoadedBoardImageSrc] = useState<string | null>(null);
     const [failedBoardImageSrc, setFailedBoardImageSrc] = useState<string | null>(null);
     const tokenPresent = Boolean(localStorage.getItem('token'));
@@ -256,7 +256,7 @@ const Board = () => {
         const id = Number(boardId);
         if (!Number.isFinite(id) || id <= 0) return null;
 
-        const stateBoard = (location.state as { board?: Partial<BoardEntity> } | null)?.board;
+        const stateBoard = (location.state as { board?: Partial<UnifiedBoard> } | null)?.board;
         const fromState = stateBoard && Number(stateBoard.id) === id ? stateBoard : undefined;
         const fromOverride = boardMetaOverride && Number(boardMetaOverride.id) === id ? boardMetaOverride : undefined;
 
@@ -266,7 +266,7 @@ const Board = () => {
         const fromFriends = friendsBoards.find((b) => b.id === id);
         const fromGuest = guestBoards.find((b) => b.id === id);
 
-        const merged: Partial<BoardEntity> = {
+        const merged: Partial<UnifiedBoard> = {
             ...(fromState ?? {}),
             ...(fromPublic ?? {}),
             ...(fromFriends ?? {}),
@@ -352,12 +352,26 @@ const Board = () => {
             navigate('/spaces', { replace: true });
         };
 
-        const applyAuthBoardPatch = (patch: Partial<BoardEntity>) => {
-            useBoardsStore.setState((s) => ({
-                ...s,
-                boards: s.boards.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-                recentBoards: s.recentBoards.map((b) => (b.id === id ? { ...b, ...patch } : b)),
-            }));
+        const applyAuthBoardPatch = (patch: Partial<UnifiedBoard>) => {
+            useBoardsUnifiedStore.setState((s) => {
+                const prev = s.entitiesById[id];
+                const nextEntities = {
+                    ...s.entitiesById,
+                    [id]: { ...(prev ?? { id, title: '', created_at: new Date().toISOString() }), ...prev, ...patch, id },
+                };
+
+                const apply = <T extends { id: number }>(list: T[]) => list.map((b) => (b.id === id ? ({ ...b, ...patch } as T) : b));
+
+                return {
+                    ...s,
+                    entitiesById: nextEntities,
+                    myBoards: apply(s.myBoards),
+                    recentBoards: apply(s.recentBoards),
+                    guestBoards: apply(s.guestBoards),
+                    friendsBoards: apply(s.friendsBoards),
+                    publicBoards: apply(s.publicBoards),
+                };
+            });
         };
 
         (async () => {
@@ -366,12 +380,12 @@ const Board = () => {
                 if (tokenPresent && !isInitialized) {
                     if (inviteToken) {
                         try {
-                            const { data } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/invite-link/preview`, {
+                            const { data } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/invite-link/preview`, {
                                 params: { token: inviteToken },
                             });
                             if (cancelled) return;
                             if (data && typeof data === 'object') {
-                                const payload = data as Partial<BoardEntity>;
+                                const payload = data as Partial<UnifiedBoard>;
                                 const resolvedId = Number((payload as { board_id?: unknown }).board_id ?? payload.id);
                                 if (Number.isFinite(resolvedId) && resolvedId > 0 && resolvedId !== id) {
                                     navigate(`/spaces/${resolvedId}?invite=${encodeURIComponent(inviteToken)}`, { replace: true });
@@ -409,7 +423,7 @@ const Board = () => {
                     }
 
                     const tryLoadAccessibleBoard = async () => {
-                        const { data } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/${id}`);
+                        const { data } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/${id}`);
                         if (cancelled) return null;
                         if (data && typeof data === 'object') {
                             setBoardMetaOverride({ ...data, id });
@@ -430,7 +444,8 @@ const Board = () => {
                             } catch {
                                 // ignore
                             }
-                            void useBoardsStore.getState().loadBoards();
+                            void useBoardsUnifiedStore.getState().refreshMySilent();
+                            void useBoardsUnifiedStore.getState().refreshRecentSilent();
                             return;
                         }
                     } catch (err: unknown) {
@@ -460,7 +475,8 @@ const Board = () => {
                                                 } catch {
                                                     // ignore
                                                 }
-                                                void useBoardsStore.getState().loadBoards();
+                                                void useBoardsUnifiedStore.getState().refreshMySilent();
+                                                void useBoardsUnifiedStore.getState().refreshRecentSilent();
                                                 return;
                                             }
                                         } catch {
@@ -473,7 +489,7 @@ const Board = () => {
                             }
 
                             try {
-                                const { data: publicData } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/public/${id}`);
+                                const { data: publicData } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/public/${id}`);
                                 if (cancelled) return;
                                 if (!publicData || typeof publicData !== 'object') {
                                     redirectToSpaces();
@@ -505,7 +521,8 @@ const Board = () => {
                                 } catch {
                                     // ignore
                                 }
-                                void useBoardsStore.getState().loadBoards();
+                                void useBoardsUnifiedStore.getState().refreshMySilent();
+                                void useBoardsUnifiedStore.getState().refreshRecentSilent();
                                 return;
                             } catch {
                                 redirectToSpaces();
@@ -523,12 +540,12 @@ const Board = () => {
                     const inviteGate = Boolean(inviteToken || getPendingInviteUrlForThisBoard());
                     if (inviteToken) {
                         try {
-                            const { data: preview } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/invite-link/preview`, {
+                            const { data: preview } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/invite-link/preview`, {
                                 params: { token: inviteToken },
                             });
                             if (cancelled) return;
                             if (preview && typeof preview === 'object') {
-                                const payload = preview as Partial<BoardEntity>;
+                                const payload = preview as Partial<UnifiedBoard>;
                                 const resolvedId = Number((payload as { board_id?: unknown }).board_id ?? payload.id);
                                 if (Number.isFinite(resolvedId) && resolvedId > 0 && resolvedId !== id) {
                                     navigate(`/spaces/${resolvedId}?invite=${encodeURIComponent(inviteToken)}`, { replace: true });
@@ -541,7 +558,7 @@ const Board = () => {
                         }
                     }
 
-                    const { data } = await axiosInstance.get<Partial<BoardEntity>>(`/api/boards/public/${id}`);
+                    const { data } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/public/${id}`);
                     if (cancelled) return;
                     if (!data || typeof data !== 'object') {
                         if (!inviteGate) redirectToSpaces();
@@ -550,13 +567,13 @@ const Board = () => {
 
                     setBoardMetaOverride({ ...data, id, is_public: true });
 
-                    const persistRecent = (entry: BoardEntity) => {
-                        const readCurrent = (): BoardEntity[] => {
+                    const persistRecent = (entry: UnifiedBoard) => {
+                        const readCurrent = (): UnifiedBoard[] => {
                             try {
                                 const raw = localStorage.getItem(RECENT_BOARDS_LS_KEY);
                                 if (!raw) return [];
                                 const parsed: unknown = JSON.parse(raw);
-                                return Array.isArray(parsed) ? (parsed as BoardEntity[]) : [];
+                                return Array.isArray(parsed) ? (parsed as UnifiedBoard[]) : [];
                             } catch {
                                 return [];
                             }
@@ -572,7 +589,23 @@ const Board = () => {
                             // ignore
                         }
 
-                        useBoardsStore.setState({ recentBoards: updated });
+                        useBoardsUnifiedStore.setState((s) => {
+                            const nextEntities = { ...s.entitiesById };
+                            const nextIds: number[] = [];
+                            for (const b of updated) {
+                                const id = Number(b?.id);
+                                if (!Number.isFinite(id) || id <= 0) continue;
+                                nextIds.push(id);
+                                nextEntities[id] = { ...(nextEntities[id] ?? b), ...b, id };
+                            }
+                            return {
+                                ...s,
+                                entitiesById: nextEntities,
+                                recentIds: nextIds,
+                                recentBoards: updated,
+                                hasLoadedOnceRecent: true,
+                            };
+                        });
                     };
 
                     const now = new Date().toISOString();
@@ -614,6 +647,7 @@ const Board = () => {
             setParticipantsData(null);
             setRemoveConfirmParticipantId(null);
             setParticipantsLoading(false);
+            participantsBoardIdRef.current = null;
             return;
         }
 
@@ -622,21 +656,29 @@ const Board = () => {
 
         const seq = participantsLoadSeqRef.current + 1;
         participantsLoadSeqRef.current = seq;
-        setParticipantsLoading(true);
-        setParticipantsData(null);
+        const isInitialLoad = participantsBoardIdRef.current !== id;
+        if (isInitialLoad) {
+            setParticipantsLoading(true);
+            setParticipantsData(null);
+            participantsBoardIdRef.current = null;
+        }
         setRemoveConfirmParticipantId(null);
         loadBoardParticipants(id)
             .then((data) => {
                 if (participantsLoadSeqRef.current !== seq) return;
                 setParticipantsData(data ?? null);
+                participantsBoardIdRef.current = data ? id : null;
             })
             .catch(() => {
                 if (participantsLoadSeqRef.current !== seq) return;
-                setParticipantsData(null);
+                if (isInitialLoad) {
+                    setParticipantsData(null);
+                    participantsBoardIdRef.current = null;
+                }
             })
             .finally(() => {
                 if (participantsLoadSeqRef.current !== seq) return;
-                setParticipantsLoading(false);
+                if (isInitialLoad) setParticipantsLoading(false);
             });
 
         return () => {};
@@ -669,10 +711,11 @@ const Board = () => {
                         const status = Number((err as { response?: { status?: unknown } } | null)?.response?.status);
                         if (status === 403 || status === 404) {
                             closeBoardSettingsModal();
-                            void useBoardsStore.getState().loadBoards();
-                            void useSpacesBoardsStore.getState().refreshGuestBoards();
-                            void useSpacesBoardsStore.getState().refreshFriendsBoards();
-                            void useSpacesBoardsStore.getState().refreshPublicBoardsSilent();
+                            void useBoardsUnifiedStore.getState().refreshMySilent();
+                            void useBoardsUnifiedStore.getState().refreshRecentSilent();
+                            void useBoardsUnifiedStore.getState().refreshGuestSilent();
+                            void useBoardsUnifiedStore.getState().refreshFriendsSilent();
+                            void useBoardsUnifiedStore.getState().refreshPublicSilent();
                             navigate('/spaces', { replace: true });
                             return;
                         }
@@ -836,9 +879,11 @@ const Board = () => {
         try {
             await axiosInstance.post(`/api/boards/${id}/leave`);
             setLeaveConfirmOpen(false);
-            void useBoardsStore.getState().loadBoards();
-            void useSpacesBoardsStore.getState().refreshGuestBoards();
-            void useSpacesBoardsStore.getState().refreshFriendsBoards();
+            void useBoardsUnifiedStore.getState().refreshMySilent();
+            void useBoardsUnifiedStore.getState().refreshRecentSilent();
+            void useBoardsUnifiedStore.getState().refreshGuestSilent();
+            void useBoardsUnifiedStore.getState().refreshFriendsSilent();
+            void useBoardsUnifiedStore.getState().refreshPublicSilent();
             navigate('/spaces', { replace: true });
         } catch {
             // ignore

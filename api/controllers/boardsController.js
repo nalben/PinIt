@@ -428,9 +428,9 @@ exports.renameBoard = async (req, res) => {
       if (Number.isFinite(boardId) && boardId > 0) {
         const io = req.app.get('io');
         if (io && isPublic) {
-          io.emit('boards:updated', { reason: 'title_changed', board_id: boardId, title, is_public: 1 });
+          io.emit('boards:updated', { reason: 'meta_changed', board_id: boardId });
         }
-        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'title_changed', board_id: boardId, title }, [user_id]);
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'meta_changed', board_id: boardId }, [user_id]);
       }
     } catch {
       // ignore
@@ -479,9 +479,9 @@ exports.updateDescription = async (req, res) => {
       if (Number.isFinite(boardId) && boardId > 0) {
         const io = req.app.get('io');
         if (io && isPublic) {
-          io.emit('boards:updated', { reason: 'description_changed', board_id: boardId, description, is_public: 1 });
+          io.emit('boards:updated', { reason: 'meta_changed', board_id: boardId });
         }
-        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'description_changed', board_id: boardId, description }, [user_id]);
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'meta_changed', board_id: boardId }, [user_id]);
       }
     } catch {
       // ignore
@@ -531,10 +531,10 @@ exports.updateBoardPublic = async (req, res) => {
         // Board public status affects global "public boards" listings, so notify all connected clients.
         const io = req.app.get('io');
         if (io) {
-          io.emit('boards:updated', { reason: 'public_changed', board_id: boardId, is_public: value });
+          io.emit('boards:updated', { reason: 'public_changed', board_id: boardId });
         }
 
-        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'public_changed', board_id: boardId, is_public: value }, [user_id]);
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'public_changed', board_id: boardId }, [user_id]);
       }
     } catch {
       // ignore
@@ -661,9 +661,9 @@ exports.updateBoardImage = async (req, res) => {
       if (Number.isFinite(boardId) && boardId > 0) {
         const io = req.app.get('io');
         if (io && isPublic) {
-          io.emit('boards:updated', { reason: 'image_changed', board_id: boardId, image: newImage, is_public: 1 });
+          io.emit('boards:updated', { reason: 'meta_changed', board_id: boardId });
         }
-        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'image_changed', board_id: boardId, image: newImage }, [user_id]);
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'meta_changed', board_id: boardId }, [user_id]);
       }
     } catch {
       // ignore
