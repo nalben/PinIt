@@ -12,6 +12,7 @@ import { connectSocket, disconnectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 import { useFriendsStore } from '@/store/friendsStore';
 import { useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
+import { useBoardDetailsStore } from '@/store/boardDetailsStore';
 import Appitit from './AppInit'
 import FriendsModal from '@/components/friends/friendsmodal/FriendsModal';
 import CreateBoardModal from '@/components/boards/createboardmodal/CreateBoardModal';
@@ -66,6 +67,7 @@ const Root = () => {
   const { addInvite, removeInvite } = useBoardsInvitesStore();
   const fetchFriends = useFriendsStore((s) => s.fetchFriends);
   const handleBoardsUpdated = useBoardsUnifiedStore((s) => s.handleBoardsUpdated);
+  const handleBoardDetailsUpdated = useBoardDetailsStore((s) => s.handleBoardsUpdated);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
   const userId = useAuthStore(state => state.user?.id);
@@ -79,6 +81,7 @@ const Root = () => {
     if (!isAuth) {
       disconnectSocket();
       useBoardsUnifiedStore.getState().clearAuthBoards();
+      useBoardDetailsStore.getState().clearAll();
       return;
     }
 
@@ -121,14 +124,22 @@ const Root = () => {
         }
       },
       onBoardsUpdate: (data) => {
-        handleBoardsUpdated(data as { reason?: string; board_id?: number });
+        const cmd = data as { reason?: string; board_id?: number | string; user_id?: number | string };
+        const rawBoardId = cmd?.board_id;
+        const parsedBoardId = typeof rawBoardId === 'number' ? rawBoardId : Number(rawBoardId);
+        const safeBoardId = Number.isFinite(parsedBoardId) && parsedBoardId > 0 ? parsedBoardId : undefined;
+        const rawUserId = cmd?.user_id;
+        const parsedUserId = typeof rawUserId === 'number' ? rawUserId : Number(rawUserId);
+        const safeUserId = Number.isFinite(parsedUserId) && parsedUserId > 0 ? parsedUserId : undefined;
+        handleBoardsUpdated({ reason: cmd?.reason, board_id: safeBoardId, user_id: safeUserId });
+        handleBoardDetailsUpdated(cmd);
       }
     });
 
     return () => {
       unsubscribe?.();
     };
-  }, [addInvite, addRequest, fetchFriends, handleBoardsUpdated, isAuth, isInitialized, removeInvite, removeRequest, updateRequestStatus, userId]);
+  }, [addInvite, addRequest, fetchFriends, handleBoardDetailsUpdated, handleBoardsUpdated, isAuth, isInitialized, removeInvite, removeRequest, updateRequestStatus, userId]);
 
   useEffect(() => {
     if (!isInitialized) return;

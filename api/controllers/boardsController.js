@@ -599,7 +599,37 @@ exports.joinPublicBoardAsGuest = async (req, res) => {
       );
     }
 
-    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'join_public', board_id: boardId }, [user_id]);
+    // Clear stale invites (including rejected) when the user joins the board via public flow.
+    const [inviteRows] = await db.execute(
+      `SELECT id
+       FROM board_invites
+       WHERE board_id = ? AND invited_id = ? AND status IN ('sent','rejected')`,
+      [boardId, user_id]
+    );
+
+    if (Array.isArray(inviteRows) && inviteRows.length) {
+      await db.execute(
+        `DELETE FROM board_invites
+         WHERE board_id = ? AND invited_id = ? AND status IN ('sent','rejected')`,
+        [boardId, user_id]
+      );
+
+      try {
+        const io = req.app.get('io');
+        if (io) {
+          for (const r of inviteRows) {
+            const id = Number(r?.id);
+            if (Number.isFinite(id) && id > 0) {
+              io.to(`user:${user_id}`).emit('board_invite:removed', { id });
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'join_public', board_id: boardId, user_id }, [user_id]);
     return res.status(200).json({ board_id: boardId, my_role: 'guest' });
   } catch (e) {
     console.error(e);
@@ -891,7 +921,7 @@ exports.removeGuestFromBoard = async (req, res) => {
     );
 
     try {
-      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'removed', board_id: boardId }, [guestId, owner_id]);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'removed', board_id: boardId, user_id: guestId }, [guestId, owner_id]);
     } catch {
       // ignore
     }
@@ -953,7 +983,7 @@ exports.updateGuestRole = async (req, res) => {
     );
 
     try {
-      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'role', board_id: boardId }, [guestId, owner_id]);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'role', board_id: boardId, user_id: guestId }, [guestId, owner_id]);
     } catch {
       // ignore
     }
@@ -1001,7 +1031,7 @@ exports.leaveBoard = async (req, res) => {
       return res.status(404).json({ message: 'Р’С‹ РЅРµ РіРѕСЃС‚СЊ СЌС‚РѕР№ РґРѕСЃРєРё' });
     }
     try {
-      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'left', board_id: boardId }, [user_id, boardRows[0]?.owner_id]);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'left', board_id: boardId, user_id }, [user_id, boardRows[0]?.owner_id]);
     } catch {
       // ignore
     }
@@ -1062,7 +1092,7 @@ exports.visitBoard = async (req, res) => {
       }
 
       try {
-        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'invite_cleared', board_id: boardId }, [user_id]);
+        emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'invite_cleared', board_id: boardId, user_id }, [user_id]);
       } catch {
         // ignore
       }
@@ -1387,7 +1417,7 @@ exports.acceptBoardInvite = async (req, res) => {
     await connection.commit();
     try {
       const io = req.app.get('io');
-      emitBoardsUpdatedToBoardUsers(req, Number(board_id), { reason: 'invite_accepted', board_id: Number(board_id) }, [invited_id]);
+      emitBoardsUpdatedToBoardUsers(req, Number(board_id), { reason: 'invite_accepted', board_id: Number(board_id), user_id: invited_id }, [invited_id]);
       io.to(`user:${invited_id}`).emit('board_invite:removed', { id: Number(invite_id) });
     } catch {
       // ignore
@@ -1432,7 +1462,7 @@ exports.rejectBoardInvite = async (req, res) => {
     try {
       const io = req.app.get('io');
       io.to(`user:${invited_id}`).emit('board_invite:removed', { id: Number(invite_id) });
-      emitBoardsUpdatedToBoardUsers(req, Number(rows[0].board_id), { reason: 'invite_rejected', board_id: Number(rows[0].board_id) }, [
+      emitBoardsUpdatedToBoardUsers(req, Number(rows[0].board_id), { reason: 'invite_rejected', board_id: Number(rows[0].board_id), user_id: invited_id }, [
         Number(rows[0].user_id),
         invited_id,
       ]);
@@ -1674,6 +1704,7 @@ exports.acceptBoardInviteLink = async (req, res) => {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
+    let clearedInviteIds = [];
 
     const [rows] = await connection.execute(
       `SELECT bil.board_id, b.owner_id
@@ -1709,19 +1740,47 @@ exports.acceptBoardInviteLink = async (req, res) => {
         );
       }
 
-      if (!existing.length) {
-        await connection.execute(
-          `INSERT INTO boardguests (board_id, user_id, role)
-           VALUES (?, ?, 'guest')`,
-          [board_id, user_id]
-        );
-      }
+       if (!existing.length) {
+         await connection.execute(
+           `INSERT INTO boardguests (board_id, user_id, role)
+            VALUES (?, ?, 'guest')`,
+           [board_id, user_id]
+         );
+       }
+    }
+
+    // Clear stale invites (including rejected) when the user joins the board via invite-link flow.
+    const [inviteRows] = await connection.execute(
+      `SELECT id
+       FROM board_invites
+       WHERE board_id = ? AND invited_id = ? AND status IN ('sent','rejected')`,
+      [board_id, user_id]
+    );
+
+    if (Array.isArray(inviteRows) && inviteRows.length) {
+      clearedInviteIds = inviteRows
+        .map((r) => Number(r?.id))
+        .filter((id) => Number.isFinite(id) && id > 0);
+
+      await connection.execute(
+        `DELETE FROM board_invites
+         WHERE board_id = ? AND invited_id = ? AND status IN ('sent','rejected')`,
+        [board_id, user_id]
+      );
     }
 
     await connection.commit();
 
     try {
-      emitBoardsUpdatedToBoardUsers(req, board_id, { reason: 'invite_link_accepted', board_id }, [user_id, owner_id]);
+      emitBoardsUpdatedToBoardUsers(req, board_id, { reason: 'invite_link_accepted', board_id, user_id }, [user_id, owner_id]);
+      if (clearedInviteIds.length) {
+        const io = req.app.get('io');
+        if (io) {
+          for (const id of clearedInviteIds) {
+            io.to(`user:${user_id}`).emit('board_invite:removed', { id });
+          }
+        }
+      }
     } catch {
       // ignore
     }

@@ -1088,9 +1088,9 @@ These points are confirmed from current repository code and override any older c
   - `GET /api/boards/public/:board_id`
 - Public board endpoints do not add the viewer into `boardguests` (no implicit "become a guest" on open).
 - Authenticated join endpoint exists for public boards:
-  - `POST /api/boards/:board_id/join-public` — if `is_public=1` and user is not owner/guest, inserts into `boardguests` as `role='guest'` (idempotent); returns 403 if `boardguests.role='blocked'`.
+  - `POST /api/boards/:board_id/join-public` — if `is_public=1` and user is not owner/guest, inserts into `boardguests` as `role='guest'` (idempotent); returns 403 if `boardguests.role='blocked'`. Also clears stale `board_invites` for that user on this board with `status IN ('sent','rejected')` and emits `board_invite:removed` per id.
 - Invite-link join endpoint exists and is authenticated:
-  - `POST /api/boards/invite-link/accept` — body `{ token }`, inserts into `boardguests` as `role='guest'` for the linked board (idempotent); if role was `blocked`, re-activates it by setting role to `guest`.
+  - `POST /api/boards/invite-link/accept` — body `{ token }`, inserts into `boardguests` as `role='guest'` for the linked board (idempotent); if role was `blocked`, re-activates it by setting role to `guest`. Also clears stale `board_invites` for that user on this board with `status IN ('sent','rejected')` and emits `board_invite:removed` per id.
 - Public invite-link resolve endpoint exists:
   - `GET /api/boards/invite-link/resolve?token=<token>` — returns `{ board_id }` if token exists, иначе 404.
 - Public invite-link preview endpoint exists:

@@ -10,21 +10,34 @@ import ProfileRedirect from "./components/__general/profileredirect/ProfileRedir
 import Todo from "./pages/todo/Todo";
 import Spaces from "./pages/spaces/Spaces";
 import Board from "./pages/board/Board";
+import { useBoardDetailsStore } from "@/store/boardDetailsStore";
+import { useBoardsUnifiedStore } from "@/store/boardsUnifiedStore";
 
 const useDocumentTitle = (defaultTitle = "PinIt") => {
   const location = useLocation();
+  const boardMatch = matchPath({ path: "/spaces/:boardId", end: false }, location.pathname);
+  const boardIdRaw = boardMatch?.params?.boardId;
+  const boardId = typeof boardIdRaw === 'string' ? Number(boardIdRaw) : null;
+  const safeBoardId = Number.isFinite(boardId) && (boardId as number) > 0 ? (boardId as number) : null;
+
+  const unifiedTitle = useBoardsUnifiedStore((s) => (safeBoardId ? s.entitiesById[safeBoardId]?.title : null));
+  const detailsTitle = useBoardDetailsStore((s) =>
+    safeBoardId ? (s.boardMetaByBoardId[safeBoardId]?.title ?? null) : null
+  );
 
   useEffect(() => {
     const profileMatch = matchPath("/user/:username", location.pathname);
-    const boardMatch = matchPath("/spaces/:boardId", location.pathname);
 
     if (profileMatch?.params?.username) {
       document.title = `Profile | PinIt`;
       return;
     }
 
-    if (boardMatch?.params?.boardId) {
-      document.title = "Board | PinIt";
+    if (safeBoardId) {
+      const title = (typeof detailsTitle === 'string' && detailsTitle.trim() ? detailsTitle : null) ??
+        (typeof unifiedTitle === 'string' && unifiedTitle.trim() ? unifiedTitle : null);
+
+      document.title = title ? `${title} | PinIt` : "Board | PinIt";
       return;
     }
 
@@ -45,7 +58,7 @@ const useDocumentTitle = (defaultTitle = "PinIt") => {
       default:
         document.title = defaultTitle;
     }
-  }, [location.pathname, defaultTitle]);
+  }, [location.pathname, defaultTitle, detailsTitle, safeBoardId, unifiedTitle]);
 };
 
 const AppWithTitle = () => {

@@ -12,7 +12,7 @@ import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
 import { useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import { useAuthStore } from '@/store/authStore';
 import { Friend, useFriendsStore } from '@/store/friendsStore';
-import { connectSocket } from '@/services/socketManager';
+import { BoardParticipant, useBoardDetailsStore } from '@/store/boardDetailsStore';
 
 const MAX_BOARD_IMAGE_SIZE_MB = 5;
 const MAX_BOARD_IMAGE_SIZE_BYTES = MAX_BOARD_IMAGE_SIZE_MB * 1024 * 1024;
@@ -34,46 +34,10 @@ interface BoardResponse {
 
 type BoardParticipantRole = 'owner' | 'guest' | 'editer';
 
-type BoardParticipant = {
-  id: number;
-  username: string;
-  nickname?: string | null;
-  avatar?: string | null;
-  role: BoardParticipantRole;
-  added_at?: string;
-};
-
-type OutgoingBoardInvite = {
-  id: number;
-  invited_id: number;
-  status: 'sent' | 'rejected' | string;
-  created_at: string;
-};
-
 type BoardInviteLinkResponse = {
   token: string;
   updated_at?: string;
 };
-
-type BoardCacheEntry = BoardResponse;
-
-type BoardParticipantsCacheEntry = {
-  participantsByUserId: Record<number, true>;
-  participants: BoardParticipant[];
-};
-
-type OutgoingInvitesCacheEntry = {
-  invitesByUserId: Record<number, { id: number; status: 'sent' | 'rejected' }>;
-};
-
-const boardParticipantsCache = new Map<number, BoardParticipantsCacheEntry>();
-const boardParticipantsInFlight = new Map<number, Promise<BoardParticipantsCacheEntry>>();
-const outgoingInvitesCache = new Map<number, OutgoingInvitesCacheEntry>();
-const outgoingInvitesInFlight = new Map<number, Promise<OutgoingInvitesCacheEntry>>();
-const inviteLinkCache = new Map<number, string>();
-const inviteLinkInFlight = new Map<number, Promise<string | null>>();
-const boardCache = new Map<number, BoardCacheEntry>();
-const boardInFlight = new Map<number, Promise<BoardCacheEntry | null>>();
 
 const resolveBoardImageSrc = (image?: string | null) => {
   if (!image) return null;
@@ -176,34 +140,22 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const friendsLoading = useFriendsStore((s) => s.isLoading);
   const ensureFriendsLoaded = useFriendsStore((s) => s.ensureFriendsLoaded);
 
-  const [board, setBoard] = useState<BoardResponse | null>(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [isPublic, setIsPublic] = useState(() => Boolean(initialIsPublic));
   const [isPublicToggleNoAnim, setIsPublicToggleNoAnim] = useState(true);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const boardLoadSeqRef = useRef(0);
 
   const [participantsError, setParticipantsError] = useState<string | null>(null);
-  const [participantsLoading, setParticipantsLoading] = useState(false);
-  const [participantsByUserId, setParticipantsByUserId] = useState<Record<number, true>>({});
-  const [boardParticipants, setBoardParticipants] = useState<BoardParticipant[]>([]);
   const [removedGuestsByUserId, setRemovedGuestsByUserId] = useState<Record<number, BoardParticipant>>({});
-  const [outgoingInvitesLoading, setOutgoingInvitesLoading] = useState(false);
-  const [outgoingInvitesByUserId, setOutgoingInvitesByUserId] = useState<Record<number, { id: number; status: 'sent' | 'rejected' }>>({});
   const [inviteActionUserId, setInviteActionUserId] = useState<number | null>(null);
   const [roleActionUserId, setRoleActionUserId] = useState<number | null>(null);
   const [roleDropdownUserId, setRoleDropdownUserId] = useState<number | null>(null);
 
-  const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
-  const [inviteLinkToken, setInviteLinkToken] = useState<string | null>(null);
   const [inviteLinkError, setInviteLinkError] = useState<string | null>(null);
+  const [inviteLinkActionLoading, setInviteLinkActionLoading] = useState(false);
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const inviteLinkCopiedTimeoutRef = useRef<number | null>(null);
   const friendsListRef = useRef<HTMLDivElement | null>(null);
@@ -214,7 +166,6 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const [guestsAnchorUserId, setGuestsAnchorUserId] = useState<number | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const didSeedFromInitialRef = useRef(false);
 
   const numericBoardId = useMemo(() => {
     const id = Number(boardId);
@@ -222,84 +173,66 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   }, [boardId]);
 
   const shouldWarmAllTabs = Boolean(preRenderAllTabs);
-  const isOwner = board?.my_role === 'owner';
-  const currentImageSrc = resolveBoardImageSrc(board?.image ?? null);
+  const boardMeta = useBoardDetailsStore((s) => (numericBoardId ? (s.boardMetaByBoardId[numericBoardId] ?? null) : null));
+  const boardMetaLoadingFlags = useBoardDetailsStore((s) => (numericBoardId ? s.boardMetaLoadingByBoardId[numericBoardId] : undefined));
+  const boardMetaLoadedOnce = useBoardDetailsStore((s) => (numericBoardId ? Boolean(s.boardMetaHasLoadedOnce[numericBoardId]) : false));
+  const draft = useBoardDetailsStore((s) => (numericBoardId ? s.boardDraftByBoardId[numericBoardId] : undefined));
+  const isDraftDirty = useBoardDetailsStore((s) => (numericBoardId ? Boolean(s.boardDraftDirtyByBoardId[numericBoardId]) : false));
+  const isOwnerFromUnified = useBoardsUnifiedStore((s) => (numericBoardId ? s.entitiesById?.[numericBoardId]?.my_role === 'owner' : false));
+  const isOwner = isOwnerFromUnified || boardMeta?.my_role === 'owner';
+  const metaInitialLoading = Boolean(boardMetaLoadingFlags?.initial) && !boardMeta;
+  const title = draft?.title ?? (typeof initialTitle === 'string' ? initialTitle : '');
+  const description = draft?.description ?? (typeof initialDescription === 'string' ? initialDescription : '');
+  const isPublic = draft?.is_public ?? Boolean(initialIsPublic);
+  const currentImageSrc = resolveBoardImageSrc(boardMeta?.image ?? null);
   const imageSrc = imagePreview ?? currentImageSrc ?? initialImageSrc ?? null;
-
-  const loadBoard = useCallback(async (boardId: number) => {
-    const seq = boardLoadSeqRef.current + 1;
-    boardLoadSeqRef.current = seq;
-
-    setError(null);
-    try {
-      const cached = boardCache.get(boardId);
-      if (cached) {
-        setBoard(cached ?? null);
-        setTitle(typeof cached?.title === 'string' ? cached.title : '');
-        setDescription(typeof cached?.description === 'string' ? cached.description : '');
-        setIsPublic(typeof cached?.is_public === 'boolean' ? cached.is_public : Number(cached?.is_public) === 1);
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-
-      const promise =
-        boardInFlight.get(boardId) ??
-        (async () => {
-          const { data } = await axiosInstance.get<BoardResponse>(`/api/boards/${boardId}`);
-          const entry = (data ?? null) as BoardCacheEntry | null;
-          if (entry) boardCache.set(boardId, entry);
-          return entry;
-        })();
-
-      if (!boardInFlight.has(boardId)) {
-        boardInFlight.set(
-          boardId,
-          promise.then(
-            (v) => {
-              boardInFlight.delete(boardId);
-              return v;
-            },
-            (err) => {
-              boardInFlight.delete(boardId);
-              throw err;
-            }
-          )
-        );
-      }
-
-      const data = await boardInFlight.get(boardId)!;
-      if (boardLoadSeqRef.current !== seq) return;
-      setBoard(data ?? null);
-      setTitle(typeof data?.title === 'string' ? data.title : '');
-      setDescription(typeof data?.description === 'string' ? data.description : '');
-      setIsPublic(typeof data?.is_public === 'boolean' ? data.is_public : Number(data?.is_public) === 1);
-    } catch {
-      if (boardLoadSeqRef.current !== seq) return;
-      setError('Не удалось загрузить доску');
-      setBoard(null);
-    } finally {
-      if (boardLoadSeqRef.current !== seq) return;
-      setIsLoading(false);
+  const participantsResponse = useBoardDetailsStore((s) => (numericBoardId ? (s.participantsByBoardId[numericBoardId] ?? null) : null));
+  const participantsLoadingFlags = useBoardDetailsStore((s) => (numericBoardId ? s.participantsLoadingByBoardId[numericBoardId] : undefined));
+  const boardParticipants = participantsResponse?.participants ?? [];
+  const participantsByUserId = useMemo(() => {
+    const map: Record<number, true> = {};
+    for (const p of boardParticipants) {
+      const id = Number(p?.id);
+      if (!Number.isFinite(id) || id <= 0) continue;
+      map[id] = true;
     }
-  }, []);
+    return map;
+  }, [boardParticipants]);
+
+  const outgoingInvitesByUserId = useBoardDetailsStore((s) => (numericBoardId ? s.outgoingInvitesByBoardId[numericBoardId] : undefined)) ?? {};
+  const outgoingInvitesLoadingFlags = useBoardDetailsStore((s) => (numericBoardId ? s.outgoingInvitesLoadingByBoardId[numericBoardId] : undefined));
+
+  const inviteLinkToken = useBoardDetailsStore((s) => (numericBoardId ? (s.inviteLinkTokenByBoardId[numericBoardId] ?? null) : null));
+  const inviteLinkLoadingFlags = useBoardDetailsStore((s) => (numericBoardId ? s.inviteLinkLoadingByBoardId[numericBoardId] : undefined));
+  const participantsLoading = Boolean(participantsLoadingFlags?.initial) && !participantsResponse;
+  const outgoingInvitesLoading = Boolean(outgoingInvitesLoadingFlags?.initial) && Object.keys(outgoingInvitesByUserId).length === 0;
+  const inviteLinkLoading = inviteLinkActionLoading || (Boolean(inviteLinkLoadingFlags?.initial) && !inviteLinkToken);
 
   useEffect(() => {
-    if (!isOpen) {
-      didSeedFromInitialRef.current = false;
-      return;
-    }
+    setRemovedGuestsByUserId((prev) => {
+      const keys = Object.keys(prev);
+      if (keys.length === 0) return prev;
+      const next = { ...prev };
+      for (const key of keys) {
+        const id = Number(key);
+        if (!Number.isFinite(id) || id <= 0) continue;
+        if (participantsByUserId[id]) delete next[id];
+      }
+      return next;
+    });
+  }, [participantsByUserId]);
 
-    if (didSeedFromInitialRef.current) return;
-    didSeedFromInitialRef.current = true;
+  useEffect(() => {
+    if (!numericBoardId) return;
+    if (!isOpen && !shouldWarmAllTabs) return;
 
-    if (typeof initialTitle === 'string') setTitle(initialTitle);
-
-    if (typeof initialDescription === 'string') setDescription(initialDescription);
-
-    if (typeof initialIsPublic === 'boolean') setIsPublic(initialIsPublic);
-  }, [initialDescription, initialIsPublic, initialTitle, isOpen]);
+    useBoardDetailsStore.getState().seedBoardDraftFromInitial(numericBoardId, {
+      title: typeof initialTitle === 'string' ? initialTitle : '',
+      description: typeof initialDescription === 'string' ? initialDescription : '',
+      is_public: typeof initialIsPublic === 'boolean' ? initialIsPublic : Boolean(initialIsPublic),
+    });
+    useBoardDetailsStore.getState().ensureBoardMetaLoaded(numericBoardId);
+  }, [initialDescription, initialIsPublic, initialTitle, isOpen, numericBoardId, shouldWarmAllTabs]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -308,7 +241,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
 
   useEffect(() => {
     if (!isOpen) return;
-    if (isLoading) return;
+    if (metaInitialLoading) return;
 
     const id = requestAnimationFrame(() => {
       const id2 = requestAnimationFrame(() => setIsPublicToggleNoAnim(false));
@@ -316,46 +249,15 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     });
 
     return () => cancelAnimationFrame(id);
-  }, [isLoading, isOpen]);
+  }, [metaInitialLoading, isOpen]);
 
   useEffect(() => {
     if (!numericBoardId) return;
     if (!isOpen && !shouldWarmAllTabs) return;
-    void loadBoard(numericBoardId);
-  }, [isOpen, loadBoard, numericBoardId, shouldWarmAllTabs]);
-
-  useEffect(() => {
-    if (!numericBoardId) return;
-    if (!isOpen && !shouldWarmAllTabs) return;
-
-    const unsubscribe = connectSocket({
-      onBoardsUpdate: (data) => {
-        const rawBoardId = (data as { board_id?: unknown } | null)?.board_id;
-        const updatedBoardId = typeof rawBoardId === 'number' ? rawBoardId : Number(rawBoardId);
-        if (Number.isFinite(updatedBoardId) && updatedBoardId > 0 && updatedBoardId !== numericBoardId) return;
-
-        boardCache.delete(numericBoardId);
-        boardParticipantsCache.delete(numericBoardId);
-        outgoingInvitesCache.delete(numericBoardId);
-        inviteLinkCache.delete(numericBoardId);
-        boardInFlight.delete(numericBoardId);
-        boardParticipantsInFlight.delete(numericBoardId);
-        outgoingInvitesInFlight.delete(numericBoardId);
-        inviteLinkInFlight.delete(numericBoardId);
-
-        void loadBoard(numericBoardId);
-        if (isOwner) {
-          if (userId) void ensureFriendsLoaded(userId);
-          void loadParticipants(numericBoardId);
-          void loadOutgoingInvites(numericBoardId);
-          void loadInviteLink(numericBoardId);
-        }
-      },
-    });
-
-    return () => {
-      unsubscribe?.();
-    };
+    useBoardDetailsStore.getState().ensureParticipantsLoaded(numericBoardId);
+    useBoardDetailsStore.getState().ensureOutgoingInvitesLoaded(numericBoardId);
+    useBoardDetailsStore.getState().ensureInviteLinkLoaded(numericBoardId);
+    if (isOwner && userId) void ensureFriendsLoaded(userId);
   }, [ensureFriendsLoaded, isOpen, isOwner, numericBoardId, shouldWarmAllTabs, userId]);
 
   useEffect(() => {
@@ -370,18 +272,14 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     setParticipantsError(null);
     setInviteActionUserId(null);
     setInviteLinkError(null);
+    setInviteLinkActionLoading(false);
     setInviteLinkCopied(false);
     if (inviteLinkCopiedTimeoutRef.current) {
       window.clearTimeout(inviteLinkCopiedTimeoutRef.current);
       inviteLinkCopiedTimeoutRef.current = null;
     }
-    if (!shouldWarmAllTabs) {
-      setIsLoading(false);
-      setParticipantsLoading(false);
-      setOutgoingInvitesLoading(false);
-      setInviteLinkLoading(false);
-    }
-  }, [imagePreview, isOpen, shouldWarmAllTabs]);
+    if (numericBoardId) useBoardDetailsStore.getState().resetBoardDraft(numericBoardId);
+  }, [imagePreview, isOpen, numericBoardId, shouldWarmAllTabs]);
 
   const inviteLinkUrl = useMemo(() => {
     if (!numericBoardId || !inviteLinkToken) return '';
@@ -412,203 +310,20 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     };
   }, []);
 
-  const loadParticipants = async (boardId: number) => {
-    try {
-      const cached = boardParticipantsCache.get(boardId);
-      if (cached) {
-        setParticipantsError(null);
-        setBoardParticipants(cached.participants);
-        setParticipantsByUserId(cached.participantsByUserId);
-        setParticipantsLoading(false);
-        return;
-      }
-
-      setParticipantsLoading(true);
-      setParticipantsError(null);
-
-      const promise =
-        boardParticipantsInFlight.get(boardId) ??
-        (async () => {
-          const { data } = await axiosInstance.get<{ participants?: BoardParticipant[] }>(`/api/boards/${boardId}/participants`);
-          const participants = Array.isArray(data?.participants) ? data.participants : [];
-          const map: Record<number, true> = {};
-          for (const p of participants) {
-            const id = Number(p?.id);
-            if (!Number.isFinite(id) || id <= 0) continue;
-            map[id] = true;
-          }
-
-          const entry: BoardParticipantsCacheEntry = { participants, participantsByUserId: map };
-          boardParticipantsCache.set(boardId, entry);
-          return entry;
-        })();
-
-      if (!boardParticipantsInFlight.has(boardId)) {
-        boardParticipantsInFlight.set(
-          boardId,
-          promise.then(
-            (v) => {
-              boardParticipantsInFlight.delete(boardId);
-              return v;
-            },
-            (err) => {
-              boardParticipantsInFlight.delete(boardId);
-              throw err;
-            }
-          )
-        );
-      }
-
-      const entry = await boardParticipantsInFlight.get(boardId)!;
-      setBoardParticipants(entry.participants);
-      setParticipantsByUserId(entry.participantsByUserId);
-
-      setRemovedGuestsByUserId((prev) => {
-        const next = { ...prev };
-        Object.keys(next).forEach((key) => {
-          const id = Number(key);
-          if (!Number.isFinite(id) || id <= 0) return;
-          if (entry.participantsByUserId[id]) delete next[id];
-        });
-        return next;
-      });
-    } catch {
-      setParticipantsByUserId({});
-      setBoardParticipants([]);
-      setParticipantsError('Не удалось загрузить участников');
-    } finally {
-      setParticipantsLoading(false);
-    }
-  };
-
-  const loadOutgoingInvites = async (boardId: number) => {
-    try {
-      const cached = outgoingInvitesCache.get(boardId);
-      if (cached) {
-        setParticipantsError(null);
-        setOutgoingInvitesByUserId(cached.invitesByUserId);
-        setOutgoingInvitesLoading(false);
-        return;
-      }
-
-      setOutgoingInvitesLoading(true);
-      setParticipantsError(null);
-
-      const promise =
-        outgoingInvitesInFlight.get(boardId) ??
-        (async () => {
-          const { data } = await axiosInstance.get<OutgoingBoardInvite[]>(`/api/boards/${boardId}/invites/outgoing`);
-          const map: Record<number, { id: number; status: 'sent' | 'rejected' }> = {};
-          if (Array.isArray(data)) {
-            for (const inv of data) {
-              const invitedId = Number(inv?.invited_id);
-              const inviteId = Number(inv?.id);
-              const status = inv?.status;
-
-              if (!Number.isFinite(invitedId) || invitedId <= 0) continue;
-              if (!Number.isFinite(inviteId) || inviteId <= 0) continue;
-              if (status !== 'sent' && status !== 'rejected') continue;
-              if (map[invitedId]) continue;
-
-              map[invitedId] = { id: inviteId, status };
-            }
-          }
-
-          const entry: OutgoingInvitesCacheEntry = { invitesByUserId: map };
-          outgoingInvitesCache.set(boardId, entry);
-          return entry;
-        })();
-
-      if (!outgoingInvitesInFlight.has(boardId)) {
-        outgoingInvitesInFlight.set(
-          boardId,
-          promise.then(
-            (v) => {
-              outgoingInvitesInFlight.delete(boardId);
-              return v;
-            },
-            (err) => {
-              outgoingInvitesInFlight.delete(boardId);
-              throw err;
-            }
-          )
-        );
-      }
-
-      const entry = await outgoingInvitesInFlight.get(boardId)!;
-      setOutgoingInvitesByUserId(entry.invitesByUserId);
-    } catch {
-      setOutgoingInvitesByUserId({});
-      setParticipantsError('Не удалось загрузить приглашения');
-    } finally {
-      setOutgoingInvitesLoading(false);
-    }
-  };
-
-  const loadInviteLink = async (boardId: number) => {
-    try {
-      const cached = inviteLinkCache.get(boardId);
-      if (cached) {
-        setInviteLinkError(null);
-        setInviteLinkToken(cached);
-        setInviteLinkLoading(false);
-        return;
-      }
-
-      setInviteLinkLoading(true);
-      setInviteLinkError(null);
-
-      const promise =
-        inviteLinkInFlight.get(boardId) ??
-        (async () => {
-          const { data } = await axiosInstance.get<BoardInviteLinkResponse>(`/api/boards/${boardId}/invite-link`);
-          const token = typeof data?.token === 'string' ? data.token : null;
-          if (token) inviteLinkCache.set(boardId, token);
-          return token;
-        })();
-
-      if (!inviteLinkInFlight.has(boardId)) {
-        inviteLinkInFlight.set(
-          boardId,
-          promise.then(
-            (v) => {
-              inviteLinkInFlight.delete(boardId);
-              return v;
-            },
-            (err) => {
-              inviteLinkInFlight.delete(boardId);
-              throw err;
-            }
-          )
-        );
-      }
-
-      const token = await inviteLinkInFlight.get(boardId)!;
-      setInviteLinkToken(token);
-    } catch {
-      setInviteLinkToken(null);
-      setInviteLinkError('Не удалось загрузить ссылку');
-    } finally {
-      setInviteLinkLoading(false);
-    }
-  };
-
   const regenerateInviteLink = async () => {
     if (!numericBoardId) return;
     if (!isOwner) return;
 
-    setInviteLinkLoading(true);
+    setInviteLinkActionLoading(true);
     setInviteLinkError(null);
     try {
       const { data } = await axiosInstance.post<BoardInviteLinkResponse>(`/api/boards/${numericBoardId}/invite-link/regenerate`);
       const token = typeof data?.token === 'string' ? data.token : null;
-      if (token) inviteLinkCache.set(numericBoardId, token);
-      else inviteLinkCache.delete(numericBoardId);
-      setInviteLinkToken(token);
+      useBoardDetailsStore.getState().setInviteLinkToken(numericBoardId, token);
     } catch {
       setInviteLinkError('Не удалось пересоздать ссылку');
     } finally {
-      setInviteLinkLoading(false);
+      setInviteLinkActionLoading(false);
     }
   };
 
@@ -657,11 +372,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
 
       const inviteId = Number(data?.id);
       if (Number.isFinite(inviteId) && inviteId > 0) {
-        setOutgoingInvitesByUserId((prev) => {
-          const next = { ...prev, [friend.id]: { id: inviteId, status: 'sent' as const } };
-          if (numericBoardId) outgoingInvitesCache.set(numericBoardId, { invitesByUserId: next });
-          return next;
-        });
+        useBoardDetailsStore.getState().setOutgoingInvite(numericBoardId, friend.id, { id: inviteId, status: 'sent' });
       }
     } catch (e: unknown) {
       const status = (e as { response?: { status?: number; data?: unknown } })?.response?.status;
@@ -669,11 +380,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       const inviteStatus = (e as { response?: { data?: { status?: string } } })?.response?.data?.status;
       if (status === 409 && Number.isFinite(inviteId) && inviteId > 0) {
         const nextStatus: 'sent' | 'rejected' = inviteStatus === 'rejected' ? 'rejected' : 'sent';
-        setOutgoingInvitesByUserId((prev) => {
-          const next = { ...prev, [friend.id]: { id: inviteId, status: nextStatus } };
-          if (numericBoardId) outgoingInvitesCache.set(numericBoardId, { invitesByUserId: next });
-          return next;
-        });
+        useBoardDetailsStore.getState().setOutgoingInvite(numericBoardId, friend.id, { id: inviteId, status: nextStatus });
       } else {
         setParticipantsError('Не удалось отправить приглашение');
       }
@@ -694,12 +401,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     setParticipantsError(null);
     try {
       await axiosInstance.delete(`/api/boards/${numericBoardId}/invites/${inviteInfo.id}`);
-      setOutgoingInvitesByUserId((prev) => {
-        const next = { ...prev };
-        delete next[friend.id];
-        outgoingInvitesCache.set(numericBoardId, { invitesByUserId: next });
-        return next;
-      });
+      useBoardDetailsStore.getState().removeOutgoingInvite(numericBoardId, friend.id);
     } catch {
       setParticipantsError('Не удалось отменить приглашение');
     } finally {
@@ -716,22 +418,11 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     setParticipantsError(null);
     try {
       await axiosInstance.delete(`/api/boards/${numericBoardId}/guests/${guest.id}`);
-
-      const nextParticipants = boardParticipants.filter((p) => p.id !== guest.id);
-      const nextById = { ...participantsByUserId };
-      delete nextById[guest.id];
-
-      setBoardParticipants(nextParticipants);
-      setParticipantsByUserId(nextById);
-      boardParticipantsCache.set(numericBoardId, { participants: nextParticipants, participantsByUserId: nextById });
-
-      setOutgoingInvitesByUserId((prev) => {
-        if (!prev[guest.id]) return prev;
-        const next = { ...prev };
-        delete next[guest.id];
-        outgoingInvitesCache.set(numericBoardId, { invitesByUserId: next });
-        return next;
+      useBoardDetailsStore.getState().applyParticipantsPatch(numericBoardId, (prev) => {
+        if (!prev) return prev;
+        return { ...prev, participants: prev.participants.filter((p) => p.id !== guest.id) };
       });
+      useBoardDetailsStore.getState().removeOutgoingInvite(numericBoardId, guest.id);
       setRemovedGuestsByUserId((prev) => ({ ...prev, [guest.id]: guest }));
     } catch {
       setParticipantsError('Не удалось удалить гостя');
@@ -754,9 +445,10 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     setParticipantsError(null);
     try {
       await axiosInstance.patch(`/api/boards/${numericBoardId}/guests/${guest.id}/role`, { role: nextRole });
-      const nextParticipants = boardParticipants.map((p) => (p.id === guest.id ? { ...p, role: nextRole } : p));
-      setBoardParticipants(nextParticipants);
-      boardParticipantsCache.set(numericBoardId, { participants: nextParticipants, participantsByUserId });
+      useBoardDetailsStore.getState().applyParticipantsPatch(numericBoardId, (prev) => {
+        if (!prev) return prev;
+        return { ...prev, participants: prev.participants.map((p) => (p.id === guest.id ? { ...p, role: nextRole } : p)) };
+      });
       setRoleDropdownUserId(null);
     } catch {
       setParticipantsError('Не удалось изменить роль');
@@ -783,9 +475,10 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     if (!isOwner) return;
 
     if (userId) void ensureFriendsLoaded(userId);
-    void loadParticipants(numericBoardId);
-    void loadOutgoingInvites(numericBoardId);
-    void loadInviteLink(numericBoardId);
+    const ttlMs = 60_000;
+    useBoardDetailsStore.getState().refreshParticipantsIfStale(numericBoardId, ttlMs);
+    useBoardDetailsStore.getState().refreshOutgoingInvitesIfStale(numericBoardId, ttlMs);
+    useBoardDetailsStore.getState().refreshInviteLinkIfStale(numericBoardId, ttlMs);
   }, [ensureFriendsLoaded, isOpen, isOwner, numericBoardId, shouldWarmAllTabs, userId, view]);
 
   useEffect(() => {
@@ -833,10 +526,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
         publicBoards: s.publicBoards.filter((b) => b.id !== numericBoardId),
       }));
 
-      boardCache.delete(numericBoardId);
-      boardParticipantsCache.delete(numericBoardId);
-      outgoingInvitesCache.delete(numericBoardId);
-      inviteLinkCache.delete(numericBoardId);
+      useBoardDetailsStore.getState().clearBoard(numericBoardId);
 
       close();
       navigate('/spaces', { replace: true });
@@ -851,6 +541,10 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const submit = async () => {
     if (!numericBoardId) return;
     if (!isOwner) return;
+    if (!boardMeta) {
+      setError('Не удалось загрузить доску');
+      return;
+    }
 
     const updateBoardsStore = (patch: Partial<Pick<BoardResponse, 'title' | 'description' | 'image' | 'is_public'>>) => {
       useBoardsUnifiedStore.setState((s) => {
@@ -871,12 +565,6 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       });
     };
 
-    const updateBoardCache = (patch: Partial<Pick<BoardResponse, 'title' | 'description' | 'image' | 'is_public'>>) => {
-      const current = boardCache.get(numericBoardId) ?? board;
-      if (!current) return;
-      boardCache.set(numericBoardId, { ...current, ...patch });
-    };
-
     const nextTitle = title.trim();
     if (!nextTitle) {
       setError('Название обязательно');
@@ -894,19 +582,18 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     setIsSaving(true);
     setError(null);
     try {
-      if (board && nextTitle !== board.title) {
+      if (nextTitle !== boardMeta.title) {
         const { data } = await axiosInstance.patch<{ title: string }>(`/api/boards/${numericBoardId}/title`, {
           title: nextTitle,
         });
         const next = data?.title ?? nextTitle;
-        setBoard((prev) => (prev ? { ...prev, title: next } : prev));
         updateBoardsStore({ title: next });
-        updateBoardCache({ title: next });
+        useBoardDetailsStore.getState().applyBoardMetaPatch(numericBoardId, { title: next });
       }
 
       const nextDescription = description.trim() || null;
-      const prevDescription = board?.description ?? null;
-      if (board && nextDescription !== prevDescription) {
+      const prevDescription = boardMeta?.description ?? null;
+      if (nextDescription !== prevDescription) {
         const { data } = await axiosInstance.patch<{ description: string | null }>(
           `/api/boards/${numericBoardId}/description`,
           {
@@ -914,9 +601,8 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
           }
         );
         const next = data?.description ?? nextDescription;
-        setBoard((prev) => (prev ? { ...prev, description: next } : prev));
         updateBoardsStore({ description: next });
-        updateBoardCache({ description: next });
+        useBoardDetailsStore.getState().applyBoardMetaPatch(numericBoardId, { description: next });
       }
 
       if (imageFile) {
@@ -926,10 +612,9 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
         const { data } = await axiosInstance.patch<{ image: string | null }>(`/api/boards/${numericBoardId}/image`, form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        const next = typeof data?.image === 'string' || data?.image === null ? data.image : board?.image ?? null;
-        setBoard((prev) => (prev ? { ...prev, image: next } : prev));
+        const next = typeof data?.image === 'string' || data?.image === null ? data.image : boardMeta?.image ?? null;
         updateBoardsStore({ image: next });
-        updateBoardCache({ image: next });
+        useBoardDetailsStore.getState().applyBoardMetaPatch(numericBoardId, { image: next });
         setImageFile(null);
         if (imagePreview) URL.revokeObjectURL(imagePreview);
         setImagePreview(null);
@@ -937,17 +622,17 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       }
 
       const nextIsPublic = Boolean(isPublic);
-      const prevIsPublic = typeof board?.is_public === 'boolean' ? board.is_public : Number(board?.is_public) === 1;
-      if (board && nextIsPublic !== prevIsPublic) {
+      const prevIsPublic = typeof boardMeta?.is_public === 'boolean' ? boardMeta.is_public : Number(boardMeta?.is_public) === 1;
+      if (nextIsPublic !== prevIsPublic) {
         const { data } = await axiosInstance.patch<{ is_public: number | boolean }>(`/api/boards/${numericBoardId}/public`, {
           is_public: nextIsPublic,
         });
         const next = typeof data?.is_public === 'boolean' ? data.is_public : Number(data?.is_public) === 1;
-        setBoard((prev) => (prev ? { ...prev, is_public: next ? 1 : 0 } : prev));
         updateBoardsStore({ is_public: next ? 1 : 0 });
-        updateBoardCache({ is_public: next ? 1 : 0 });
+        useBoardDetailsStore.getState().applyBoardMetaPatch(numericBoardId, { is_public: next ? 1 : 0 });
       }
 
+      useBoardDetailsStore.getState().resetBoardDraft(numericBoardId);
       close();
     } catch {
       setError('Не удалось сохранить изменения');
@@ -980,9 +665,9 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
           {view === 'settings' ? (
             <div className={classes.settings}>
               {error ? <p className={classes.error}>{error}</p> : null}
-              {!isLoading && board && !isOwner ? <p className={classes.hint}>Только владелец может редактировать доску</p> : null}
+              {!metaInitialLoading && boardMeta && !isOwner ? <p className={classes.hint}>Только владелец может редактировать доску</p> : null}
 
-              {isLoading && !board ? (
+              {metaInitialLoading && !boardMeta ? (
                 <p className={classes.hint} />
               ) : (
                 <>
@@ -1048,8 +733,11 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                       type="text"
                       value={title}
                       maxLength={BOARD_TITLE_MAX_LENGTH}
-                      disabled={!isOwner || isSaving || isLoading}
-                      onChange={(e) => setTitle(e.target.value)}
+                      disabled={!isOwner || isSaving || metaInitialLoading}
+                      onChange={(e) => {
+                        if (!numericBoardId) return;
+                        useBoardDetailsStore.getState().setBoardDraft(numericBoardId, { title: e.target.value });
+                      }}
                       placeholder="Введите название"
                     />
                   </label>
@@ -1060,8 +748,11 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                       type="text"
                       value={description}
                       maxLength={BOARD_DESCRIPTION_MAX_LENGTH}
-                      disabled={!isOwner || isSaving || isLoading}
-                      onChange={(e) => setDescription(e.target.value)}
+                      disabled={!isOwner || isSaving || metaInitialLoading}
+                      onChange={(e) => {
+                        if (!numericBoardId) return;
+                        useBoardDetailsStore.getState().setBoardDraft(numericBoardId, { description: e.target.value });
+                      }}
                       placeholder="Введите описание"
                     />
                   </label>
@@ -1072,8 +763,11 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                       className={classes.publicToggleInput}
                       type="checkbox"
                       checked={isPublic}
-                      disabled={!isOwner || isSaving || isDeleting || isLoading}
-                      onChange={(e) => setIsPublic(e.target.checked)}
+                      disabled={!isOwner || isSaving || isDeleting || metaInitialLoading}
+                      onChange={(e) => {
+                        if (!numericBoardId) return;
+                        useBoardDetailsStore.getState().setBoardDraft(numericBoardId, { is_public: e.target.checked });
+                      }}
                     />
                     <span className={classes.publicToggleSwitch} aria-hidden="true" />
                   </label>
@@ -1092,7 +786,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         key="trigger"
                         type="button"
                         className={classes.deleteBoardTrigger}
-                        disabled={isSaving || isDeleting || isLoading}
+                        disabled={isSaving || isDeleting || metaInitialLoading}
                         aria-label="Удалить доску"
                         onClick={() => setDeleteConfirmOpen((v) => !v)}
                       >
@@ -1103,7 +797,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                           type="button"
                           data-dropdown-class={classes.deleteBoardConfirmDanger}
                           onClick={deleteBoard}
-                          disabled={isDeleting || isSaving || isLoading}
+                          disabled={isDeleting || isSaving || metaInitialLoading}
                         >
                           {isDeleting ? 'Удаление...' : 'Удалить'}
                         </button>
@@ -1111,7 +805,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                           type="button"
                           data-dropdown-class={classes.deleteBoardConfirmCancel}
                           onClick={() => setDeleteConfirmOpen(false)}
-                          disabled={isDeleting || isSaving || isLoading}
+                          disabled={isDeleting || isSaving || metaInitialLoading}
                         >
                           Отмена
                         </button>
@@ -1126,7 +820,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                   type="button"
                   text={isSaving ? 'Сохранение...' : 'Сохранить'}
                   onClick={submit}
-                  disabled={!isOwner || isSaving || isDeleting || isLoading}
+                  disabled={!isOwner || isSaving || isDeleting || metaInitialLoading}
                 />
               </div>
             </div>
@@ -1134,7 +828,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
             <div className={classes.participantsTab}>
               {participantsError ? <p className={classes.error}>{participantsError}</p> : null}
               {inviteLinkError ? <p className={classes.error}>{inviteLinkError}</p> : null}
-              {!isLoading && board && !isOwner ? <p className={classes.hint}>Только владелец может приглашать друзей</p> : null}
+              {!metaInitialLoading && boardMeta && !isOwner ? <p className={classes.hint}>Только владелец может приглашать друзей</p> : null}
 
               {isOwner ? (
                 <>
@@ -1245,11 +939,11 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                                   inviteStatus === 'rejected' ||
                                   isBusy ||
                                   friendsLoading ||
-                                  outgoingInvitesLoading ||
-                                  participantsLoading ||
-                                  isSaving ||
-                                  isDeleting ||
-                                  isLoading;
+                                   outgoingInvitesLoading ||
+                                   participantsLoading ||
+                                   isSaving ||
+                                   isDeleting ||
+                                   metaInitialLoading;
 
                                 const btnText = isParticipant
                                   ? 'Участник'
@@ -1357,7 +1051,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                                 outgoingInvitesLoading ||
                                 isSaving ||
                                 isDeleting ||
-                                isLoading;
+                                metaInitialLoading;
 
                               const btnText = isOwnerRow
                                 ? 'Владелец'

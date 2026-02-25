@@ -136,6 +136,11 @@
         width: 100%;
     }
 }
+.board_info_actions_skeleton{
+    width: 100%;
+    height: 38px;
+    border-radius: 10px;
+}
 .participants{
     display: flex;
     flex-direction: column;
@@ -248,18 +253,32 @@
     height: 40px;
     border-radius: 999px;
     overflow: hidden;
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    & img{
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
     & svg{
         width: 100%;
         height: 100%;
     }
+}
+.participant_avatar_overlay{
+    position: absolute;
+    inset: 0;
+}
+.participant_avatar_img{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.participant_avatar_img_hidden{
+    opacity: 0;
+}
+.participant_avatar_img_visible{
+    opacity: 1;
+    transition: opacity 0.2s ease;
 }
 .participant_avatar_skeleton{
     width: 40px;

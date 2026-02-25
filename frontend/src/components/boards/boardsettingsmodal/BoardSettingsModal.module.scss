@@ -90,12 +90,12 @@
 .friendsInvitesBlock{
   display: flex;
   flex-direction: column;
+  gap: 0.75rem;
 }
 
 .participantsInnerToggle{
   display: flex;
   width: 100%;
-  margin-bottom: 0.75rem;
   & button{
     width: 100%;
     background-color: transparent;
@@ -121,9 +121,6 @@
   max-height: 150px;
   overflow: auto;
   padding-right: 0;
-  .friendRow:first-child{
-    border-top: none;
-  }
   &::-webkit-scrollbar {
     width: 10px;
   }

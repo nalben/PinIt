@@ -14,41 +14,22 @@ import AuthModal from '@/components/auth/authmodal/AuthModal';
 import LoginForm from '@/components/auth/login/Login';
 import RegisterForm from '@/components/auth/register/Register';
 import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
-import { connectSocket } from '@/services/socketManager';
 import Close from '@/assets/icons/monochrome/back.svg';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
 import Deny from '@/assets/icons/monochrome/deny.svg'
 import Members from '@/assets/icons/monochrome/members.svg';
+import { BoardParticipant, BoardParticipantsResponse, useBoardDetailsStore } from '@/store/boardDetailsStore';
 
 type BoardParticipantRole = 'owner' | 'guest' | 'editer';
 
 const PENDING_INVITE_LS_KEY = 'pinit_pendingInviteUrl';
 type AuthView = 'login' | 'register' | 'reset';
 
-interface BoardParticipant {
-    id: number;
-    username: string;
-    nickname?: string | null;
-    avatar?: string | null;
-    role: BoardParticipantRole;
-}
-
-interface BoardParticipantsResponse {
-    board_id: number;
-    my_role: BoardParticipantRole | null;
-    participants: BoardParticipant[];
-}
-
 const resolveAvatarSrc = (avatar?: string | null) => {
     if (!avatar) return null;
     if (avatar.startsWith('/uploads/')) return `${API_URL}${avatar}`;
     return avatar;
-};
-
-const loadBoardParticipants = async (boardId: number) => {
-    const { data } = await axiosInstance.get<BoardParticipantsResponse>(`/api/boards/${boardId}/participants`);
-    return data;
 };
 
 const Board = () => {
@@ -72,22 +53,21 @@ const Board = () => {
     const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
     const [forcedAuthView, setForcedAuthView] = useState<AuthView>('login');
 
-    const [participantsData, setParticipantsData] = useState<BoardParticipantsResponse | null>(null);
     const [debugParticipantsData, setDebugParticipantsData] = useState<BoardParticipantsResponse | null>(null);
-    const [participantsLoading, setParticipantsLoading] = useState(false);
     const [removeConfirmParticipantId, setRemoveConfirmParticipantId] = useState<number | null>(null);
     const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
     const [leaveLoading, setLeaveLoading] = useState(false);
     const [roleDropdownParticipantId, setRoleDropdownParticipantId] = useState<number | null>(null);
     const [roleLoadingParticipantId, setRoleLoadingParticipantId] = useState<number | null>(null);
+    const [removeLoadingParticipantId, setRemoveLoadingParticipantId] = useState<number | null>(null);
     const participantsListRef = useRef<HTMLDivElement | null>(null);
     const [hasParticipantsListScroll, setHasParticipantsListScroll] = useState(false);
-    const participantsLoadSeqRef = useRef(0);
-    const participantsBoardIdRef = useRef<number | null>(null);
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
     const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<UnifiedBoard> | null>(null);
     const [loadedBoardImageSrc, setLoadedBoardImageSrc] = useState<string | null>(null);
     const [failedBoardImageSrc, setFailedBoardImageSrc] = useState<string | null>(null);
+    const [loadedParticipantAvatarSrcs, setLoadedParticipantAvatarSrcs] = useState<Record<string, true>>({});
+    const [failedParticipantAvatarSrcs, setFailedParticipantAvatarSrcs] = useState<Record<string, true>>({});
     const tokenPresent = Boolean(localStorage.getItem('token'));
     const inviteToken = useMemo(() => {
         try {
@@ -100,6 +80,10 @@ const Board = () => {
     const isLoggedIn = isInitialized && isAuth;
     const numericBoardId = Number(boardId);
     const hasValidBoardId = Number.isFinite(numericBoardId) && numericBoardId > 0;
+    const participantsData = useBoardDetailsStore((s) => (hasValidBoardId ? (s.participantsByBoardId[numericBoardId] ?? null) : null));
+    const participantsLoadingFlags = useBoardDetailsStore((s) => (hasValidBoardId ? s.participantsLoadingByBoardId[numericBoardId] : undefined));
+    const accessLost = useBoardDetailsStore((s) => (hasValidBoardId ? Boolean(s.accessLostBoards[numericBoardId]) : false));
+    const participantsInitialLoading = Boolean(participantsLoadingFlags?.initial) && !participantsData;
 
     const getPendingInviteUrlForThisBoard = () => {
         if (!hasValidBoardId) return null;
@@ -444,7 +428,6 @@ const Board = () => {
                             } catch {
                                 // ignore
                             }
-                            void useBoardsUnifiedStore.getState().refreshMySilent();
                             void useBoardsUnifiedStore.getState().refreshRecentSilent();
                             return;
                         }
@@ -475,7 +458,6 @@ const Board = () => {
                                                 } catch {
                                                     // ignore
                                                 }
-                                                void useBoardsUnifiedStore.getState().refreshMySilent();
                                                 void useBoardsUnifiedStore.getState().refreshRecentSilent();
                                                 return;
                                             }
@@ -521,7 +503,6 @@ const Board = () => {
                                 } catch {
                                     // ignore
                                 }
-                                void useBoardsUnifiedStore.getState().refreshMySilent();
                                 void useBoardsUnifiedStore.getState().refreshRecentSilent();
                                 return;
                             } catch {
@@ -643,100 +624,40 @@ const Board = () => {
     }, [closeBoardSettingsModal, isOwnerBoard]);
 
     useEffect(() => {
+        if (!isInitialized) return;
         if (!isLoggedIn) {
-            setParticipantsData(null);
             setRemoveConfirmParticipantId(null);
-            setParticipantsLoading(false);
-            participantsBoardIdRef.current = null;
             return;
         }
 
         const id = Number(boardId);
         if (!Number.isFinite(id) || id <= 0) return;
-
-        const seq = participantsLoadSeqRef.current + 1;
-        participantsLoadSeqRef.current = seq;
-        const isInitialLoad = participantsBoardIdRef.current !== id;
-        if (isInitialLoad) {
-            setParticipantsLoading(true);
-            setParticipantsData(null);
-            participantsBoardIdRef.current = null;
-        }
-        setRemoveConfirmParticipantId(null);
-        loadBoardParticipants(id)
-            .then((data) => {
-                if (participantsLoadSeqRef.current !== seq) return;
-                setParticipantsData(data ?? null);
-                participantsBoardIdRef.current = data ? id : null;
-            })
-            .catch(() => {
-                if (participantsLoadSeqRef.current !== seq) return;
-                if (isInitialLoad) {
-                    setParticipantsData(null);
-                    participantsBoardIdRef.current = null;
-                }
-            })
-            .finally(() => {
-                if (participantsLoadSeqRef.current !== seq) return;
-                if (isInitialLoad) setParticipantsLoading(false);
-            });
+        useBoardDetailsStore.getState().ensureParticipantsLoaded(id);
 
         return () => {};
-    }, [boardId, boardInfo?.myRole, isLoggedIn]);
+    }, [boardId, isInitialized, isLoggedIn]);
 
     useEffect(() => {
-        if (!isInitialized) return;
-        if (!isLoggedIn) return;
+        if (!hasValidBoardId) return;
+        if (!accessLost) return;
 
-        const id = Number(boardId);
-        if (!Number.isFinite(id) || id <= 0) return;
-
-        const unsubscribe = connectSocket({
-            onBoardsUpdate: (data) => {
-                const rawBoardId = (data as { board_id?: unknown } | null)?.board_id;
-                const updatedBoardId = typeof rawBoardId === 'number' ? rawBoardId : Number(rawBoardId);
-                if (Number.isFinite(updatedBoardId) && updatedBoardId > 0 && updatedBoardId !== id) return;
-
-                const seq = participantsLoadSeqRef.current + 1;
-                participantsLoadSeqRef.current = seq;
-
-                setRemoveConfirmParticipantId(null);
-                loadBoardParticipants(id)
-                    .then((next) => {
-                        if (participantsLoadSeqRef.current !== seq) return;
-                        setParticipantsData(next ?? null);
-                    })
-                    .catch((err) => {
-                        if (participantsLoadSeqRef.current !== seq) return;
-                        const status = Number((err as { response?: { status?: unknown } } | null)?.response?.status);
-                        if (status === 403 || status === 404) {
-                            closeBoardSettingsModal();
-                            void useBoardsUnifiedStore.getState().refreshMySilent();
-                            void useBoardsUnifiedStore.getState().refreshRecentSilent();
-                            void useBoardsUnifiedStore.getState().refreshGuestSilent();
-                            void useBoardsUnifiedStore.getState().refreshFriendsSilent();
-                            void useBoardsUnifiedStore.getState().refreshPublicSilent();
-                            navigate('/spaces', { replace: true });
-                            return;
-                        }
-                        // keep previous participantsData on transient errors
-                    })
-                    .finally(() => {});
-            },
-        });
-
-        return () => {
-            unsubscribe?.();
-        };
-    }, [boardId, closeBoardSettingsModal, isInitialized, isLoggedIn, navigate]);
+        closeBoardSettingsModal();
+        void useBoardsUnifiedStore.getState().refreshMySilent();
+        void useBoardsUnifiedStore.getState().refreshRecentSilent();
+        void useBoardsUnifiedStore.getState().refreshGuestSilent();
+        void useBoardsUnifiedStore.getState().refreshFriendsSilent();
+        void useBoardsUnifiedStore.getState().refreshPublicSilent();
+        useBoardDetailsStore.getState().clearBoard(numericBoardId);
+        navigate('/spaces', { replace: true });
+    }, [accessLost, closeBoardSettingsModal, hasValidBoardId, navigate, numericBoardId]);
 
     const effectiveParticipantsData = debugParticipantsData ?? participantsData;
     const isOwner = effectiveParticipantsData?.my_role === 'owner';
     const participants = effectiveParticipantsData?.participants ?? [];
     const guests = participants.filter((p) => p.role !== 'owner');
-    const shouldShowParticipants = participantsLoading || isOwner || guests.length > 0;
+    const shouldShowParticipants = participantsInitialLoading || isOwner || guests.length > 0;
     const canManageParticipants = isOwner || isOwnerBoard;
-    const shouldShowOwnerActions = canManageParticipants && !participantsLoading;
+    const shouldShowOwnerActions = canManageParticipants && !participantsInitialLoading;
     const ownerParticipant = participants.find((p) => p.role === 'owner') ?? null;
     const ownerAvatarSrc = ownerParticipant ? resolveAvatarSrc(ownerParticipant.avatar) : null;
 
@@ -821,15 +742,18 @@ const Board = () => {
         if (!Number.isFinite(id) || id <= 0) return;
         if (!isOwner) return;
 
-        setParticipantsLoading(true);
+        setRemoveLoadingParticipantId(participantId);
         try {
             await axiosInstance.delete(`/api/boards/${id}/guests/${participantId}`);
-            const data = await loadBoardParticipants(id);
-            setParticipantsData(data ?? null);
+            useBoardDetailsStore.getState().applyParticipantsPatch(id, (prev) => {
+                if (!prev) return prev;
+                return { ...prev, participants: prev.participants.filter((p) => p.id !== participantId) };
+            });
+            void useBoardDetailsStore.getState().refreshParticipantsSilent(id);
         } catch {
             // ignore
         } finally {
-            setParticipantsLoading(false);
+            setRemoveLoadingParticipantId(null);
             setRemoveConfirmParticipantId(null);
         }
     };
@@ -859,7 +783,7 @@ const Board = () => {
                 };
             };
 
-            setParticipantsData(apply);
+            useBoardDetailsStore.getState().applyParticipantsPatch(id, apply);
             setDebugParticipantsData(apply);
             setRoleDropdownParticipantId(null);
         } catch {
@@ -879,11 +803,6 @@ const Board = () => {
         try {
             await axiosInstance.post(`/api/boards/${id}/leave`);
             setLeaveConfirmOpen(false);
-            void useBoardsUnifiedStore.getState().refreshMySilent();
-            void useBoardsUnifiedStore.getState().refreshRecentSilent();
-            void useBoardsUnifiedStore.getState().refreshGuestSilent();
-            void useBoardsUnifiedStore.getState().refreshFriendsSilent();
-            void useBoardsUnifiedStore.getState().refreshPublicSilent();
             navigate('/spaces', { replace: true });
         } catch {
             // ignore
@@ -901,7 +820,7 @@ const Board = () => {
                 </button>
                 <div className={classes.board_menu_}>
                     <div className={classes.board_info}>
-                        {isBoardMetaLoading ? (
+                        {isBoardMetaLoading || !boardInfo?.title ? (
                             <>
                                 <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
                                 <div className={`${classes.skeleton} ${classes.board_info_line_skeleton}`} />
@@ -959,7 +878,7 @@ const Board = () => {
                                         type="button"
                                         className={classes.leave_board_trigger}
                                         onClick={() => setLeaveConfirmOpen((v) => !v)}
-                                        disabled={leaveLoading || participantsLoading}
+                                        disabled={leaveLoading || participantsInitialLoading}
                                         aria-label="Покинуть доску"
                                     >
                                         Покинуть доску
@@ -969,7 +888,7 @@ const Board = () => {
                                             type="button"
                                             data-dropdown-class={classes.participant_confirm_danger}
                                             onClick={leaveBoard}
-                                            disabled={leaveLoading || participantsLoading}
+                                            disabled={leaveLoading || participantsInitialLoading}
                                         >
                                             {leaveLoading ? 'Выход...' : 'Покинуть'}
                                         </button>
@@ -977,7 +896,7 @@ const Board = () => {
                                             type="button"
                                             data-dropdown-class={classes.participant_confirm_cancel}
                                             onClick={() => setLeaveConfirmOpen(false)}
-                                            disabled={leaveLoading || participantsLoading}
+                                            disabled={leaveLoading || participantsInitialLoading}
                                         >
                                             Отмена
                                         </button>
@@ -986,12 +905,18 @@ const Board = () => {
                             </DropdownWrapper>
                         </div>
                     ) : null}
-                    {isOwnerBoard && !isBoardMetaLoading ? (
-                        <div className={classes.board_info_actions}>
-                            <Mainbtn variant="mini" kind="button" type="button" text="Настройки" onClick={() => openBoardSettingsModal()} />
-                        </div>
+                    {isLoggedIn ? (
+                        isBoardMetaLoading ? (
+                            <div className={classes.board_info_actions}>
+                                <div className={`${classes.skeleton} ${classes.board_info_actions_skeleton}`} />
+                            </div>
+                        ) : isOwnerBoard ? (
+                            <div className={classes.board_info_actions}>
+                                <Mainbtn variant="mini" kind="button" type="button" text="Настройки" onClick={() => openBoardSettingsModal()} />
+                            </div>
+                        ) : null
                     ) : null}
-                    {!isLoggedIn ? (
+                    {!isLoggedIn && isInitialized ? (
                         <div className={classes.participants}>
                             <div className={classes.participant_add}>
                                 <AuthTrigger type="login">
@@ -1002,7 +927,7 @@ const Board = () => {
                     ) : null}
                     {isLoggedIn && shouldShowParticipants ? (
                         <div className={classes.participants}>
-                            {participantsLoading ? (
+                            {participantsInitialLoading ? (
                                 <div className={`${classes.skeleton} ${classes.participants_title_skeleton}`} />
                             ) : (
                                 <span className={classes.participants_title}>Участники:</span>
@@ -1012,7 +937,7 @@ const Board = () => {
                                 className={`${classes.participants_list} ${hasParticipantsListScroll ? classes.participants_list_scroll : ''}`}
                             >
                                 {canManageParticipants ? (
-                                    participantsLoading ? (
+                                    participantsInitialLoading ? (
                                         <div className={`${classes.skeleton} ${classes.participant_add_skeleton}`} />
                                     ) : (
                                         <div className={classes.participant_add}>
@@ -1044,7 +969,7 @@ const Board = () => {
                                         </div>
                                     )
                                 ) : null}
-                                {participantsLoading ? (
+                                {participantsInitialLoading ? (
                                     <>
                                         {[0, 1, 2].map((idx) => (
                                             <div className={classes.participant_item} key={`participant-skeleton-${idx}`}>
@@ -1061,18 +986,46 @@ const Board = () => {
                                         ))}
                                     </>
                                 ) : null}
-                                {!participantsLoading ? guests.map((p) => {
+                                {!participantsInitialLoading ? guests.map((p) => {
                                     const avatarSrc = resolveAvatarSrc(p.avatar);
                                     const displayName = (p.nickname ?? '').trim() || p.username;
                                     const shouldShowUsername = Boolean((p.nickname ?? '').trim());
                                     const isRoleBusy = roleLoadingParticipantId === p.id;
+                                    const isAvatarLoaded = Boolean(avatarSrc && loadedParticipantAvatarSrcs[avatarSrc]);
+                                    const isAvatarFailed = Boolean(avatarSrc && failedParticipantAvatarSrcs[avatarSrc]);
                                     const roleLabel = p.role === 'editer' ? 'Редактор' : 'Гость';
 
                                     return (
                                         <div className={classes.participant_item} key={p.id}>
                                             <Link className={classes.participant_link} to={`/user/${p.username}`}>
                                                 <div className={classes.participant_avatar}>
-                                                    {avatarSrc ? <img src={avatarSrc} alt={displayName} /> : <DefaultUser />}
+                                                    {avatarSrc && !isAvatarFailed ? (
+                                                        <>
+                                                            {!isAvatarLoaded ? (
+                                                                <div
+                                                                    className={`${classes.skeleton} ${classes.participant_avatar_skeleton} ${classes.participant_avatar_overlay}`}
+                                                                />
+                                                            ) : null}
+                                                            <img
+                                                                src={avatarSrc}
+                                                                alt={displayName}
+                                                                className={`${classes.participant_avatar_img} ${isAvatarLoaded ? classes.participant_avatar_img_visible : classes.participant_avatar_img_hidden}`}
+                                                                loading="lazy"
+                                                                onLoad={() => {
+                                                                    setLoadedParticipantAvatarSrcs((prev) =>
+                                                                        prev[avatarSrc] ? prev : { ...prev, [avatarSrc]: true }
+                                                                    );
+                                                                }}
+                                                                onError={() => {
+                                                                    setFailedParticipantAvatarSrcs((prev) =>
+                                                                        prev[avatarSrc] ? prev : { ...prev, [avatarSrc]: true }
+                                                                    );
+                                                                }}
+                                                            />
+                                                        </>
+                                                    ) : (
+                                                        <DefaultUser />
+                                                    )}
                                                 </div>
                                                 <div className={classes.participant_names}>
                                                     <span className={classes.participant_name}>{displayName}</span>
@@ -1092,7 +1045,7 @@ const Board = () => {
                                                             type="button"
                                                             className={classes.participant_role_btn}
                                                             onClick={() => setRoleDropdownParticipantId((prev) => (prev === p.id ? null : p.id))}
-                                                            disabled={participantsLoading || isRoleBusy}
+                                                            disabled={participantsInitialLoading || isRoleBusy}
                                                         >
                                                             {roleLabel}
                                                         </button>,
@@ -1101,7 +1054,7 @@ const Board = () => {
                                                                 type="button"
                                                                 data-dropdown-class={classes.participant_role_item}
                                                                 onClick={() => updateParticipantRole(p.id, 'guest')}
-                                                                disabled={participantsLoading || isRoleBusy}
+                                                                disabled={participantsInitialLoading || isRoleBusy}
                                                             >
                                                                 Гость
                                                             </button>
@@ -1109,7 +1062,7 @@ const Board = () => {
                                                                 type="button"
                                                                 data-dropdown-class={classes.participant_role_item}
                                                                 onClick={() => updateParticipantRole(p.id, 'editer')}
-                                                                disabled={participantsLoading || isRoleBusy}
+                                                                disabled={participantsInitialLoading || isRoleBusy}
                                                             >
                                                                 Редактор
                                                             </button>
@@ -1136,7 +1089,7 @@ const Board = () => {
                                                                 e.stopPropagation();
                                                                 setRemoveConfirmParticipantId((prev) => (prev === p.id ? null : p.id));
                                                             }}
-                                                            disabled={participantsLoading}
+                                                            disabled={participantsInitialLoading || removeLoadingParticipantId === p.id}
                                                             aria-label="Удалить участника"
                                                         >
                                                             <Deny />
@@ -1146,7 +1099,7 @@ const Board = () => {
                                                                 type="button"
                                                                 data-dropdown-class={classes.participant_confirm_danger}
                                                                 onClick={() => removeParticipant(p.id)}
-                                                                disabled={participantsLoading}
+                                                                disabled={participantsInitialLoading || removeLoadingParticipantId === p.id}
                                                             >
                                                                 Удалить
                                                             </button>
@@ -1154,7 +1107,7 @@ const Board = () => {
                                                                 type="button"
                                                                 data-dropdown-class={classes.participant_confirm_cancel}
                                                                 onClick={() => setRemoveConfirmParticipantId(null)}
-                                                                disabled={participantsLoading}
+                                                                disabled={participantsInitialLoading || removeLoadingParticipantId === p.id}
                                                             >
                                                                 Отмена
                                                             </button>

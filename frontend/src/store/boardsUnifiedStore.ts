@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import axiosInstance from '@/api/axiosInstance';
+import { useAuthStore } from '@/store/authStore';
 
 export type UnifiedBoard = {
   id: number;
@@ -50,7 +51,7 @@ const readRecentBoardsFromLocalStorage = (): UnifiedBoard[] => {
   }
 };
 
-type BoardsUpdatedCommand = { reason?: string; board_id?: number };
+type BoardsUpdatedCommand = { reason?: string; board_id?: number; user_id?: number };
 
 type ListKey = 'my' | 'recent' | 'guest' | 'friends' | 'public';
 
@@ -126,7 +127,10 @@ export const useBoardsUnifiedStore = create<BoardsUnifiedState>((set, get) => {
 
   let syncTimer: number | null = null;
   let pendingPublicRefresh = false;
-  let pendingAllAuthRefresh = false;
+  let pendingMyRefresh = false;
+  let pendingRecentRefresh = false;
+  let pendingGuestRefresh = false;
+  let pendingFriendsRefresh = false;
   let pendingMetaBoardIds = new Set<number>();
 
   const setList = (key: ListKey, boards: UnifiedBoard[]) => {
@@ -294,17 +298,23 @@ export const useBoardsUnifiedStore = create<BoardsUnifiedState>((set, get) => {
     const metaIds = Array.from(pendingMetaBoardIds);
     pendingMetaBoardIds = new Set<number>();
     const doPublic = pendingPublicRefresh;
-    const doAllAuth = pendingAllAuthRefresh;
     pendingPublicRefresh = false;
-    pendingAllAuthRefresh = false;
+
+    const doMy = pendingMyRefresh;
+    const doRecent = pendingRecentRefresh;
+    const doGuest = pendingGuestRefresh;
+    const doFriends = pendingFriendsRefresh;
+
+    pendingMyRefresh = false;
+    pendingRecentRefresh = false;
+    pendingGuestRefresh = false;
+    pendingFriendsRefresh = false;
 
     if (doPublic) void fetchList('public', true, true);
-    if (doAllAuth) {
-      void fetchList('my', true, true);
-      void fetchList('recent', true, true);
-      void fetchList('guest', true, true);
-      void fetchList('friends', true, true);
-    }
+    if (doMy) void fetchList('my', true, true);
+    if (doRecent) void fetchList('recent', true, true);
+    if (doGuest) void fetchList('guest', true, true);
+    if (doFriends) void fetchList('friends', true, true);
     for (const id of metaIds) {
       void refreshBoardMeta(id);
     }
@@ -313,6 +323,18 @@ export const useBoardsUnifiedStore = create<BoardsUnifiedState>((set, get) => {
   const scheduleSync = () => {
     if (syncTimer) return;
     syncTimer = window.setTimeout(flushSync, 200);
+  };
+
+  const getMyUserId = () => {
+    const fromStore = useAuthStore.getState().user?.id;
+    if (typeof fromStore === 'number' && Number.isFinite(fromStore) && fromStore > 0) return fromStore;
+    try {
+      const raw = localStorage.getItem('userId');
+      const n = Number(raw);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+      return null;
+    }
   };
 
   return {
@@ -404,38 +426,64 @@ export const useBoardsUnifiedStore = create<BoardsUnifiedState>((set, get) => {
     handleBoardsUpdated: (cmd) => {
       const reason = typeof cmd?.reason === 'string' ? cmd?.reason : '';
       const boardId = normalizeId(cmd?.board_id);
+      const subjectUserId = normalizeId(cmd?.user_id);
+      const myUserId = getMyUserId();
+      const affectsMe = subjectUserId && myUserId ? subjectUserId === myUserId : true;
+      const state = get();
 
       const membershipReasons = new Set(['join_public', 'invite_accepted', 'invite_link_accepted', 'left']);
 
       if (reason === 'removed' && boardId) {
+        if (!affectsMe) return;
         removeFromList('public', boardId);
         removeFromList('guest', boardId);
         removeFromList('friends', boardId);
-        pendingAllAuthRefresh = true;
-        pendingPublicRefresh = true;
-        scheduleSync();
+        removeFromList('recent', boardId);
+        pendingRecentRefresh = Boolean(state.hasLoadedOnceRecent);
+        pendingGuestRefresh = Boolean(state.hasLoadedOnceGuest);
+        pendingFriendsRefresh = Boolean(state.hasLoadedOnceFriends);
+        pendingPublicRefresh = Boolean(state.hasLoadedOncePublic);
+        if (pendingRecentRefresh || pendingGuestRefresh || pendingFriendsRefresh || pendingPublicRefresh) scheduleSync();
         return;
       }
 
       if (reason === 'public_changed') {
-        pendingPublicRefresh = true;
+        pendingPublicRefresh = Boolean(state.hasLoadedOncePublic);
         if (boardId) pendingMetaBoardIds.add(boardId);
-        scheduleSync();
+        if (pendingPublicRefresh || (boardId && pendingMetaBoardIds.size)) scheduleSync();
         return;
       }
 
       if (reason === 'meta_changed' || reason === 'title_changed' || reason === 'description_changed' || reason === 'image_changed') {
         if (boardId) pendingMetaBoardIds.add(boardId);
-        pendingPublicRefresh = true;
-        scheduleSync();
+        pendingPublicRefresh = Boolean(state.hasLoadedOncePublic);
+        if (pendingPublicRefresh || (boardId && pendingMetaBoardIds.size)) scheduleSync();
         return;
       }
 
       if (membershipReasons.has(reason)) {
-        pendingAllAuthRefresh = true;
-        pendingPublicRefresh = true;
+        if (!affectsMe) return;
+        if (reason === 'left' && boardId) {
+          removeFromList('guest', boardId);
+          removeFromList('friends', boardId);
+          removeFromList('recent', boardId);
+        }
+        pendingGuestRefresh = Boolean(state.hasLoadedOnceGuest);
+        pendingFriendsRefresh = Boolean(state.hasLoadedOnceFriends);
+        pendingRecentRefresh = Boolean(state.hasLoadedOnceRecent);
+        pendingPublicRefresh = Boolean(state.hasLoadedOncePublic);
         if (boardId) pendingMetaBoardIds.add(boardId);
-        scheduleSync();
+        if (reason === 'left') pendingPublicRefresh = false;
+        if (pendingGuestRefresh || pendingFriendsRefresh || pendingRecentRefresh || pendingPublicRefresh || (boardId && pendingMetaBoardIds.size)) scheduleSync();
+        return;
+      }
+
+      // Role changes affect only participants, not boards lists/meta.
+      if (reason === 'role') {
+        return;
+      }
+
+      if (reason === 'invite_cleared' || reason === 'invite_rejected') {
         return;
       }
 
@@ -445,9 +493,11 @@ export const useBoardsUnifiedStore = create<BoardsUnifiedState>((set, get) => {
         return;
       }
 
-      pendingAllAuthRefresh = true;
-      pendingPublicRefresh = true;
-      scheduleSync();
+      pendingGuestRefresh = Boolean(state.hasLoadedOnceGuest);
+      pendingFriendsRefresh = Boolean(state.hasLoadedOnceFriends);
+      pendingRecentRefresh = Boolean(state.hasLoadedOnceRecent);
+      pendingPublicRefresh = Boolean(state.hasLoadedOncePublic);
+      if (pendingGuestRefresh || pendingFriendsRefresh || pendingRecentRefresh || pendingPublicRefresh) scheduleSync();
     },
   };
 });

@@ -108,11 +108,6 @@ export const useBoardsInvitesStore = create<BoardsInvitesState>((set, get) => ({
           },
           'friends'
         );
-
-        void useBoardsUnifiedStore.getState().refreshGuestSilent();
-        void useBoardsUnifiedStore.getState().refreshFriendsSilent();
-        void useBoardsUnifiedStore.getState().refreshRecentSilent();
-        void useBoardsUnifiedStore.getState().refreshPublicSilent();
       }
     } catch (e) {
       console.error(e);

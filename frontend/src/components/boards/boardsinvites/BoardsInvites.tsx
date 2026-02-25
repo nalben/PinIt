@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 import AuthTrigger from '@/components/auth/AuthTrigger';
+import { Link } from 'react-router-dom';
 
 const BoardsInvites: React.FC = () => {
   const { isAuth, isInitialized } = useAuthStore();
@@ -93,20 +94,26 @@ const BoardsInvites: React.FC = () => {
               : null;
 
             const inviterName = invite.nickname || invite.username;
+            const profileHref = `/user/${encodeURIComponent(invite.username)}`;
 
             return (
               <div key={invite.id} className={classes.item}>
                 <div className={classes.avatar}>
+                  <Link to={profileHref} className={classes.avatarLink} aria-label={`Profile ${inviterName}`}>
                   {avatarSrc ? (
                     <img src={avatarSrc} alt="Аватар" />
                   ) : (
                     <Default />
                   )}
+                  </Link>
                 </div>
 
-                <div className={classes.text}>
+                <Link to={profileHref} className={classes.textLink} aria-label={`Profile ${inviterName}`}>
+                  <div className={classes.text}>
                   <span>{inviterName}</span> Приглашает в доску <span>{invite.title}</span>
                 </div>
+
+                </Link>
 
                 <div className={classes.actions}>
                   <Mainbtn
