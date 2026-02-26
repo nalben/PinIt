@@ -4,6 +4,15 @@ type HeaderDropdown = 'profile' | 'notifications' | null;
 export type FriendsModalView = 'list' | 'search';
 export type BoardSettingsModalView = 'settings' | 'participants';
 export type BoardSettingsParticipantsInnerView = 'friends' | 'guests';
+export type FlowCardShape = 'rectangle' | 'rhombus' | 'circle';
+
+export type FlowCardSettingsSnapshot = {
+  nodeId: string;
+  type: FlowCardShape;
+  title: string;
+  isLocked: boolean;
+  imageSrc: string | null;
+};
 
 interface UIState {
   headerDropdown: HeaderDropdown;
@@ -11,9 +20,13 @@ interface UIState {
   friendsModalOpen: boolean;
   friendsModalView: FriendsModalView;
   isBoardMenuOpen: boolean;
+  restoreBoardMenuAfterFlowCardSettings: boolean;
   boardSettingsModalOpen: boolean;
   boardSettingsModalView: BoardSettingsModalView;
   boardSettingsModalParticipantsInnerViewNext: BoardSettingsParticipantsInnerView | null;
+  flowCardSettingsOpen: boolean;
+  flowCardSettings: FlowCardSettingsSnapshot | null;
+  flowCardSettingsDraft: Omit<FlowCardSettingsSnapshot, 'nodeId'> | null;
 
   // dropdown actions
   openHeaderDropdown: (dropdown: HeaderDropdown) => void;
@@ -33,6 +46,11 @@ interface UIState {
   closeBoardSettingsModal: () => void;
   setBoardSettingsModalView: (view: BoardSettingsModalView) => void;
   setBoardSettingsModalParticipantsInnerViewNext: (view: BoardSettingsParticipantsInnerView | null) => void;
+
+  openFlowCardSettings: (snapshot: FlowCardSettingsSnapshot) => void;
+  closeFlowCardSettings: () => void;
+  setFlowCardSettingsDraft: (next: Partial<Omit<FlowCardSettingsSnapshot, 'nodeId'>>) => void;
+  commitFlowCardSettingsDraft: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -41,9 +59,13 @@ export const useUIStore = create<UIState>((set) => ({
   friendsModalOpen: false,
   friendsModalView: 'list',
   isBoardMenuOpen: true,
+  restoreBoardMenuAfterFlowCardSettings: false,
   boardSettingsModalOpen: false,
   boardSettingsModalView: 'settings',
   boardSettingsModalParticipantsInnerViewNext: null,
+  flowCardSettingsOpen: false,
+  flowCardSettings: null,
+  flowCardSettingsDraft: null,
 
   openHeaderDropdown: (dropdown) => set({ headerDropdown: dropdown }),
   closeHeaderDropdown: () => set({ headerDropdown: null }),
@@ -71,4 +93,35 @@ export const useUIStore = create<UIState>((set) => ({
   closeBoardSettingsModal: () => set({ boardSettingsModalOpen: false, boardSettingsModalView: 'settings' }),
   setBoardSettingsModalView: (view) => set({ boardSettingsModalView: view }),
   setBoardSettingsModalParticipantsInnerViewNext: (view) => set({ boardSettingsModalParticipantsInnerViewNext: view }),
+
+  openFlowCardSettings: (snapshot) =>
+    set((s) => ({
+      flowCardSettingsOpen: true,
+      flowCardSettings: snapshot,
+      flowCardSettingsDraft: {
+        type: snapshot.type,
+        title: snapshot.title,
+        isLocked: snapshot.isLocked,
+        imageSrc: snapshot.imageSrc,
+      },
+      restoreBoardMenuAfterFlowCardSettings: s.flowCardSettingsOpen ? s.restoreBoardMenuAfterFlowCardSettings : s.isBoardMenuOpen,
+      isBoardMenuOpen: false,
+    })),
+  closeFlowCardSettings: () =>
+    set((s) => ({
+      flowCardSettingsOpen: false,
+      flowCardSettings: null,
+      flowCardSettingsDraft: null,
+      isBoardMenuOpen: s.restoreBoardMenuAfterFlowCardSettings ? true : s.isBoardMenuOpen,
+      restoreBoardMenuAfterFlowCardSettings: false,
+    })),
+  setFlowCardSettingsDraft: (next) =>
+    set((s) => (s.flowCardSettingsDraft ? { flowCardSettingsDraft: { ...s.flowCardSettingsDraft, ...next } } : {})),
+  commitFlowCardSettingsDraft: () =>
+    set((s) => {
+      if (!s.flowCardSettings || !s.flowCardSettingsDraft) return {};
+      return {
+        flowCardSettings: { ...s.flowCardSettings, ...s.flowCardSettingsDraft },
+      };
+    }),
 }));

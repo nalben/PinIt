@@ -883,7 +883,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
 
                     {participantsInnerView === 'friends' ? (
                       <>
-                        {friendsLoading || outgoingInvitesLoading || participantsLoading ? <p className={classes.hint} /> : null}
+                        
                         {!friendsLoading && friends.length === 0 ? <p className={classes.hint}>Список друзей пуст</p> : null}
                         {!friendsLoading && friends.length === 0 ? (
                           <Mainbtn

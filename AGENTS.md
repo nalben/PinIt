@@ -930,9 +930,7 @@ board_id
 
 type enum('circle','rectangle')
 
-title
-
-text
+title (varchar 70)
 
 image_path
 
@@ -940,33 +938,34 @@ x
 
 y
 
-linked_card_ids (longtext)
-
 created_at
 
 Key characteristics:
 
 x, y are floating-point canvas coordinates.
 
-linked_card_ids stores serialized relationship data (non-normalized).
-
 Belongs to exactly one board.
 
 carddetails
 
-Extended content.
+One-to-one details panel for a card (card_id is the primary key).
+The panel content is normalized into ordered blocks.
 
-Columns:
+carddetail_blocks
 
-id
+Ordered blocks for a card details panel.
+Each block has `block_type` (text/image/facts/checklist) and `sort_order`.
+Block payload is stored in type-specific tables:
 
-card_id
+- carddetail_text_blocks
+- carddetail_image_blocks
+- carddetail_fact_items
+- carddetail_checklist_items
 
-content_type enum('text','list')
+cardlinks
 
-content
-
-One-to-many possible, depending on implementation.
+Directed links between cards on a board (replaces the old `linked_card_ids` column).
+Supports `style` (line/arrow) and `color` for rendering.
 
 cardcomments
 
@@ -1035,12 +1034,29 @@ boards
 
 cards
 ├─ carddetails
+├─ carddetail_blocks
+├─ cardlinks
 ├─ cardcomments
 └─ activitylog
 
 SECTION 11 - VERIFIED CURRENT CODE FACTS (2026-02-24)
 
 These points are confirmed from current repository code and override any older conflicting notes.
+
+Update (2026-02-26)
+
+- Legacy `/api/cards` route was removed from `api/routes/index.js` and the old implementation files were deleted.
+- DB migration script added for normalized cards schema: `api/sql/2026-02-26-cards-normalized-details.sql` (creates `cards`, `carddetails`, `carddetail_*` block tables, `cardcomments`, `cardlinks`).
+- The cards migration script drops any existing `activitylog -> cards` FK (if present) before dropping `cards`, then restores it as `ON DELETE SET NULL` (preserve activity history when a card is deleted).
+- Cards type enum includes `diamond` (in addition to `circle`/`rectangle`).
+- Cards table includes `is_locked` boolean (TINYINT(1)) to disable dragging in UI.
+- New cards endpoints:
+  - `POST /api/boards/:board_id/cards` (owner/`editer` only) — create a card row + `carddetails` row.
+  - `GET /api/boards/:board_id/cards` — list board cards for authorized users (owner/guest/`editer`).
+  - `GET /api/boards/public/:board_id/cards` — list board cards for public boards (auth optional, blocked users filtered).
+  - `PATCH /api/boards/:board_id/cards/:card_id/lock` — toggle `cards.is_locked` (owner/`editer` only).
+  - `PATCH /api/boards/:board_id/cards/:card_id/image` — upload/remove `cards.image_path` (multipart `image`, max 5MB; owner/`editer` only).
+  - `PATCH /api/boards/:board_id/cards/:card_id/type` — update `cards.type` (owner/`editer` only).
 
 1. Frontend routing and app entry
 

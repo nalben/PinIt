@@ -46,6 +46,7 @@ const maybeUploadSingleImage = (req, res, next) => {
 // Public routes (optional auth for per-user filtering)
 router.get('/public/popular', optionalAuth, boardsController.getPopularPublicBoards);
 router.get('/public/:board_id', optionalAuth, boardsController.getPublicBoardById);
+router.get('/public/:board_id/cards', optionalAuth, boardsController.getPublicBoardCards);
 router.get('/invite-link/resolve', boardsController.resolveBoardInviteLink);
 router.get('/invite-link/preview', boardsController.previewBoardInviteLink);
 
@@ -77,6 +78,12 @@ router.patch('/:board_id/title', boardsController.renameBoard);
 router.patch('/:board_id/description', boardsController.updateDescription);
 router.patch('/:board_id/public', boardsController.updateBoardPublic);
 router.patch('/:board_id/image', maybeUploadSingleImage, boardsController.updateBoardImage);
+router.post('/:board_id/cards', boardsController.createCard);
+router.get('/:board_id/cards', boardsController.getBoardCards);
+router.patch('/:board_id/cards/:card_id/lock', boardsController.updateCardLock);
+router.patch('/:board_id/cards/:card_id/image', maybeUploadSingleImage, boardsController.updateCardImage);
+router.patch('/:board_id/cards/:card_id/type', boardsController.updateCardType);
+router.patch('/:board_id/cards/:card_id/title', boardsController.updateCardTitle);
 router.get('/:board_id/participants', boardsController.getBoardParticipants);
 router.get('/:board_id/full', boardsController.getBoardFull);
 router.get('/:board_id', boardsController.getBoardById);

@@ -1906,3 +1906,433 @@ exports.previewBoardInviteLink = async (req, res) => {
     return res.status(500).json({ message: 'Server error' });
   }
 };
+
+
+exports.createCard = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const rawType = String(req.body?.type || '').trim();
+    const rawTitle = String(req.body?.title || '').trim();
+    const x = Number(req.body?.x);
+    const y = Number(req.body?.y);
+
+    const allowedTypes = new Set(['rectangle', 'circle', 'diamond']);
+    if (!allowedTypes.has(rawType)) {
+      return res.status(400).json({ message: 'Некорректный тип' });
+    }
+
+    if (!rawTitle || rawTitle.length > 70) {
+      return res.status(400).json({ message: 'Некорректный заголовок' });
+    }
+
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return res.status(400).json({ message: 'Некорректные координаты' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const [result] = await connection.execute(
+        `INSERT INTO cards (board_id, type, title, x, y)
+         VALUES (?, ?, ?, ?, ?)`,
+        [boardId, rawType, rawTitle, x, y]
+      );
+
+      const id = Number(result?.insertId);
+      if (!Number.isFinite(id) || id <= 0) {
+        throw new Error('Failed to create card');
+      }
+
+      await connection.execute(`INSERT INTO carddetails (card_id) VALUES (?)`, [id]);
+
+      await connection.commit();
+
+      return res.status(201).json({
+        id,
+        board_id: boardId,
+        type: rawType,
+        title: rawTitle,
+        x,
+        y,
+      });
+    } catch (e) {
+      try {
+        await connection.rollback();
+      } catch {
+        // ignore
+      }
+      throw e;
+    } finally {
+      connection.release();
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка создания записи' });
+  }
+};
+
+
+exports.getBoardCards = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [accessRows] = await db.execute(
+      `SELECT 1
+       FROM boards b
+       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role IN ('guest','editer')
+       WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
+       LIMIT 1`,
+      [user_id, boardId, user_id]
+    );
+
+    if (!accessRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, type, title, image_path, is_locked, x, y, created_at
+       FROM cards
+       WHERE board_id = ?
+       ORDER BY created_at ASC, id ASC`,
+      [boardId]
+    );
+
+    return res.status(200).json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка получения записей' });
+  }
+};
+
+
+exports.getPublicBoardCards = async (req, res) => {
+  try {
+    const boardId = Number(req.params?.board_id);
+    if (!Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const userId = req.user?.id ? Number(req.user.id) : null;
+
+    if (Number.isFinite(userId) && userId && userId > 0) {
+      const [boardRows] = await db.execute(
+        `SELECT 1
+         FROM boards b
+         LEFT JOIN boardguests bg_block ON bg_block.board_id = b.id AND bg_block.user_id = ? AND bg_block.role = 'blocked'
+         WHERE b.id = ? AND b.is_public = 1 AND bg_block.user_id IS NULL
+         LIMIT 1`,
+        [userId, boardId]
+      );
+      if (!boardRows.length) {
+        return res.status(404).json({ message: 'Доска не найдена' });
+      }
+    } else {
+      const [boardRows] = await db.execute(
+        `SELECT 1
+         FROM boards
+         WHERE id = ? AND is_public = 1
+         LIMIT 1`,
+        [boardId]
+      );
+      if (!boardRows.length) {
+        return res.status(404).json({ message: 'Доска не найдена' });
+      }
+    }
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, type, title, image_path, is_locked, x, y, created_at
+       FROM cards
+       WHERE board_id = ?
+       ORDER BY created_at ASC, id ASC`,
+      [boardId]
+    );
+
+    return res.status(200).json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка получения записей' });
+  }
+};
+
+
+exports.updateCardLock = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const is_locked = Boolean(req.body?.is_locked);
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
+    if (!cardRows.length) {
+      return res.status(404).json({ message: 'Запись не найдена' });
+    }
+
+    await db.execute(`UPDATE cards SET is_locked = ? WHERE id = ? AND board_id = ?`, [is_locked ? 1 : 0, cardId, boardId]);
+    return res.status(200).json({ id: cardId, board_id: boardId, is_locked: is_locked ? 1 : 0 });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления' });
+  }
+};
+
+
+exports.updateCardImage = async (req, res) => {
+  let newImage = null;
+
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    if (req.file) {
+      newImage = `/uploads/${req.file.filename}`;
+    } else if (req.body?.image === null) {
+      newImage = null;
+    } else {
+      return res.status(400).json({ message: 'Картинка обязательна' });
+    }
+
+    if (newImage && newImage.length > 255) {
+      if (req.file) await safeUnlinkUpload(newImage);
+      return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      if (req.file) await safeUnlinkUpload(newImage);
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      if (req.file) await safeUnlinkUpload(newImage);
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [cardRows] = await db.execute(
+      `SELECT image_path FROM cards WHERE id = ? AND board_id = ? LIMIT 1`,
+      [cardId, boardId]
+    );
+
+    if (!cardRows.length) {
+      if (req.file) await safeUnlinkUpload(newImage);
+      return res.status(404).json({ message: 'Запись не найдена' });
+    }
+
+    const oldImage = cardRows[0]?.image_path ?? null;
+
+    await db.execute(`UPDATE cards SET image_path = ? WHERE id = ? AND board_id = ?`, [newImage, cardId, boardId]);
+
+    const oldRel = getUploadsRelativePath(oldImage);
+    const newRel = getUploadsRelativePath(newImage);
+    if (oldRel && oldRel !== newRel) {
+      await safeUnlinkUpload(oldImage);
+    }
+
+    return res.status(200).json({ id: cardId, board_id: boardId, image_path: newImage });
+  } catch (e) {
+    if (req.file && newImage) {
+      await safeUnlinkUpload(newImage);
+    }
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления картинки' });
+  }
+};
+
+
+exports.updateCardType = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const rawType = String(req.body?.type || '').trim();
+    const allowedTypes = new Set(['rectangle', 'circle', 'diamond']);
+    if (!allowedTypes.has(rawType)) {
+      return res.status(400).json({ message: 'Некорректный тип' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
+    if (!cardRows.length) {
+      return res.status(404).json({ message: 'Запись не найдена' });
+    }
+
+    await db.execute(`UPDATE cards SET type = ? WHERE id = ? AND board_id = ?`, [rawType, cardId, boardId]);
+    return res.status(200).json({ id: cardId, board_id: boardId, type: rawType });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления' });
+  }
+};
+
+
+exports.updateCardTitle = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const rawTitle = String(req.body?.title || '').trim();
+    if (!rawTitle || rawTitle.length > 70) {
+      return res.status(400).json({ message: 'Некорректный заголовок' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
+    if (!cardRows.length) {
+      return res.status(404).json({ message: 'Запись не найдена' });
+    }
+
+    await db.execute(`UPDATE cards SET title = ? WHERE id = ? AND board_id = ?`, [rawTitle, cardId, boardId]);
+    return res.status(200).json({ id: cardId, board_id: boardId, title: rawTitle });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления' });
+  }
+};

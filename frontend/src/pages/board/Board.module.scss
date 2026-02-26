@@ -8,6 +8,7 @@
 .board_menu_con{
     position: relative;
     height: 100%;
+    background-color: var(--grey20);
     width: min(450px, 80%);
     border-left: var(--border);
     margin-left: 0;
@@ -30,7 +31,8 @@
     height: 54px;
     border: var(--border);
     border-right: none;
-    border-radius: 12px 0 0 12px;
+    border-radius: 10px 0 0 10px;
+    corner-shape: bevel;
     display: flex;
     align-items: center;
     justify-content: center;
