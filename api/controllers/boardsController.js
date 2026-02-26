@@ -3,14 +3,45 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const isUploadPath = p => typeof p === 'string' && p.startsWith('/uploads/');
+const getUploadsRelativePath = rawPath => {
+  if (typeof rawPath !== 'string') return null;
+
+  const raw = rawPath.trim();
+  if (!raw) return null;
+
+  let pathname = raw.replace(/\\/g, '/');
+
+  if (pathname.startsWith('http://') || pathname.startsWith('https://')) {
+    try {
+      pathname = new URL(pathname).pathname;
+    } catch {
+      return null;
+    }
+  } else {
+    pathname = pathname.split('?')[0].split('#')[0];
+  }
+
+  if (pathname.startsWith('uploads/')) pathname = `/${pathname}`;
+  if (!pathname.startsWith('/uploads/')) return null;
+
+  const rel = pathname.slice('/uploads/'.length);
+  const normalized = path.posix.normalize(rel);
+  if (!normalized || normalized === '.' || normalized.startsWith('..')) return null;
+
+  return normalized.replace(/^\//, '');
+};
 
 const safeUnlinkUpload = async uploadPath => {
-  if (!isUploadPath(uploadPath)) return;
+  const rel = getUploadsRelativePath(uploadPath);
+  if (!rel) return;
 
   const uploadsDir = path.join(__dirname, '..', 'uploads');
-  const filename = path.basename(uploadPath);
-  const absolutePath = path.join(uploadsDir, filename);
+  const uploadsDirResolved = path.resolve(uploadsDir);
+  const absolutePath = path.resolve(uploadsDir, rel);
+
+  const uploadsPrefix = uploadsDirResolved.toLowerCase() + path.sep;
+  const absLower = absolutePath.toLowerCase();
+  if (absLower !== uploadsDirResolved.toLowerCase() && !absLower.startsWith(uploadsPrefix)) return;
 
   try {
     await fs.promises.unlink(absolutePath);
@@ -683,8 +714,10 @@ exports.updateBoardImage = async (req, res) => {
       [newImage, board_id, user_id]
     );
 
-    if (oldImage && oldImage !== newImage) {
-      safeUnlinkUpload(oldImage);
+    const oldRel = getUploadsRelativePath(oldImage);
+    const newRel = getUploadsRelativePath(newImage);
+    if (oldRel && oldRel !== newRel) {
+      await safeUnlinkUpload(oldImage);
     }
 
     try {
