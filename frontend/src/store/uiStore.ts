@@ -27,6 +27,7 @@ interface UIState {
   flowCardSettingsOpen: boolean;
   flowCardSettings: FlowCardSettingsSnapshot | null;
   flowCardSettingsDraft: Omit<FlowCardSettingsSnapshot, 'nodeId'> | null;
+  topAlarm: { message: string; open: boolean } | null;
 
   // dropdown actions
   openHeaderDropdown: (dropdown: HeaderDropdown) => void;
@@ -51,9 +52,22 @@ interface UIState {
   closeFlowCardSettings: () => void;
   setFlowCardSettingsDraft: (next: Partial<Omit<FlowCardSettingsSnapshot, 'nodeId'>>) => void;
   commitFlowCardSettingsDraft: () => void;
+
+  showTopAlarm: (message: string) => void;
 }
 
-export const useUIStore = create<UIState>((set) => ({
+export const useUIStore = create<UIState>((set) => {
+  let topAlarmHideTimeout: number | null = null;
+  let topAlarmUnmountTimeout: number | null = null;
+
+  const clearTopAlarmTimers = () => {
+    if (topAlarmHideTimeout) window.clearTimeout(topAlarmHideTimeout);
+    if (topAlarmUnmountTimeout) window.clearTimeout(topAlarmUnmountTimeout);
+    topAlarmHideTimeout = null;
+    topAlarmUnmountTimeout = null;
+  };
+
+  return ({
   headerDropdown: null,
   authModalOpen: false,
   friendsModalOpen: false,
@@ -66,6 +80,7 @@ export const useUIStore = create<UIState>((set) => ({
   flowCardSettingsOpen: false,
   flowCardSettings: null,
   flowCardSettingsDraft: null,
+  topAlarm: null,
 
   openHeaderDropdown: (dropdown) => set({ headerDropdown: dropdown }),
   closeHeaderDropdown: () => set({ headerDropdown: null }),
@@ -124,4 +139,19 @@ export const useUIStore = create<UIState>((set) => ({
         flowCardSettings: { ...s.flowCardSettings, ...s.flowCardSettingsDraft },
       };
     }),
-}));
+
+  showTopAlarm: (message) => {
+    clearTopAlarmTimers();
+    set({ topAlarm: { message, open: true } });
+
+    topAlarmHideTimeout = window.setTimeout(() => {
+      set((s) => (s.topAlarm ? { topAlarm: { ...s.topAlarm, open: false } } : {}));
+      topAlarmHideTimeout = null;
+      topAlarmUnmountTimeout = window.setTimeout(() => {
+        set({ topAlarm: null });
+        topAlarmUnmountTimeout = null;
+      }, 220);
+    }, 2200);
+  },
+  });
+});

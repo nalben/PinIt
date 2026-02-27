@@ -1,0 +1,26 @@
+.top_alarm{
+    position: fixed;
+    z-index: 1200;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-12px);
+    opacity: 0;
+    pointer-events: none;
+    background: var(--grey20);
+    border: var(--border);
+    border-color: var(--pink);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    padding: 10px 14px;
+    color: var(--cyan);
+    font-size: 16px;
+    backdrop-filter: blur(12px);
+    transition: transform 180ms ease, opacity 180ms ease;
+    text-wrap: balance;
+    text-align: center;
+}
+
+.top_alarm_open{
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+}
+

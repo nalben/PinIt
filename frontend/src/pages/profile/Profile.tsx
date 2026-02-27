@@ -65,7 +65,7 @@ const Profile = () => {
   const [openModal, setOpenModal] = useState<OpenModal>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const { user, isAuth, isInitialized } = useAuthStore();
-  const { openHeaderDropdown, openFriendsModal } = useUIStore();
+  const { openHeaderDropdown, openFriendsModal, showTopAlarm } = useUIStore();
   const { setHighlightRequestId } = useNotificationsStore();
 
   const safeCopyToClipboard = (text: string) => {
@@ -513,13 +513,13 @@ const handleFriendAction = async (userId: number) => {
                           if (!file) return;
 
                           if (!file.type.startsWith('image/')) {
-                            alert('Можно загружать только изображения');
+                            showTopAlarm('Можно загружать только изображения');
                             e.target.value = '';
                             return;
                           }
 
                           if (file.size > MAX_AVATAR_SIZE_BYTES) {
-                            alert(`Максимальный размер аватара: ${MAX_AVATAR_SIZE_MB}MB`);
+                            showTopAlarm(`Вес слишком большой — выберите изображение весом до ${MAX_AVATAR_SIZE_MB} МБ.`);
                             e.target.value = '';
                             setAvatarFile(null);
                             setAvatarPreview(null);
@@ -605,7 +605,6 @@ const handleFriendAction = async (userId: number) => {
 };
 
 export default Profile;
-
 
 
 

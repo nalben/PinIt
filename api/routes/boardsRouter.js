@@ -84,6 +84,8 @@ router.patch('/:board_id/cards/:card_id/lock', boardsController.updateCardLock);
 router.patch('/:board_id/cards/:card_id/image', maybeUploadSingleImage, boardsController.updateCardImage);
 router.patch('/:board_id/cards/:card_id/type', boardsController.updateCardType);
 router.patch('/:board_id/cards/:card_id/title', boardsController.updateCardTitle);
+router.patch('/:board_id/cards/:card_id/position', boardsController.updateCardPosition);
+router.delete('/:board_id/cards/:card_id', boardsController.deleteCard);
 router.get('/:board_id/participants', boardsController.getBoardParticipants);
 router.get('/:board_id/full', boardsController.getBoardFull);
 router.get('/:board_id', boardsController.getBoardById);

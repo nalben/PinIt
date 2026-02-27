@@ -4,6 +4,8 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Edge,
+  MiniMap,
+  MiniMapNodeProps,
   Node as RFNode,
   NodeProps,
   applyNodeChanges,
@@ -14,8 +16,11 @@ import 'reactflow/dist/style.css';
 import classes from './FlowBoard.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
+import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import LockClose from '@/assets/icons/monochrome/lock_close.svg';
 import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
+import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
+import boardClasses from '@/pages/board/Board.module.scss';
 import { FlowCardShape, useUIStore } from '@/store/uiStore';
 
 type FlowNodeType = FlowCardShape;
@@ -32,6 +37,40 @@ type ApiCard = {
   x: number;
   y: number;
   created_at: string;
+};
+
+const MAX_CARD_IMAGE_SIZE_MB = 5;
+const MAX_CARD_IMAGE_SIZE_BYTES = MAX_CARD_IMAGE_SIZE_MB * 1024 * 1024;
+
+const MiniMapNode: React.FC<MiniMapNodeProps> = (props) => {
+  const { id, x, y, width, height, className, color, strokeColor, strokeWidth, shapeRendering, style, onClick } = props;
+
+  const commonProps = {
+    className,
+    style,
+    fill: color,
+    stroke: strokeColor,
+    strokeWidth,
+    shapeRendering,
+    onClick: onClick ? (e: React.MouseEvent<SVGElement>) => onClick(e, id) : undefined,
+  };
+
+  if (className.includes('minimap_circle')) {
+    const r = Math.min(width, height) / 2;
+    return <circle {...commonProps} cx={x + width / 2} cy={y + height / 2} r={r} />;
+  }
+
+  if (className.includes('minimap_rhombus')) {
+    const points = [
+      `${x + width / 2},${y}`,
+      `${x + width},${y + height / 2}`,
+      `${x + width / 2},${y + height}`,
+      `${x},${y + height / 2}`,
+    ].join(' ');
+    return <polygon {...commonProps} points={points} />;
+  }
+
+  return <rect {...commonProps} x={x} y={y} width={width} height={height} rx={props.borderRadius} ry={props.borderRadius} />;
 };
 
 const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {
@@ -112,10 +151,14 @@ const FlowBoard: React.FC = () => {
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const createPanelRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const longPressTimeoutRef = useRef<number | null>(null);
+  const longPressStartRef = useRef<{ pointerId: number; clientX: number; clientY: number } | null>(null);
+  const suppressClickRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<{
     isOpen: boolean;
-    x: number;
-    y: number;
+    x: number; // viewport (fixed) coordinates
+    y: number; // viewport (fixed) coordinates
     anchorX: number;
     anchorY: number;
   }>({
@@ -166,6 +209,24 @@ const FlowBoard: React.FC = () => {
     };
   }, [flowCardSettingsDraft, isEditing, visualEditing]);
 
+  useEffect(() => {
+    if (!isEditing) return;
+    if (!activeNodeId) return;
+    if (!String(activeNodeId).startsWith('draft-')) return;
+
+    const raf = requestAnimationFrame(() => {
+      const input = titleInputRef.current;
+      if (!input || input.disabled) return;
+      input.focus();
+      try {
+        input.select();
+      } catch {
+        // ignore
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeNodeId, isEditing]);
+
   const visualDraft = isEditing ? flowCardSettingsDraft : visualDraftRef.current;
   const displayType: FlowNodeType = visualDraft?.type ?? 'rectangle';
   const displayTitle = visualDraft?.title ?? '';
@@ -176,6 +237,8 @@ const FlowBoard: React.FC = () => {
   const pendingObjectUrlRef = useRef<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const showTopAlarm = useUIStore((s) => s.showTopAlarm);
 
   const onNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
     setNodes((prev) => applyNodeChanges(changes, prev));
@@ -195,6 +258,33 @@ const FlowBoard: React.FC = () => {
   const closeContextMenu = useCallback(() => {
     setContextMenu(prev => (prev.isOpen ? { ...prev, isOpen: false } : prev));
   }, []);
+
+  const handleMiniMapClick = useCallback(
+    (event: React.MouseEvent, position: { x: number; y: number }) => {
+      if (!reactFlow) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const viewport = reactFlow.getViewport();
+      reactFlow.setCenter(position.x, position.y, { zoom: viewport.zoom, duration: 200 });
+    },
+    [reactFlow]
+  );
+
+  const persistCardPosition = useCallback(
+    async (cardId: string, x: number, y: number) => {
+      if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+      if (!cardId || String(cardId).startsWith('draft-')) return;
+      const hasToken = Boolean(localStorage.getItem('token'));
+      if (!hasToken) return;
+
+      try {
+        await axiosInstance.patch(`/api/boards/${numericBoardId}/cards/${cardId}/position`, { x, y });
+      } catch (e) {
+        // ignore (no access / offline)
+      }
+    },
+    [numericBoardId]
+  );
 
   useEffect(() => {
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
@@ -311,40 +401,142 @@ const FlowBoard: React.FC = () => {
     return () => window.removeEventListener('contextmenu', onContextMenuCapture, true);
   }, [closeContextMenu, contextMenu.isOpen]);
 
+  const getContainerScale = useCallback(() => {
+    const containerEl = containerRef.current;
+    if (!containerEl) return { scaleX: 1, scaleY: 1, rect: null as DOMRect | null };
+    const rect = containerEl.getBoundingClientRect();
+    const scaleX = containerEl.offsetWidth ? rect.width / containerEl.offsetWidth : 1;
+    const scaleY = containerEl.offsetHeight ? rect.height / containerEl.offsetHeight : 1;
+    return { scaleX: Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1, scaleY: Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1, rect };
+  }, []);
+
+  const clampToViewport = useCallback((x: number, y: number, menuWidth: number, menuHeight: number) => {
+    const margin = 16;
+    const viewportWidth = window.innerWidth || 0;
+    const viewportHeight = window.innerHeight || 0;
+
+    let nextX = x;
+    let nextY = y;
+
+    const maxX = viewportWidth - menuWidth - margin;
+    const maxY = viewportHeight - menuHeight - margin;
+
+    if (nextX > maxX) nextX = maxX;
+    if (nextY > maxY) nextY = maxY;
+    if (nextX < margin) nextX = margin;
+    if (nextY < margin) nextY = margin;
+
+    return { x: nextX, y: nextY };
+  }, []);
+
   useLayoutEffect(() => {
     if (!contextMenu.isOpen) return;
     const el = contextMenuRef.current;
     if (!el) return;
-    const containerEl = containerRef.current;
-    if (!containerEl) return;
-
-    const margin = 16;
-    let x = contextMenu.x;
-    let y = contextMenu.y;
 
     const menuWidth = el.offsetWidth;
     const menuHeight = el.offsetHeight;
-    const containerRect = containerEl.getBoundingClientRect();
+    if (!menuWidth || !menuHeight) return;
 
-    const maxX = containerRect.width - menuWidth - margin;
-    const maxY = containerRect.height - menuHeight - margin;
+    setContextMenu((prev) => {
+      if (!prev.isOpen) return prev;
+      const { x, y } = clampToViewport(prev.x, prev.y, menuWidth, menuHeight);
+      if (x === prev.x && y === prev.y) return prev;
+      return { ...prev, x, y };
+    });
+  }, [clampToViewport, contextMenu.isOpen]);
 
-    if (x > maxX) x = maxX;
-    if (y > maxY) y = maxY;
-    if (x < margin) x = margin;
-    if (y < margin) y = margin;
+  useEffect(() => {
+    if (!contextMenu.isOpen) return;
+    const el = contextMenuRef.current;
+    if (!el) return;
+    if (typeof ResizeObserver === 'undefined') return;
 
-    if (x !== contextMenu.x || y !== contextMenu.y) setContextMenu(prev => ({ ...prev, x, y }));
-  }, [contextMenu.isOpen, contextMenu.x, contextMenu.y]);
+    const ro = new ResizeObserver(() => {
+      const menuWidth = el.offsetWidth;
+      const menuHeight = el.offsetHeight;
+      if (!menuWidth || !menuHeight) return;
+
+      setContextMenu((prev) => {
+        if (!prev.isOpen) return prev;
+        const { x, y } = clampToViewport(prev.x, prev.y, menuWidth, menuHeight);
+        if (x === prev.x && y === prev.y) return prev;
+        return { ...prev, x, y };
+      });
+    });
+
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [clampToViewport, contextMenu.isOpen]);
+
+  const openContextMenuAt = useCallback((clientX: number, clientY: number) => {
+    const { scaleX, scaleY, rect } = getContainerScale();
+    const anchorX = rect ? (clientX - rect.left) / scaleX : clientX;
+    const anchorY = rect ? (clientY - rect.top) / scaleY : clientY;
+    setContextMenu({ isOpen: true, x: clientX, y: clientY, anchorX, anchorY });
+  }, [getContainerScale]);
 
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    const containerRect = containerRef.current?.getBoundingClientRect();
-    const x = containerRect ? e.clientX - containerRect.left : e.clientX;
-    const y = containerRect ? e.clientY - containerRect.top : e.clientY;
-    setContextMenu({ isOpen: true, x, y, anchorX: x, anchorY: y });
+    openContextMenuAt(e.clientX, e.clientY);
   };
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimeoutRef.current) {
+      window.clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+    longPressStartRef.current = null;
+  }, []);
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'touch') return;
+    if (!e.isPrimary) return;
+
+    const target = e.target as globalThis.Node | null;
+    const panelEl = createPanelRef.current;
+    const menuEl = contextMenuRef.current;
+    if (panelEl && target && panelEl.contains(target)) return;
+    if (menuEl && target && menuEl.contains(target)) return;
+
+    cancelLongPress();
+
+    longPressStartRef.current = { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY };
+    longPressTimeoutRef.current = window.setTimeout(() => {
+      const start = longPressStartRef.current;
+      if (!start) return;
+      longPressTimeoutRef.current = null;
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 1000);
+      openContextMenuAt(start.clientX, start.clientY);
+    }, 450);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const start = longPressStartRef.current;
+    if (!start) return;
+    if (e.pointerId !== start.pointerId) return;
+    if (Math.hypot(e.clientX - start.clientX, e.clientY - start.clientY) > 10) cancelLongPress();
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const start = longPressStartRef.current;
+    if (!start) return;
+    if (e.pointerId !== start.pointerId) return;
+    cancelLongPress();
+  };
+
+  const handleClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!suppressClickRef.current) return;
+    suppressClickRef.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  useEffect(() => cancelLongPress, [cancelLongPress]);
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!contextMenu.isOpen) return;
@@ -537,8 +729,9 @@ const FlowBoard: React.FC = () => {
 
   const setDraftTitleLive = (title: string) => {
     if (!activeNodeId) return;
-    setFlowCardSettingsDraft({ title });
-    applyPreviewToNode(activeNodeId, { title });
+    const next = String(title ?? '').slice(0, 50);
+    setFlowCardSettingsDraft({ title: next });
+    applyPreviewToNode(activeNodeId, { title: next });
   };
 
   const setDraftTypeLive = (type: FlowNodeType) => {
@@ -557,7 +750,10 @@ const FlowBoard: React.FC = () => {
   const handleImageSelected = (file: File | null) => {
     if (!activeNodeId) return;
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) return;
+    if (file.size > MAX_CARD_IMAGE_SIZE_BYTES) {
+      showTopAlarm(`Вес слишком большой — выберите изображение весом до ${MAX_CARD_IMAGE_SIZE_MB} МБ.`);
+      return;
+    }
 
     clearPendingImage();
     const preview = URL.createObjectURL(file);
@@ -572,6 +768,30 @@ const FlowBoard: React.FC = () => {
     clearPendingImage();
     setFlowCardSettingsDraft({ imageSrc: null });
     applyPreviewToNode(activeNodeId, { imageSrc: null });
+  };
+
+  const deleteActive = async () => {
+    if (!flowCardSettings || !Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+    const nodeId = flowCardSettings.nodeId;
+    const isDraft = String(nodeId).startsWith('draft-');
+
+    if (isDraft) {
+      setDeleteConfirmOpen(false);
+      cancelCardSettings();
+      return;
+    }
+
+    const hasToken = Boolean(localStorage.getItem('token'));
+    if (!hasToken) return;
+
+    try {
+      await axiosInstance.delete(`/api/boards/${numericBoardId}/cards/${nodeId}`);
+      setNodes((prev) => prev.filter((n) => String(n.id) !== String(nodeId)));
+      setDeleteConfirmOpen(false);
+      closeFlowCardSettings();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const saveActive = async () => {
@@ -658,12 +878,50 @@ const FlowBoard: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (!isEditing) return;
+    const panelEl = createPanelRef.current;
+    if (!panelEl) return;
+
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (deleteConfirmOpen) setDeleteConfirmOpen(false);
+        else cancelCardSettings();
+        return;
+      }
+
+      if (e.key !== 'Enter') return;
+      if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+      if ((e as unknown as { isComposing?: boolean }).isComposing) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!displayTitle.trim()) {
+        titleInputRef.current?.focus();
+        return;
+      }
+
+      void saveActive();
+    };
+
+    window.addEventListener('keydown', onKeyDownCapture, true);
+    return () => window.removeEventListener('keydown', onKeyDownCapture, true);
+  }, [cancelCardSettings, deleteConfirmOpen, displayTitle, isEditing, saveActive]);
+
   return (
     <div
       ref={containerRef}
       className={classes.space_container}
       onContextMenu={handleContextMenu}
       onMouseDown={handleMouseDown}
+      onClickCapture={handleClickCapture}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={cancelLongPress}
       onWheelCapture={() => closeContextMenu()}
     >
       <ReactFlowProvider>
@@ -677,6 +935,13 @@ const FlowBoard: React.FC = () => {
           onInit={setReactFlow}
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
+          onNodeDragStop={(_, node) => {
+            const typed = node as RFNode<FlowNodeData>;
+            const x = Number(typed.position?.x);
+            const y = Number(typed.position?.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+            void persistCardPosition(String(typed.id), x, y);
+          }}
           onNodeClick={(_, node) => {
             const typed = node as RFNode<FlowNodeData>;
             if (flowCardSettingsOpen && activeNodeId && String(typed.id) === String(activeNodeId)) {
@@ -690,6 +955,25 @@ const FlowBoard: React.FC = () => {
             closeContextMenu();
           }}
         >
+          <MiniMap
+            position="bottom-left"
+            pannable
+            zoomable
+            maskColor="rgba(0, 0, 0, 0.35)"
+            nodeColor="var(--pink)"
+            nodeStrokeColor="var(--pink)"
+            nodeBorderRadius={2}
+            nodeComponent={MiniMapNode}
+            nodeClassName={(node) => `minimap_${String(node.type || 'rectangle')}`}
+            onClick={handleMiniMapClick}
+            style={{
+              background: 'rgba(0, 0, 0, 0.35)',
+              border: '1px solid rgba(255, 255, 255, 0.12)',
+              borderRadius: 0,
+              boxShadow: '0 12px 40px rgba(0, 0, 0, 0.45)',
+              backdropFilter: 'blur(14px)'
+            }}
+          />
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         </ReactFlow>
       </ReactFlowProvider>
@@ -716,105 +1000,213 @@ const FlowBoard: React.FC = () => {
           e.stopPropagation();
         }}
       >
-        <div className={classes.create_panel_title}>Настройте вид записи:</div>
-        <div className={classes.create_panel_radios}>
-          <label className={`${classes.create_panel_radio} ${displayType === 'rectangle' ? classes.radio_active : ''}`}>
-            <input
-              type="radio"
-              name="nodeShape"
-              value="rectangle"
-              checked={displayType === 'rectangle'}
-              onChange={() => setDraftTypeLive('rectangle')}
-              disabled={!isEditing}
-            />
-            Прямоугольник
-          </label>
-          <label className={`${classes.create_panel_radio} ${displayType === 'rhombus' ? classes.radio_active : ''}`}>
-            <input
-              type="radio"
-              name="nodeShape"
-              value="rhombus"
-              checked={displayType === 'rhombus'}
-              onChange={() => setDraftTypeLive('rhombus')}
-              disabled={!isEditing}
-            />
-            Ромб
-          </label>
-          <label className={`${classes.create_panel_radio} ${displayType === 'circle' ? classes.radio_active : ''}`}>
-            <input
-              type="radio"
-              name="nodeShape"
-              value="circle"
-              checked={displayType === 'circle'}
-              onChange={() => setDraftTypeLive('circle')}
-              disabled={!isEditing}
-            />
-            Круг
-          </label>
+        <div className={classes.create_panel_header}>
+          <div className={classes.create_panel_title}>Настройте вид записи:</div>
+          <Mainbtn
+            variant="mini"
+            kind="button"
+            type="button"
+            text={displayLocked ? <LockClose /> : <LockOpen />}
+            onClick={toggleLockLive}
+            disabled={!isEditing || draftSaving || imageUploading}
+            className={` ${displayLocked ? classes.icon_btn_active : ''} ${classes.create_panel_lock}`.trim()}
+          />
         </div>
-        <div className={classes.create_panel_row}>
-          <input
-            className={classes.create_panel_input}
-            value={displayTitle}
-            onChange={e => {
-              const value = e.target.value;
-              setDraftTitleLive(value);
-            }}
-            placeholder={visualEditing ? 'Название' : 'Выберите запись'}
-            disabled={!isEditing}
-          />
-          <input
-            ref={imageInputRef}
-            type="file"
-            accept="image/*"
-            className={classes.hidden_file_input}
-            onChange={(e) => handleImageSelected(e.target.files?.[0] ?? null)}
-            disabled={!isEditing}
-          />
-          <div className={classes.create_panel_tools}>
-            <Mainbtn
-              variant="mini"
-              kind="button"
-              type="button"
-              text={displayLocked ? <LockClose /> : <LockOpen />}
-              onClick={toggleLockLive}
-              disabled={!isEditing || draftSaving || imageUploading}
-              className={`${classes.icon_btn} ${displayLocked ? classes.icon_btn_active : ''}`.trim()}
-            />
-            <Mainbtn
-              variant="mini"
-              kind="button"
-              type="button"
-              text="Картинка"
-              onClick={() => imageInputRef.current?.click()}
-              disabled={!isEditing || draftSaving || imageUploading}
-            />
-            <Mainbtn
-              variant="mini"
-              kind="button"
-              type="button"
-              text="Убрать"
-              onClick={removeImageLive}
-              disabled={!isEditing || draftSaving || imageUploading || !displayImagePreview}
-            />
+
+        <div className={classes.create_panel_body}>
+          <div className={classes.create_panel_previews}>
+            <div className={classes.preview_grid}>
+              
+              <button
+                type="button"
+                className={`${classes.preview_item} ${classes.preview_item_rect}`.trim()}
+                onClick={() => (isEditing ? setDraftTypeLive('rectangle') : undefined)}
+                disabled={!isEditing}
+              >
+                <div
+                  className={`${classes.preview_shape} ${classes.preview_rectangle} ${
+                    displayType === 'rectangle' ? classes.preview_active : classes.preview_inactive
+                  }`.trim()}
+                  style={
+                    displayType === 'rectangle' && displayImagePreview
+                      ? { backgroundImage: `url(${displayImagePreview})` }
+                      : undefined
+                  }
+                >
+                  {displayLocked ? (
+                    <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rectangle}`}>
+                      <LockClose />
+                    </div>
+                  ) : null}
+                  <div className={classes.preview_rect_title}>{displayTitle || 'title'}</div>
+                </div>
+              </button>
+              <button
+                type="button"
+                className={classes.preview_item}
+                onClick={() => (isEditing ? setDraftTypeLive('circle') : undefined)}
+                disabled={!isEditing}
+              >
+                <div
+                  className={`${classes.preview_shape} ${classes.preview_circle} ${
+                    displayType === 'circle' ? classes.preview_active : classes.preview_inactive
+                  }`.trim()}
+                  style={
+                    displayType === 'circle' && displayImagePreview
+                      ? { backgroundImage: `url(${displayImagePreview})` }
+                      : undefined
+                  }
+                >
+                  {displayLocked ? (
+                    <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_circle}`}>
+                      <LockClose />
+                    </div>
+                  ) : null}
+                </div>
+                <div className={classes.preview_caption}>{displayTitle || 'title'}</div>
+              </button>
+
+              
+
+              <button
+                type="button"
+                className={classes.preview_item}
+                onClick={() => (isEditing ? setDraftTypeLive('rhombus') : undefined)}
+                disabled={!isEditing}
+              >
+                <div
+                  className={`${classes.preview_shape} ${classes.preview_rhombus} ${
+                    displayType === 'rhombus' ? classes.preview_active : classes.preview_inactive
+                  }`.trim()}
+                  style={
+                    displayType === 'rhombus' && displayImagePreview
+                      ? { backgroundImage: `url(${displayImagePreview})` }
+                      : undefined
+                  }
+                >
+                  {displayLocked ? (
+                    <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rhombus}`}>
+                      <LockClose />
+                    </div>
+                  ) : null}
+                </div>
+                <div className={classes.preview_caption}>{displayTitle || 'title'}</div>
+              </button>
+            </div>
           </div>
-          <div className={classes.create_panel_actions}>
-            <Mainbtn
-              variant="mini"
-              kind="button"
-              type="button"
-              text="Сохранить"
-              onClick={saveActive}
-              disabled={!isEditing || draftSaving || !displayTitle.trim()}
-            />
-            <Mainbtn
-              variant="mini"
-              kind="button"
-              type="button"
-              text="Отмена"
-              onClick={cancelCardSettings}
-              disabled={!isEditing || draftSaving}
-            />
+
+          <div className={classes.create_panel_form}>
+            <div className={classes.form_field}>
+              <div className={classes.form_label}>Название</div>
+              <input
+                className={classes.create_panel_input}
+                ref={titleInputRef}
+                value={displayTitle}
+                onChange={e => setDraftTitleLive(e.target.value)}
+                placeholder={visualEditing ? 'Название' : 'Выберите запись'}
+                maxLength={50}
+                disabled={!isEditing}
+              />
+            </div>
+
+            <div className={classes.form_field}>
+              <div className={classes.form_label}>Изображение</div>
+              <div className={classes.form_row}>
+                <Mainbtn
+                  variant="mini"
+                  kind="button"
+                  type="button"
+                  text="Выбрать"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={!isEditing || draftSaving || imageUploading}
+                />
+                <Mainbtn
+                  variant="mini"
+                  kind="button"
+                  type="button"
+                  text={<DeleteIcon />}
+                  onClick={removeImageLive}
+                  disabled={!isEditing || draftSaving || imageUploading || !displayImagePreview}
+                  className={`${classes.icon_btn} ${classes.icon_btn_trash}`.trim()}
+                />
+              </div>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className={classes.hidden_file_input}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  e.currentTarget.value = '';
+                  handleImageSelected(file);
+                }}
+                disabled={!isEditing}
+              />
+            </div>
+
+            <div className={classes.form_field}>
+              <div className={boardClasses.leave_board_row}>
+                <DropdownWrapper upDel closeOnClick={false} isOpen={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
+                {[
+                  <button
+                    key="trigger"
+                    type="button"
+                    className={boardClasses.leave_board_trigger}
+                    onClick={() => setDeleteConfirmOpen((prev) => !prev)}
+                    disabled={!isEditing || draftSaving || imageUploading}
+                    aria-label="Удалить запись"
+                  >
+                    Удалить
+                  </button>,
+                  <div key="menu">
+                    <button
+                      type="button"
+                      data-dropdown-class={boardClasses.participant_confirm_danger}
+                      onClick={() => void deleteActive()}
+                      disabled={!isEditing || draftSaving || imageUploading}
+                    >
+                      Да, удалить
+                    </button>
+                    <button
+                      type="button"
+                      data-dropdown-class={boardClasses.participant_confirm_cancel}
+                      onClick={() => setDeleteConfirmOpen(false)}
+                      disabled={!isEditing || draftSaving || imageUploading}
+                    >
+                      Отмена
+                    </button>
+                  </div>,
+                ]}
+                </DropdownWrapper>
+              </div>
+            </div>
+
+            <div className={classes.form_actions}>
+              <Mainbtn
+                variant="mini"
+                kind="button"
+                type="button"
+                text="Сохранить"
+                onClick={() => {
+                  if (!isEditing || draftSaving || imageUploading) return;
+                  if (!displayTitle.trim()) {
+                    titleInputRef.current?.focus();
+                    return;
+                  }
+                  void saveActive();
+                }}
+                disabled={!isEditing || draftSaving || imageUploading}
+                className={`${!displayTitle.trim() ? classes.save_btn_soft_disabled : ''}`.trim()}
+              />
+              <Mainbtn
+                variant="mini"
+                kind="button"
+                type="button"
+                text="Отмена"
+                onClick={cancelCardSettings}
+                disabled={!isEditing || draftSaving}
+              />
+            </div>
           </div>
         </div>
       </div>

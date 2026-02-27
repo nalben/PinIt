@@ -1141,7 +1141,9 @@ Update (2026-02-26)
   - Loads participants for board menu via `GET /api/boards/:id/participants`.
   - Auth guests can leave via `POST /api/boards/:id/leave`.
   - For non-auth users: persists recent public board info into localStorage key `pinit_recentBoards`.
-- `frontend/src/components/flow/FlowBoard.tsx` is currently a placeholder with empty `nodes`/`edges`.
+- `frontend/src/components/flow/FlowBoard.tsx` renders board cards as ReactFlow nodes, supports dragging, and persists position changes via `PATCH /api/boards/:board_id/cards/:card_id/position`.
+- Cards can be deleted via `DELETE /api/boards/:board_id/cards/:card_id` (owner/editer).
+- `cards.title` max length is 50 (DB constraint via `VARCHAR(50)`).
 
 6. Frontend UI components (current code)
 

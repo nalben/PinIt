@@ -1927,7 +1927,7 @@ exports.createCard = async (req, res) => {
       return res.status(400).json({ message: 'Некорректный тип' });
     }
 
-    if (!rawTitle || rawTitle.length > 70) {
+    if (!rawTitle || rawTitle.length > 50) {
       return res.status(400).json({ message: 'Некорректный заголовок' });
     }
 
@@ -2300,7 +2300,7 @@ exports.updateCardTitle = async (req, res) => {
     }
 
     const rawTitle = String(req.body?.title || '').trim();
-    if (!rawTitle || rawTitle.length > 70) {
+    if (!rawTitle || rawTitle.length > 50) {
       return res.status(400).json({ message: 'Некорректный заголовок' });
     }
 
@@ -2334,5 +2334,118 @@ exports.updateCardTitle = async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ message: 'Ошибка обновления' });
+  }
+};
+
+exports.updateCardPosition = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const x = Number(req.body?.x);
+    const y = Number(req.body?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return res.status(400).json({ message: 'Некорректные координаты' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
+    if (!cardRows.length) {
+      return res.status(404).json({ message: 'Запись не найдена' });
+    }
+
+    await db.execute(`UPDATE cards SET x = ?, y = ? WHERE id = ? AND board_id = ?`, [x, y, cardId, boardId]);
+    return res.status(200).json({ id: cardId, board_id: boardId, x, y });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления' });
+  }
+};
+
+exports.deleteCard = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [cardRows] = await db.execute(
+      `SELECT image_path FROM cards WHERE id = ? AND board_id = ? LIMIT 1`,
+      [cardId, boardId]
+    );
+    if (!cardRows.length) {
+      return res.status(404).json({ message: 'Запись не найдена' });
+    }
+
+    const imagePath = cardRows[0]?.image_path ?? null;
+
+    await db.execute(`DELETE FROM cards WHERE id = ? AND board_id = ?`, [cardId, boardId]);
+
+    await safeUnlinkUpload(imagePath);
+    return res.status(200).json({ id: cardId, board_id: boardId });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка удаления' });
   }
 };

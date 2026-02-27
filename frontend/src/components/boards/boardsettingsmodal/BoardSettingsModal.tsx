@@ -134,6 +134,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const participantsInnerViewNext = useUIStore((s) => s.boardSettingsModalParticipantsInnerViewNext);
   const setParticipantsInnerViewNext = useUIStore((s) => s.setBoardSettingsModalParticipantsInnerViewNext);
   const openFriendsModal = useUIStore((s) => s.openFriendsModal);
+  const showTopAlarm = useUIStore((s) => s.showTopAlarm);
   const userId = useAuthStore((s) => s.user?.id ?? null);
 
   const friends = useFriendsStore((s) => s.friends);
@@ -709,13 +710,13 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         if (!file) return;
 
                         if (!file.type.startsWith('image/')) {
-                          alert('Можно загружать только изображения');
+                          showTopAlarm('Можно загружать только изображения');
                           e.target.value = '';
                           return;
                         }
 
                         if (file.size > MAX_BOARD_IMAGE_SIZE_BYTES) {
-                          alert(`Максимальный размер картинки: ${MAX_BOARD_IMAGE_SIZE_MB}MB`);
+                          showTopAlarm(`Вес слишком большой — выберите изображение весом до ${MAX_BOARD_IMAGE_SIZE_MB} МБ.`);
                           e.target.value = '';
                           return;
                         }

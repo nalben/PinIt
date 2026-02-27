@@ -21,6 +21,7 @@ import AuthModal from '@/components/auth/authmodal/AuthModal';
 import LoginForm from '@/components/auth/login/Login';
 import RegisterForm from '@/components/auth/register/Register';
 import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
+import TopAlarm from '@/components/_UI/topalarm/TopAlarm';
 
 const PENDING_INVITE_LS_KEY = 'pinit_pendingInviteUrl';
 
@@ -233,6 +234,7 @@ const Root = () => {
         <CreateBoardModal />
         <FriendsModal />
         <GlobalAuthModals />
+        <TopAlarm />
       </main>
     </div>
   );
