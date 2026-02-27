@@ -1096,8 +1096,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
               >
                 <div
                   className={`${classes.preview_shape} ${classes.preview_circle} ${
-                    displayType === 'circle' ? classes.preview_active : classes.preview_inactive
-                  }`.trim()}
+                    displayType === 'circle' && displayImagePreview ? classes.preview_circle_has_image : ''
+                  } ${displayType === 'circle' ? classes.preview_active : classes.preview_inactive}`.trim()}
                   style={
                     displayType === 'circle' && displayImagePreview
                       ? { backgroundImage: `url(${displayImagePreview})` }

@@ -219,6 +219,24 @@
     }
 }
 
+.preview_active.preview_circle{
+    & .node_lock_overlay_circle{
+        background: transparent;
+    }
+}
+
+.preview_circle_has_image{
+    & .node_lock_overlay_circle{
+        background: rgba(0, 0, 0, 0.55);
+    }
+}
+
+.preview_active.preview_circle_has_image{
+    & .node_lock_overlay_circle{
+        background: rgba(0, 0, 0, 0.55);
+    }
+}
+
 .preview_rectangle{
     width: 100%;
     max-width: 260px;
