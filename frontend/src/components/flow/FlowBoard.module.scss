@@ -53,6 +53,7 @@
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
     padding: fluid-prop(20,16,1920,320);
     backdrop-filter: blur(14px);
+    z-index: 11;
 }
 
 .create_panel_open{
