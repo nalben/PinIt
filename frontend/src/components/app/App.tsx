@@ -76,6 +76,20 @@ const Root = () => {
   const navigate = useNavigate();
   const closeAuthModal = useUIStore((s) => s.closeAuthModal);
   const isBoardPage = Boolean(matchPath('/spaces/:boardId', location.pathname));
+  const triggerEscape = useUIStore((s) => s.triggerEscape);
+
+  useEffect(() => {
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const handled = triggerEscape();
+      if (!handled) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    window.addEventListener('keydown', onKeyDownCapture, true);
+    return () => window.removeEventListener('keydown', onKeyDownCapture, true);
+  }, [triggerEscape]);
 
   useEffect(() => {
     if (!isInitialized) return;

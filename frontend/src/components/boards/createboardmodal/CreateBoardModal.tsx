@@ -7,6 +7,7 @@ import {
   useCreateBoardModalStore,
 } from '@/store/createBoardModalStore';
 import classes from './CreateBoardModal.module.scss';
+import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 
 const CreateBoardModal: React.FC = () => {
   const navigate = useNavigate();
@@ -19,6 +20,13 @@ const CreateBoardModal: React.FC = () => {
   const submit = useCreateBoardModalStore((s) => s.submit);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEscapeHandler({
+    id: 'create-board-modal',
+    priority: 650,
+    isOpen,
+    onEscape: close,
+  });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -35,6 +43,10 @@ const CreateBoardModal: React.FC = () => {
           className={classes.form}
           onSubmit={(e) => {
             e.preventDefault();
+            if (!title.trim()) {
+              inputRef.current?.focus();
+              return;
+            }
             submit().then((created) => {
               const boardId = Number(created?.id);
               if (Number.isFinite(boardId) && boardId > 0) {

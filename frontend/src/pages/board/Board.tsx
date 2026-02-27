@@ -5,7 +5,7 @@ import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { RECENT_BOARDS_LS_KEY, UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import { useUIStore } from '@/store/uiStore';
-import FlowBoard from '@/components/flow/FlowBoard';
+import FlowBoard, { type FlowBoardHandle } from '@/components/flow/FlowBoard';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import BoardSettingsModal from '@/components/boards/boardsettingsmodal/BoardSettingsModal';
@@ -20,6 +20,8 @@ import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
 import Deny from '@/assets/icons/monochrome/deny.svg'
 import Members from '@/assets/icons/monochrome/members.svg';
 import { BoardParticipant, BoardParticipantsResponse, useBoardDetailsStore } from '@/store/boardDetailsStore';
+import { useEscapeHandler } from '@/hooks/useEscapeHandler';
+import Plus from '@/assets/icons/monochrome/plus.svg'
 
 type BoardParticipantRole = 'owner' | 'guest' | 'editer';
 
@@ -63,6 +65,8 @@ const Board = () => {
     const [roleLoadingParticipantId, setRoleLoadingParticipantId] = useState<number | null>(null);
     const [removeLoadingParticipantId, setRemoveLoadingParticipantId] = useState<number | null>(null);
     const participantsListRef = useRef<HTMLDivElement | null>(null);
+    const flowBoardRef = useRef<FlowBoardHandle | null>(null);
+    const boardMenuRef = useRef<HTMLDivElement | null>(null);
     const [hasParticipantsListScroll, setHasParticipantsListScroll] = useState(false);
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
     const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<UnifiedBoard> | null>(null);
@@ -234,6 +238,20 @@ const Board = () => {
     useEffect(() => {
         setHasMounted(true);
     }, []);
+
+    useEscapeHandler({
+        id: 'board:participants-role-dropdown',
+        priority: 1100,
+        isOpen: roleDropdownParticipantId !== null,
+        onEscape: () => setRoleDropdownParticipantId(null),
+    });
+
+    useEscapeHandler({
+        id: 'board:right-menu',
+        priority: 500,
+        isOpen: effectiveBoardMenuOpen,
+        onEscape: closeBoardMenu,
+    });
 
     useLayoutEffect(() => {
         if (typeof window === 'undefined') return;
@@ -826,12 +844,28 @@ const Board = () => {
     return (
             <div className={classes.board_container}>
                 <div className={`${classes.board_flow_wrap} ${effectiveBoardMenuOpen ? classes.board_flow_shrink : ''}`.trim()}>
-                    <FlowBoard />
+                    <FlowBoard ref={flowBoardRef} />
                 </div>
-            <div className={`${classes.board_menu_con} ${!effectiveBoardMenuOpen ? classes.menu_close : ''}`}>
-                <button className={classes.close_btn} onClick={toggleBoardMenu} type="button">
-                    <Close />
-                </button>
+            <div ref={boardMenuRef} className={`${classes.board_menu_con} ${!effectiveBoardMenuOpen ? classes.menu_close : ''}`}>
+                <div className={classes.left_menu_btns}>
+                    <button
+                        className={`${classes.left_menu_btn} ${classes.left_menu_btn_toggle}`.trim()}
+                        onClick={(e) => {
+                            toggleBoardMenu();
+                            e.currentTarget.blur();
+                        }}
+                        type="button"
+                    >
+                        <Close />
+                    </button>
+                    <button
+                        className={`${classes.left_menu_btn} ${classes.left_menu_btn_create_node}`.trim()}
+                        type="button"
+                        onClick={() => flowBoardRef.current?.createDraftNodeAtCenter()}
+                    >
+                        <Plus />
+                    </button>
+                </div>
                 <div className={classes.board_menu_}>
                     <div className={classes.board_info}>
                         {isBoardMetaLoading || !boardInfo?.title ? (

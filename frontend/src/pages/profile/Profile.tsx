@@ -16,6 +16,7 @@ import { connectSocket } from "@/services/socketManager";
 import { useUIStore } from "@/store/uiStore";
 import { useNotificationsStore } from "@/store/notificationsStore";
 import ProfileSkeleton from "./ProfileSkeleton";
+import { useEscapeHandler } from "@/hooks/useEscapeHandler";
 
 
 interface ProfileData {
@@ -67,6 +68,13 @@ const Profile = () => {
   const { user, isAuth, isInitialized } = useAuthStore();
   const { openHeaderDropdown, openFriendsModal, showTopAlarm } = useUIStore();
   const { setHighlightRequestId } = useNotificationsStore();
+
+  useEscapeHandler({
+    id: "profile:edit-modal",
+    priority: 600,
+    isOpen: openModal !== null,
+    onEscape: () => setOpenModal(null),
+  });
 
   const safeCopyToClipboard = (text: string) => {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -605,7 +613,6 @@ const handleFriendAction = async (userId: number) => {
 };
 
 export default Profile;
-
 
 
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactFlow, {
   Background,
@@ -25,6 +25,10 @@ import { FlowCardShape, useUIStore } from '@/store/uiStore';
 
 type FlowNodeType = FlowCardShape;
 type FlowNodeData = { title: string; imageSrc: string | null; isLocked: boolean };
+
+export type FlowBoardHandle = {
+  createDraftNodeAtCenter: () => void;
+};
 
 type ApiCardType = 'circle' | 'rectangle' | 'diamond';
 type ApiCard = {
@@ -143,7 +147,7 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
 
 const NODE_TYPES = { rectangle: RectangleNode, rhombus: RhombusNode, circle: CircleNode } as const;
 
-const FlowBoard: React.FC = () => {
+const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
   const { boardId } = useParams<{ boardId: string }>();
   const numericBoardId = Number(boardId);
 
@@ -531,6 +535,13 @@ const FlowBoard: React.FC = () => {
 
   const handleClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!suppressClickRef.current) return;
+
+    const target = e.target as globalThis.Node | null;
+    const menuEl = contextMenuRef.current;
+    const panelEl = createPanelRef.current;
+    if (menuEl && target && menuEl.contains(target)) return;
+    if (panelEl && target && panelEl.contains(target)) return;
+
     suppressClickRef.current = false;
     e.preventDefault();
     e.stopPropagation();
@@ -682,7 +693,7 @@ const FlowBoard: React.FC = () => {
     };
   }, [activeNodeId, cancelCardSettings, flowCardSettingsOpen]);
 
-  const createDraftNode = () => {
+  const createDraftNodeAt = useCallback((anchorX: number, anchorY: number) => {
     const hasDraftNode = nodes.some((n) => String(n.id).startsWith('draft-'));
     if (hasDraftNode) {
       closeContextMenu();
@@ -695,7 +706,7 @@ const FlowBoard: React.FC = () => {
     const size = NODE_SIZES[startType];
     const id = `draft-${Date.now()}`;
     const isFirstNodeOnBoard = nodes.length === 0;
-    const flowPosition = reactFlow.project({ x: contextMenu.anchorX, y: contextMenu.anchorY });
+    const flowPosition = reactFlow.project({ x: anchorX, y: anchorY });
     const position = isFirstNodeOnBoard
       ? { x: 0, y: 0 }
       : { x: flowPosition.x - size.width / 2, y: flowPosition.y - size.height / 2 };
@@ -718,14 +729,30 @@ const FlowBoard: React.FC = () => {
       const zoom = viewport.zoom;
       reactFlow.setViewport(
         {
-          x: contextMenu.anchorX - (size.width / 2) * zoom,
-          y: contextMenu.anchorY - (size.height / 2) * zoom,
+          x: anchorX - (size.width / 2) * zoom,
+          y: anchorY - (size.height / 2) * zoom,
           zoom,
         },
         { duration: 0 }
       );
     }
-  };
+  }, [closeContextMenu, nodes, openSettingsForNode, reactFlow]);
+
+  const createDraftNode = useCallback(() => {
+    createDraftNodeAt(contextMenu.anchorX, contextMenu.anchorY);
+  }, [contextMenu.anchorX, contextMenu.anchorY, createDraftNodeAt]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      createDraftNodeAtCenter: () => {
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (!rect) return;
+        createDraftNodeAt(rect.width / 2, rect.height / 2);
+      },
+    }),
+    [createDraftNodeAt]
+  );
 
   const setDraftTitleLive = (title: string) => {
     if (!activeNodeId) return;
@@ -884,11 +911,25 @@ const FlowBoard: React.FC = () => {
     if (!panelEl) return;
 
     const onKeyDownCapture = (e: KeyboardEvent) => {
+      const targetEl = e.target as unknown as HTMLElement | null;
+      const isFormField =
+        Boolean(targetEl) &&
+        (targetEl instanceof HTMLInputElement ||
+          targetEl instanceof HTMLTextAreaElement ||
+          (targetEl as unknown as { isContentEditable?: boolean }).isContentEditable);
+
       if (e.key === 'Escape') {
         e.preventDefault();
         e.stopPropagation();
         if (deleteConfirmOpen) setDeleteConfirmOpen(false);
         else cancelCardSettings();
+        return;
+      }
+
+      if (e.key === 'Delete' && !isFormField) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!deleteConfirmOpen) setDeleteConfirmOpen(true);
         return;
       }
 
@@ -898,6 +939,11 @@ const FlowBoard: React.FC = () => {
 
       e.preventDefault();
       e.stopPropagation();
+
+      if (deleteConfirmOpen) {
+        void deleteActive();
+        return;
+      }
 
       if (!displayTitle.trim()) {
         titleInputRef.current?.focus();
@@ -909,7 +955,7 @@ const FlowBoard: React.FC = () => {
 
     window.addEventListener('keydown', onKeyDownCapture, true);
     return () => window.removeEventListener('keydown', onKeyDownCapture, true);
-  }, [cancelCardSettings, deleteConfirmOpen, displayTitle, isEditing, saveActive]);
+  }, [cancelCardSettings, deleteActive, deleteConfirmOpen, displayTitle, isEditing, saveActive]);
 
   return (
     <div
@@ -1213,6 +1259,6 @@ const FlowBoard: React.FC = () => {
       </div>
     </div>
   );
-};
+});
 
 export default FlowBoard;

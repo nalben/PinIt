@@ -13,6 +13,7 @@ import { useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import { useAuthStore } from '@/store/authStore';
 import { Friend, useFriendsStore } from '@/store/friendsStore';
 import { BoardParticipant, useBoardDetailsStore } from '@/store/boardDetailsStore';
+import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 
 const MAX_BOARD_IMAGE_SIZE_MB = 5;
 const MAX_BOARD_IMAGE_SIZE_BYTES = MAX_BOARD_IMAGE_SIZE_MB * 1024 * 1024;
@@ -165,6 +166,27 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const [friendsSearch, setFriendsSearch] = useState('');
   const [guestsSearch, setGuestsSearch] = useState('');
   const [guestsAnchorUserId, setGuestsAnchorUserId] = useState<number | null>(null);
+
+  useEscapeHandler({
+    id: 'board-settings:role-dropdown',
+    priority: 1050,
+    isOpen: roleDropdownUserId !== null,
+    onEscape: () => setRoleDropdownUserId(null),
+  });
+
+  useEscapeHandler({
+    id: 'board-settings:delete-confirm',
+    priority: 1040,
+    isOpen: deleteConfirmOpen,
+    onEscape: () => setDeleteConfirmOpen(false),
+  });
+
+  useEscapeHandler({
+    id: 'board-settings:modal',
+    priority: 800,
+    isOpen: isOpen,
+    onEscape: close,
+  });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -538,6 +560,44 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       setDeleteConfirmOpen(false);
     }
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      const targetEl = e.target as unknown as HTMLElement | null;
+      const isFormField =
+        Boolean(targetEl) &&
+        (targetEl instanceof HTMLInputElement ||
+          targetEl instanceof HTMLTextAreaElement ||
+          (targetEl as unknown as { isContentEditable?: boolean }).isContentEditable);
+
+      if (e.key === 'Delete' && !isFormField) {
+        if (!isOwner) return;
+        if (view !== 'settings') return;
+        if (!deleteConfirmOpen) {
+          e.preventDefault();
+          e.stopPropagation();
+          setDeleteConfirmOpen(true);
+        }
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+        if ((e as unknown as { isComposing?: boolean }).isComposing) return;
+
+        if (!deleteConfirmOpen) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        void deleteBoard();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDownCapture, true);
+    return () => window.removeEventListener('keydown', onKeyDownCapture, true);
+  }, [deleteBoard, deleteConfirmOpen, isOpen, isOwner, view]);
 
   const submit = async () => {
     if (!numericBoardId) return;

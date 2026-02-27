@@ -11,6 +11,7 @@ import { useNotificationsStore } from "@/store/notificationsStore";
 import { connectSocket } from "@/services/socketManager";
 import { useFriendsStore } from "@/store/friendsStore";
 import classes from "./FriendsModal.module.scss";
+import { useEscapeHandler } from "@/hooks/useEscapeHandler";
 
 type FriendStatus = "friend" | "none" | "sent" | "received" | "rejected";
 
@@ -144,6 +145,13 @@ const FriendsModal = () => {
   const [foundUserByCode, setFoundUserByCode] = useState<UserByFriendCodeResponse | null>(null);
   const [friendActionLoadingById, setFriendActionLoadingById] = useState<Record<number, boolean>>({});
   const friendSearchSeqRef = useRef(0);
+
+  useEscapeHandler({
+    id: "friends-modal",
+    priority: 700,
+    isOpen: friendsModalOpen,
+    onEscape: closeFriendsModal,
+  });
 
   const mergeFriends = (current: Friend[], incoming: Friend[]) => {
     if (!current.length) return incoming;

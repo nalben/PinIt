@@ -6,6 +6,17 @@ export type BoardSettingsModalView = 'settings' | 'participants';
 export type BoardSettingsParticipantsInnerView = 'friends' | 'guests';
 export type FlowCardShape = 'rectangle' | 'rhombus' | 'circle';
 
+type EscapeHandler = {
+  priority: number;
+  isOpen: () => boolean;
+  onEscape: () => void;
+};
+
+type RegisteredEscapeHandler = EscapeHandler & { order: number };
+
+const escapeHandlers = new Map<string, RegisteredEscapeHandler>();
+let escapeOrder = 0;
+
 export type FlowCardSettingsSnapshot = {
   nodeId: string;
   type: FlowCardShape;
@@ -54,6 +65,10 @@ interface UIState {
   commitFlowCardSettingsDraft: () => void;
 
   showTopAlarm: (message: string) => void;
+
+  registerEscapeHandler: (id: string, handler: EscapeHandler) => void;
+  unregisterEscapeHandler: (id: string) => void;
+  triggerEscape: () => boolean;
 }
 
 export const useUIStore = create<UIState>((set) => {
@@ -151,7 +166,29 @@ export const useUIStore = create<UIState>((set) => {
         set({ topAlarm: null });
         topAlarmUnmountTimeout = null;
       }, 220);
-    }, 2200);
+      }, 2200);
+  },
+
+  registerEscapeHandler: (id, handler) => {
+    escapeOrder += 1;
+    escapeHandlers.set(id, { ...handler, order: escapeOrder });
+  },
+  unregisterEscapeHandler: (id) => {
+    escapeHandlers.delete(id);
+  },
+  triggerEscape: () => {
+    const handlers = Array.from(escapeHandlers.values()).sort((a, b) => {
+      if (a.priority !== b.priority) return b.priority - a.priority;
+      return b.order - a.order;
+    });
+
+    for (const h of handlers) {
+      if (!h.isOpen()) continue;
+      h.onEscape();
+      return true;
+    }
+
+    return false;
   },
   });
 });

@@ -34,10 +34,9 @@
 .menu_close{
     transform: translateX(var(--board-menu-width));
 }
-.close_btn{
+.left_menu_btn{
     position: absolute;
     left: -42px;
-    top: 80px;
     width: 42px;
     height: 54px;
     border: var(--border);
@@ -52,10 +51,17 @@
     & svg{
         width: 20px;
         fill: var(--pink);
+        color: var(--pink);
         rotate: 180deg;
     }
 }
-.menu_close .close_btn{
+.left_menu_btn_toggle{
+    top: 80px;
+}
+.left_menu_btn_create_node{
+    top: 160px;
+}
+.menu_close .left_menu_btn{
     & svg{
         rotate: 0deg;
     }

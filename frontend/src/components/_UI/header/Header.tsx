@@ -15,6 +15,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
 import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { useUIStore } from '@/store/uiStore';
+import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 
 interface UserProfile {
   id: number;
@@ -57,6 +58,27 @@ const Header = ({ variant = 'default' }: { variant?: HeaderVariant }) => {
   const isNotiOpen = headerDropdown === 'notifications';
   const isProfileLoading = !isInitialized;
   const showAvatarSkeleton = isProfileLoading || (!!user?.avatar && !isAvatarLoaded);
+
+  useEscapeHandler({
+    id: 'header:dropdown-profile',
+    priority: 1000,
+    isOpen: isProfileOpen,
+    onEscape: closeHeaderDropdown,
+  });
+
+  useEscapeHandler({
+    id: 'header:dropdown-notifications',
+    priority: 1000,
+    isOpen: isNotiOpen,
+    onEscape: closeHeaderDropdown,
+  });
+
+  useEscapeHandler({
+    id: 'header:burger-menu',
+    priority: 900,
+    isOpen: menuOpen,
+    onEscape: () => setMenuOpen(false),
+  });
     
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     isActive
@@ -64,19 +86,21 @@ const Header = ({ variant = 'default' }: { variant?: HeaderVariant }) => {
       : classes.item;
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handlePointerDownOutside = (e: Event) => {
+      const target = e.target as Node | null;
       if (
         menuRef.current &&
-        !menuRef.current.contains(e.target as Node) &&
+        target &&
+        !menuRef.current.contains(target) &&
         burgerRef.current &&
-        !burgerRef.current.contains(e.target as Node)
+        !burgerRef.current.contains(target)
       ) {
         setMenuOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handlePointerDownOutside);
+    return () => document.removeEventListener('pointerdown', handlePointerDownOutside);
   }, []);
 
 useEffect(() => {
