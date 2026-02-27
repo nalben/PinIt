@@ -268,6 +268,17 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     return () => unsubscribe?.();
   }, [isAuth, numericBoardId]);
 
+  useEffect(() => {
+    if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+    if (isAuth) return;
+
+    const id = window.setInterval(() => {
+      setReloadSeq((v) => v + 1);
+    }, 10_000);
+
+    return () => window.clearInterval(id);
+  }, [isAuth, numericBoardId]);
+
   const visualDraft = isEditing ? flowCardSettingsDraft : visualDraftRef.current;
   const displayType: FlowNodeType = visualDraft?.type ?? 'rectangle';
   const displayTitle = visualDraft?.title ?? '';
