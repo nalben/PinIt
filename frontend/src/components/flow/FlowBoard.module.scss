@@ -4,6 +4,24 @@
     position: relative;
 }
 
+.space_container_readonly{
+    :global(.react-flow__node){
+        cursor: grab;
+    }
+    :global(.react-flow__node):active{
+        cursor: grabbing;
+    }
+
+    & .node_rectangle,
+    & .node_rhombus,
+    & .node_circle{
+        cursor: grab;
+        &:active{
+            cursor: grabbing;
+        }
+    }
+}
+
 .context_menu{
     position: fixed;
     z-index: 1000;
@@ -144,9 +162,6 @@
     &:disabled{
         cursor: default;
         opacity: 0.65;
-    }
-    &:nth-child(2){
-        // margin-bottom: 2rem;
     }
     @media (min-width:370px) {
         &:nth-child(1) {

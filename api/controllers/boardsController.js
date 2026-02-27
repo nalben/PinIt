@@ -1974,6 +1974,8 @@ exports.createCard = async (req, res) => {
 
       await connection.commit();
 
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_created', card_id: id }, [user_id]);
+
       return res.status(201).json({
         id,
         board_id: boardId,
@@ -2132,6 +2134,7 @@ exports.updateCardLock = async (req, res) => {
     }
 
     await db.execute(`UPDATE cards SET is_locked = ? WHERE id = ? AND board_id = ?`, [is_locked ? 1 : 0, cardId, boardId]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, is_locked: is_locked ? 1 : 0 });
   } catch (e) {
     console.error(e);
@@ -2214,6 +2217,7 @@ exports.updateCardImage = async (req, res) => {
       await safeUnlinkUpload(oldImage);
     }
 
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, image_path: newImage });
   } catch (e) {
     if (req.file && newImage) {
@@ -2274,6 +2278,7 @@ exports.updateCardType = async (req, res) => {
     }
 
     await db.execute(`UPDATE cards SET type = ? WHERE id = ? AND board_id = ?`, [rawType, cardId, boardId]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, type: rawType });
   } catch (e) {
     console.error(e);
@@ -2330,6 +2335,7 @@ exports.updateCardTitle = async (req, res) => {
     }
 
     await db.execute(`UPDATE cards SET title = ? WHERE id = ? AND board_id = ?`, [rawTitle, cardId, boardId]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, title: rawTitle });
   } catch (e) {
     console.error(e);
@@ -2386,6 +2392,7 @@ exports.updateCardPosition = async (req, res) => {
     }
 
     await db.execute(`UPDATE cards SET x = ?, y = ? WHERE id = ? AND board_id = ?`, [x, y, cardId, boardId]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, x, y });
   } catch (e) {
     console.error(e);
@@ -2441,6 +2448,7 @@ exports.deleteCard = async (req, res) => {
     const imagePath = cardRows[0]?.image_path ?? null;
 
     await db.execute(`DELETE FROM cards WHERE id = ? AND board_id = ?`, [cardId, boardId]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_deleted', card_id: cardId }, [user_id]);
 
     await safeUnlinkUpload(imagePath);
     return res.status(200).json({ id: cardId, board_id: boardId });

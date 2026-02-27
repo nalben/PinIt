@@ -22,6 +22,8 @@ import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
 import boardClasses from '@/pages/board/Board.module.scss';
 import { FlowCardShape, useUIStore } from '@/store/uiStore';
+import { connectSocket } from '@/services/socketManager';
+import { useAuthStore } from '@/store/authStore';
 
 type FlowNodeType = FlowCardShape;
 type FlowNodeData = { title: string; imageSrc: string | null; isLocked: boolean };
@@ -147,9 +149,10 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
 
 const NODE_TYPES = { rectangle: RectangleNode, rhombus: RhombusNode, circle: CircleNode } as const;
 
-const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
+const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(({ canEditCards = false }, ref) => {
   const { boardId } = useParams<{ boardId: string }>();
   const numericBoardId = Number(boardId);
+  const isAuth = useAuthStore((s) => s.isAuth);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -175,6 +178,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
   const [nodes, setNodes] = useState<RFNode<FlowNodeData>[]>([]);
   const [edges] = useState<Edge[]>([]);
+  const [reloadSeq, setReloadSeq] = useState(0);
   const flowCardSettingsOpen = useUIStore((s) => s.flowCardSettingsOpen);
   const flowCardSettings = useUIStore((s) => s.flowCardSettings);
   const flowCardSettingsDraft = useUIStore((s) => s.flowCardSettingsDraft);
@@ -231,6 +235,39 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
     return () => cancelAnimationFrame(raf);
   }, [activeNodeId, isEditing]);
 
+  useEffect(() => {
+    setNodes((prev) =>
+      prev
+        .filter((n) => (canEditCards ? true : !String(n.id).startsWith('draft-')))
+        .map((n) => {
+          const isDraft = String(n.id).startsWith('draft-');
+          const locked = Boolean(n.data?.isLocked);
+          return { ...n, draggable: isDraft ? canEditCards : canEditCards && !locked };
+        })
+    );
+  }, [canEditCards]);
+
+  useEffect(() => {
+    if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+    if (!isAuth) return;
+
+    const unsubscribe = connectSocket({
+      onBoardsUpdate: (data) => {
+        const cmd = data as { reason?: unknown; board_id?: unknown };
+        const boardIdRaw = cmd?.board_id;
+        const boardIdParsed = typeof boardIdRaw === 'number' ? boardIdRaw : Number(boardIdRaw);
+        if (!Number.isFinite(boardIdParsed) || boardIdParsed !== numericBoardId) return;
+
+        const reason = typeof cmd?.reason === 'string' ? cmd.reason : '';
+        if (reason === 'card_created' || reason === 'card_updated' || reason === 'card_deleted' || reason === 'cards_changed') {
+          setReloadSeq((v) => v + 1);
+        }
+      },
+    });
+
+    return () => unsubscribe?.();
+  }, [isAuth, numericBoardId]);
+
   const visualDraft = isEditing ? flowCardSettingsDraft : visualDraftRef.current;
   const displayType: FlowNodeType = visualDraft?.type ?? 'rectangle';
   const displayTitle = visualDraft?.title ?? '';
@@ -263,6 +300,11 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
     setContextMenu(prev => (prev.isOpen ? { ...prev, isOpen: false } : prev));
   }, []);
 
+  useEffect(() => {
+    if (canEditCards) return;
+    closeContextMenu();
+  }, [canEditCards, closeContextMenu]);
+
   const handleMiniMapClick = useCallback(
     (event: React.MouseEvent, position: { x: number; y: number }) => {
       if (!reactFlow) return;
@@ -276,6 +318,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
 
   const persistCardPosition = useCallback(
     async (cardId: string, x: number, y: number) => {
+      if (!canEditCards) return;
       if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
       if (!cardId || String(cardId).startsWith('draft-')) return;
       const hasToken = Boolean(localStorage.getItem('token'));
@@ -287,7 +330,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
         // ignore (no access / offline)
       }
     },
-    [numericBoardId]
+    [canEditCards, numericBoardId]
   );
 
   useEffect(() => {
@@ -308,7 +351,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
           id: String(c.id),
           type: mapApiTypeToNodeType(c.type),
           position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
-          draggable: !(Boolean(c.is_locked)),
+          draggable: canEditCards && !Boolean(c.is_locked),
           data: {
             title: (c.title ?? 'title').trim() || 'title',
             imageSrc: resolveImageSrc(c.image_path ?? null),
@@ -331,7 +374,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
             id: String(c.id),
             type: mapApiTypeToNodeType(c.type),
             position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
-            draggable: !(Boolean(c.is_locked)),
+            draggable: canEditCards && !Boolean(c.is_locked),
             data: {
               title: (c.title ?? 'title').trim() || 'title',
               imageSrc: resolveImageSrc(c.image_path ?? null),
@@ -354,7 +397,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
     return () => {
       cancelled = true;
     };
-  }, [numericBoardId]);
+  }, [canEditCards, isAuth, numericBoardId, reloadSeq]);
 
   useEffect(() => {
     if (!contextMenu.isOpen) return;
@@ -483,6 +526,10 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!canEditCards) {
+      closeContextMenu();
+      return;
+    }
     openContextMenuAt(e.clientX, e.clientY);
   };
 
@@ -497,6 +544,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType !== 'touch') return;
     if (!e.isPrimary) return;
+    if (!canEditCards) return;
 
     const target = e.target as globalThis.Node | null;
     const panelEl = createPanelRef.current;
@@ -582,13 +630,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
             ...n,
             type: nextType,
             position,
-            draggable: !nextLocked,
+            draggable: canEditCards && !nextLocked,
             data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc }
           };
         })
       );
     },
-    []
+    [canEditCards]
   );
 
   const clearPendingImage = useCallback(() => {
@@ -605,6 +653,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
 
   const openSettingsForNode = useCallback(
     (node: RFNode<FlowNodeData>) => {
+      if (!canEditCards) return;
       clearPendingImage();
       openFlowCardSettings({
         nodeId: String(node.id),
@@ -614,7 +663,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
         imageSrc: node.data.imageSrc,
       });
     },
-    [clearPendingImage, openFlowCardSettings]
+    [canEditCards, clearPendingImage, openFlowCardSettings]
   );
 
   const cancelCardSettings = useCallback(() => {
@@ -641,6 +690,12 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
     clearPendingImage();
     closeFlowCardSettings();
   }, [applyPreviewToNode, clearPendingImage, closeFlowCardSettings, flowCardSettings]);
+
+  useEffect(() => {
+    if (canEditCards) return;
+    if (!flowCardSettingsOpen) return;
+    cancelCardSettings();
+  }, [canEditCards, cancelCardSettings, flowCardSettingsOpen]);
 
   useEffect(() => {
     if (!flowCardSettingsOpen || !activeNodeId) return;
@@ -694,6 +749,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
   }, [activeNodeId, cancelCardSettings, flowCardSettingsOpen]);
 
   const createDraftNodeAt = useCallback((anchorX: number, anchorY: number) => {
+    if (!canEditCards) return;
     const hasDraftNode = nodes.some((n) => String(n.id).startsWith('draft-'));
     if (hasDraftNode) {
       closeContextMenu();
@@ -716,7 +772,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
       type: startType,
       position,
       data: { title: startTitle, imageSrc: null, isLocked: false },
-      draggable: true,
+      draggable: canEditCards,
       selectable: true
     };
 
@@ -736,7 +792,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
         { duration: 0 }
       );
     }
-  }, [closeContextMenu, nodes, openSettingsForNode, reactFlow]);
+  }, [canEditCards, closeContextMenu, nodes, openSettingsForNode, reactFlow]);
 
   const createDraftNode = useCallback(() => {
     createDraftNodeAt(contextMenu.anchorX, contextMenu.anchorY);
@@ -746,12 +802,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
     ref,
     () => ({
       createDraftNodeAtCenter: () => {
+        if (!canEditCards) return;
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
         createDraftNodeAt(rect.width / 2, rect.height / 2);
       },
     }),
-    [createDraftNodeAt]
+    [canEditCards, createDraftNodeAt]
   );
 
   const setDraftTitleLive = (title: string) => {
@@ -798,6 +855,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
   };
 
   const deleteActive = async () => {
+    if (!canEditCards) return;
     if (!flowCardSettings || !Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
     const nodeId = flowCardSettings.nodeId;
     const isDraft = String(nodeId).startsWith('draft-');
@@ -822,8 +880,12 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
   };
 
   const saveActive = async () => {
+    if (!canEditCards) return;
     if (!flowCardSettings || !flowCardSettingsDraft) return;
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+
+    const hasToken = Boolean(localStorage.getItem('token'));
+    if (!hasToken) return;
 
     const nodeId = flowCardSettings.nodeId;
     const node = nodes.find((n) => String(n.id) === String(nodeId));
@@ -960,7 +1022,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, {}>((_, ref) => {
   return (
     <div
       ref={containerRef}
-      className={classes.space_container}
+      className={`${classes.space_container} ${!canEditCards ? classes.space_container_readonly : ''}`.trim()}
       onContextMenu={handleContextMenu}
       onMouseDown={handleMouseDown}
       onClickCapture={handleClickCapture}

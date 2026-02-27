@@ -643,8 +643,15 @@ const Board = () => {
         };
     }, [hasValidBoardId, inviteToken, isInitialized, isLoggedIn, navigate, numericBoardId, tokenPresent]);
 
-    const isOwnerBoard = boardInfo?.myRole === 'owner';
-    const isGuestBoard = boardInfo?.myRole === 'guest' || boardInfo?.myRole === 'editer';
+    const resolvedMyRole: BoardParticipantRole | null = (() => {
+        if (!isLoggedIn) return null;
+        const v = (debugParticipantsData ?? participantsData)?.my_role ?? boardInfo?.myRole ?? null;
+        return v === 'owner' || v === 'guest' || v === 'editer' ? v : null;
+    })();
+
+    const isOwnerBoard = resolvedMyRole === 'owner';
+    const isGuestBoard = resolvedMyRole === 'guest' || resolvedMyRole === 'editer';
+    const canEditCards = resolvedMyRole === 'owner' || resolvedMyRole === 'editer';
 
     useEffect(() => {
         if (isOwnerBoard) return;
@@ -844,7 +851,7 @@ const Board = () => {
     return (
             <div className={classes.board_container}>
                 <div className={`${classes.board_flow_wrap} ${effectiveBoardMenuOpen ? classes.board_flow_shrink : ''}`.trim()}>
-                    <FlowBoard ref={flowBoardRef} />
+                    <FlowBoard ref={flowBoardRef} canEditCards={canEditCards} />
                 </div>
             <div ref={boardMenuRef} className={`${classes.board_menu_con} ${!effectiveBoardMenuOpen ? classes.menu_close : ''}`}>
                 <div className={classes.left_menu_btns}>
@@ -858,13 +865,15 @@ const Board = () => {
                     >
                         <Close />
                     </button>
-                    <button
-                        className={`${classes.left_menu_btn} ${classes.left_menu_btn_create_node}`.trim()}
-                        type="button"
-                        onClick={() => flowBoardRef.current?.createDraftNodeAtCenter()}
-                    >
-                        <Plus />
-                    </button>
+                    {canEditCards ? (
+                        <button
+                            className={`${classes.left_menu_btn} ${classes.left_menu_btn_create_node}`.trim()}
+                            type="button"
+                            onClick={() => flowBoardRef.current?.createDraftNodeAtCenter()}
+                        >
+                            <Plus />
+                        </button>
+                    ) : null}
                 </div>
                 <div className={classes.board_menu_}>
                     <div className={classes.board_info}>
