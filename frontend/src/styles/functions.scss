@@ -8,6 +8,14 @@
         #{math.div($yAxisIntersection, $base)}rem + #{$slope * 100}vw,
         #{math.div($max, $base)}rem);
 }
+@function fluid-prop-h($max, $min, $maxVH: 1080, $minVH: 640, $base: 16) {
+    $slope: math.div($max - $min, $maxVH - $minVH);
+    $yAxisIntersection: $min - $slope * $minVH;
+
+    @return clamp(#{math.div($min, $base)}rem,
+        #{math.div($yAxisIntersection, $base)}rem + #{$slope * 100}vh,
+        #{math.div($max, $base)}rem);
+}
 // h1 {
 //     padding-right: fluid-prop(size1, size2, width1, width2);
 // }
