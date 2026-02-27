@@ -137,6 +137,7 @@ const FriendsModal = () => {
   const [friendCodeCopyText, setFriendCodeCopyText] = useState<string | null>(null);
   const [isFriendCodeGenerating, setIsFriendCodeGenerating] = useState(false);
   const [isFriendCodeRegenerating, setIsFriendCodeRegenerating] = useState(false);
+  const [friendsListSearch, setFriendsListSearch] = useState("");
   const [friendSearchCode, setFriendSearchCode] = useState("");
   const [friendSearchMessage, setFriendSearchMessage] = useState<FriendSearchMessage>(null);
   const [isFriendSearching, setIsFriendSearching] = useState(false);
@@ -491,6 +492,11 @@ const FriendsModal = () => {
     setHighlightRequestId(requestId ?? null);
   };
 
+  useEffect(() => {
+    if (friendsModalOpen) return;
+    setFriendsListSearch("");
+  }, [friendsModalOpen]);
+
   const friendsListContent = useMemo(() => {
     if (!isInitialized) return <p>загрузка...</p>;
     if (!isAuth) return <p>войдите, чтобы пользоваться друзьями</p>;
@@ -500,9 +506,29 @@ const FriendsModal = () => {
       return <p>у вас пока нет друзей</p>;
     }
 
+    const query = friendsListSearch.trim().toLowerCase();
+    const filteredFriends = query
+      ? friends.filter((f) => {
+          const username = String(f.username || "").toLowerCase();
+          const nickname = String(f.nickname || "").toLowerCase();
+          return username.includes(query) || nickname.includes(query);
+        })
+      : friends;
+
     return (
-      <div className={classes.friends_item_con}>
-        {friends.map((friend) => {
+      <>
+        <div className={classes.friend_search_controls}>
+          <input
+            type="text"
+            value={friendsListSearch}
+            placeholder="Поиск по никнейму или юзернейму"
+            onChange={(e) => setFriendsListSearch(e.target.value)}
+            autoComplete="off"
+          />
+        </div>
+
+        <div className={classes.friends_item_con}>
+          {filteredFriends.map((friend) => {
           const status = friendStatusById[friend.id]?.status ?? "none";
           const requestId = friendStatusById[friend.id]?.requestId;
           const avatarSrc = friend.avatar
@@ -540,11 +566,13 @@ const FriendsModal = () => {
             </div>
           );
         })}
-      </div>
+        </div>
+      </>
     );
   }, [
     closeFriendsModal,
     friends,
+    friendsListSearch,
     getButtonClass,
     getButtonText,
     isAuth,

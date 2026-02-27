@@ -1,27 +1,38 @@
 
 .board_container{
     --board-menu-transition: 0.5s;
+    --board-menu-width: min(450px, 80vw);
     display: flex;
+    position: relative;
     height: 100dvh;
     overflow: hidden;
 }
+.board_flow_wrap{
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    width: 100%;
+    margin-right: 0;
+    transition: margin-right var(--board-menu-transition) ease;
+}
+.board_flow_shrink{
+    margin-right: var(--board-menu-width);
+}
 .board_menu_con{
-    position: relative;
+    position: absolute;
+    top: 0;
+    right: 0px;
     height: 100%;
     background-color: var(--grey20);
-    width: min(450px, 80%);
+    width: var(--board-menu-width);
     border-left: var(--border);
-    margin-left: 0;
-    transform: translateX(0);
     transition:
-        margin-left var(--board-menu-transition) ease,
         transform var(--board-menu-transition) ease;
-    flex-shrink: 0;
     overflow: visible;
+    transform: translateX(0);
 }
 .menu_close{
-    margin-left: -450px;
-    transform: translateX(100%);
+    transform: translateX(var(--board-menu-width));
 }
 .close_btn{
     position: absolute;

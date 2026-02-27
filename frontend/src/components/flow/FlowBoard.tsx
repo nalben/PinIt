@@ -122,7 +122,7 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
 
 const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
   return (
-    <div className={classes.node_circle}>
+    <div className={`${classes.node_circle} ${data.imageSrc ? classes.node_circle_has_image : ''}`.trim()}>
       <div
         className={classes.circle_content}
         style={
@@ -959,6 +959,7 @@ const FlowBoard: React.FC = () => {
             position="bottom-left"
             pannable
             zoomable
+            className={classes.minimap}
             maskColor="rgba(0, 0, 0, 0.35)"
             nodeColor="var(--pink)"
             nodeStrokeColor="var(--pink)"

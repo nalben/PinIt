@@ -52,6 +52,8 @@ const Board = () => {
     const setBoardSettingsModalParticipantsInnerViewNext = useUIStore((s) => s.setBoardSettingsModalParticipantsInnerViewNext);
     const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
     const [forcedAuthView, setForcedAuthView] = useState<AuthView>('login');
+    const [hasMounted, setHasMounted] = useState(false);
+    const effectiveBoardMenuOpen = hasMounted ? isBoardMenuOpen : false;
 
     const [debugParticipantsData, setDebugParticipantsData] = useState<BoardParticipantsResponse | null>(null);
     const [removeConfirmParticipantId, setRemoveConfirmParticipantId] = useState<number | null>(null);
@@ -229,12 +231,20 @@ const Board = () => {
         setRoleLoadingParticipantId(null);
     }, [boardId]);
 
+    useEffect(() => {
+        setHasMounted(true);
+    }, []);
+
     useLayoutEffect(() => {
+        if (typeof window === 'undefined') return;
+        closeBoardMenu();
+    }, [closeBoardMenu]);
+
+    useEffect(() => {
         if (typeof window === 'undefined') return;
         const shouldOpen = window.innerWidth >= 1440;
         if (shouldOpen) openBoardMenu();
-        else closeBoardMenu();
-    }, [closeBoardMenu, openBoardMenu]);
+    }, [openBoardMenu]);
 
     const boardInfo = useMemo(() => {
         const id = Number(boardId);
@@ -814,9 +824,11 @@ const Board = () => {
     };
 
     return (
-        <div className={classes.board_container}>
-            <FlowBoard />
-            <div className={`${classes.board_menu_con} ${!isBoardMenuOpen ? classes.menu_close : ''}`}>
+            <div className={classes.board_container}>
+                <div className={`${classes.board_flow_wrap} ${effectiveBoardMenuOpen ? classes.board_flow_shrink : ''}`.trim()}>
+                    <FlowBoard />
+                </div>
+            <div className={`${classes.board_menu_con} ${!effectiveBoardMenuOpen ? classes.menu_close : ''}`}>
                 <button className={classes.close_btn} onClick={toggleBoardMenu} type="button">
                     <Close />
                 </button>

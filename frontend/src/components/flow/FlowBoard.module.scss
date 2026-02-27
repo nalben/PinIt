@@ -286,6 +286,9 @@
     & button:nth-child(1){
         width: 100%;
         height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 }
 
@@ -446,12 +449,10 @@
 }
 
 .node_lock_overlay_rectangle{
-    bottom: -0.2px;
-    right: -0.2px;
-    border-right: none;
-    border-bottom: none;
-    border-top-left-radius: 11px;
-    border-bottom-right-radius: 30%;
+    bottom: -3px;
+    right: -3px;
+    border-top-left-radius: 38%;
+    border-bottom-right-radius: 38%;
 }
 .node_lock_overlay_rhombus{
     border-radius: 100%;
@@ -460,6 +461,7 @@
     padding: 7px;
 }
 .node_lock_overlay_circle{
+    background: transparent;
     bottom: 0px;
     top: 50%;
     right: 0px;
@@ -471,6 +473,20 @@
         position: absolute;
         bottom: 3px;
         right: 3px;
+    }
+}
+
+.minimap{
+    height: fluid-prop(150, 100, 1920, 320);
+    & svg{
+        height: fluid-prop(150, 100, 1920, 320);
+        width: auto;
+    }
+}
+
+.node_circle_has_image{
+    & .node_lock_overlay_circle{
+        background: rgba(0, 0, 0, 0.55);
     }
 }
 
