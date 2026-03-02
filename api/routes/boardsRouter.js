@@ -80,6 +80,7 @@ router.patch('/:board_id/public', boardsController.updateBoardPublic);
 router.patch('/:board_id/image', maybeUploadSingleImage, boardsController.updateBoardImage);
 router.post('/:board_id/cards', boardsController.createCard);
 router.get('/:board_id/cards', boardsController.getBoardCards);
+router.patch('/:board_id/cards/:card_id', boardsController.updateCard);
 router.patch('/:board_id/cards/:card_id/lock', boardsController.updateCardLock);
 router.patch('/:board_id/cards/:card_id/image', maybeUploadSingleImage, boardsController.updateCardImage);
 router.patch('/:board_id/cards/:card_id/type', boardsController.updateCardType);

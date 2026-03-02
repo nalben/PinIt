@@ -1051,12 +1051,23 @@ Update (2026-02-26)
 - Cards type enum includes `diamond` (in addition to `circle`/`rectangle`).
 - Cards table includes `is_locked` boolean (TINYINT(1)) to disable dragging in UI.
 - New cards endpoints:
+  - `PATCH /api/boards/:board_id/cards/:card_id` вЂ” batch update `cards` fields (`title`, `type`, `is_locked`, `x`, `y`) in one request (owner/`editer` only).
   - `POST /api/boards/:board_id/cards` (owner/`editer` only) — create a card row + `carddetails` row.
   - `GET /api/boards/:board_id/cards` — list board cards for authorized users (owner/guest/`editer`).
   - `GET /api/boards/public/:board_id/cards` — list board cards for public boards (auth optional, blocked users filtered).
   - `PATCH /api/boards/:board_id/cards/:card_id/lock` — toggle `cards.is_locked` (owner/`editer` only).
   - `PATCH /api/boards/:board_id/cards/:card_id/image` — upload/remove `cards.image_path` (multipart `image`, max 5MB; owner/`editer` only).
   - `PATCH /api/boards/:board_id/cards/:card_id/type` — update `cards.type` (owner/`editer` only).
+
+Update (2026-03-02)
+
+- `boards:updated` socket payload now also carries card-level invalidation reasons from the backend controllers:
+  - `reason: 'card_created' | 'card_updated' | 'card_deleted' | 'card_moved'` and `card_id` (in addition to `board_id`).
+  - For `reason: 'card_moved'` payload also includes `x` and `y` (new coordinates).
+  - For `reason: 'card_updated'` payload may include a patch of updated card fields: `title`, `type`, `is_locked`, `image_path`, `x`, `y`.
+- `frontend/src/pages/board/Board.tsx` derives card-edit permissions from live `my_role` (participants) so role changes to `editer` enable card editing immediately (and hide create-node action when not allowed).
+- `frontend/src/components/flow/FlowBoard.tsx` listens to `boards:updated` and reloads cards list on `card_*` reasons for the current board.
+- For non-auth users on public boards, `frontend/src/components/flow/FlowBoard.tsx` polls cards via `GET /api/boards/public/:board_id/cards` every 10 seconds (no socket available without token).
 
 1. Frontend routing and app entry
 

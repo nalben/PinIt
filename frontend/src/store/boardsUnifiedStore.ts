@@ -433,6 +433,18 @@ export const useBoardsUnifiedStore = create<BoardsUnifiedState>((set, get) => {
 
       const membershipReasons = new Set(['join_public', 'invite_accepted', 'invite_link_accepted', 'left']);
 
+      // Card updates should not refresh boards lists/meta.
+      // (Cards are handled on the board page itself.)
+      if (
+        reason === 'card_created' ||
+        reason === 'card_updated' ||
+        reason === 'card_deleted' ||
+        reason === 'cards_changed' ||
+        reason === 'card_moved'
+      ) {
+        return;
+      }
+
       if (reason === 'removed' && boardId) {
         if (!affectsMe) return;
         removeFromList('public', boardId);

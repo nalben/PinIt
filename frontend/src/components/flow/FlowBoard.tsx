@@ -95,6 +95,9 @@ const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
           : undefined
       }
     >
+      <svg className={classes.flow_hit_svg} viewBox="0 0 240 80" aria-hidden="true">
+        <rect className={classes.flow_drag_handle} x="0" y="0" width="240" height="80" rx="10" ry="10" />
+      </svg>
       {data.isLocked ? (
         <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rectangle}`}>
           <LockClose />
@@ -115,7 +118,11 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
             ? { backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : undefined
         }
-      />
+      >
+        <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
+          <polygon className={classes.flow_drag_handle} points="60,0 120,60 60,120 0,60" />
+        </svg>
+      </div>
       {data.isLocked ? (
         <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rhombus}`}>
           <LockClose />
@@ -136,7 +143,11 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
             ? { backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : undefined
         }
-      />
+      >
+        <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
+          <circle className={classes.flow_drag_handle} cx="60" cy="60" r="60" />
+        </svg>
+      </div>
       {data.isLocked ? (
         <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_circle}`}>
           <LockClose />
@@ -178,6 +189,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
   const [nodes, setNodes] = useState<RFNode<FlowNodeData>[]>([]);
   const [edges] = useState<Edge[]>([]);
+  const draggingNodeIdRef = useRef<string | null>(null);
+  const draggingNodeStartPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const [reloadSeq, setReloadSeq] = useState(0);
   const flowCardSettingsOpen = useUIStore((s) => s.flowCardSettingsOpen);
   const flowCardSettings = useUIStore((s) => s.flowCardSettings);
@@ -188,9 +201,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
 
   const activeNodeId = flowCardSettingsOpen ? flowCardSettings?.nodeId ?? null : null;
   const isEditing = Boolean(flowCardSettingsOpen && flowCardSettings && flowCardSettingsDraft && activeNodeId);
+  const editingStateRef = useRef<{ isEditing: boolean; activeNodeId: string | null }>({ isEditing: false, activeNodeId: null });
   const visualDraftRef = useRef<Omit<NonNullable<typeof flowCardSettingsDraft>, never> | null>(null);
   const [visualEditing, setVisualEditing] = useState(false);
   const visualEditingTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    editingStateRef.current = { isEditing, activeNodeId };
+  }, [activeNodeId, isEditing]);
 
   useEffect(() => {
     if (isEditing && flowCardSettingsDraft) {
@@ -253,12 +271,100 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
 
     const unsubscribe = connectSocket({
       onBoardsUpdate: (data) => {
-        const cmd = data as { reason?: unknown; board_id?: unknown };
+        const cmd = data as {
+          reason?: unknown;
+          board_id?: unknown;
+          card_id?: unknown;
+          x?: unknown;
+          y?: unknown;
+          title?: unknown;
+          type?: unknown;
+          is_locked?: unknown;
+          image_path?: unknown;
+        };
         const boardIdRaw = cmd?.board_id;
         const boardIdParsed = typeof boardIdRaw === 'number' ? boardIdRaw : Number(boardIdRaw);
         if (!Number.isFinite(boardIdParsed) || boardIdParsed !== numericBoardId) return;
 
         const reason = typeof cmd?.reason === 'string' ? cmd.reason : '';
+
+        if (reason === 'card_moved') {
+          const cardIdRaw = cmd?.card_id;
+          const cardId = typeof cardIdRaw === 'number' ? String(cardIdRaw) : String(cardIdRaw || '');
+          const x = Number(cmd?.x);
+          const y = Number(cmd?.y);
+          if (!cardId || !Number.isFinite(x) || !Number.isFinite(y)) return;
+          setNodes((prev) => prev.map((n) => (String(n.id) === cardId ? { ...n, position: { x, y } } : n)));
+          return;
+        }
+
+        if (reason === 'card_updated') {
+          const cardIdRaw = cmd?.card_id;
+          const cardId = typeof cardIdRaw === 'number' ? String(cardIdRaw) : String(cardIdRaw || '');
+
+          if (cardId) {
+            const patchTitle = typeof cmd?.title === 'string' ? cmd.title : undefined;
+            const patchTypeRaw = typeof cmd?.type === 'string' ? cmd.type : undefined;
+            const patchLockedRaw = cmd?.is_locked;
+            const patchLocked =
+              typeof patchLockedRaw === 'number'
+                ? Boolean(patchLockedRaw)
+                : typeof patchLockedRaw === 'boolean'
+                  ? patchLockedRaw
+                  : undefined;
+            const patchX = Number(cmd?.x);
+            const patchY = Number(cmd?.y);
+            const hasXY = Number.isFinite(patchX) && Number.isFinite(patchY);
+            const patchImagePath =
+              typeof cmd?.image_path === 'string' || cmd?.image_path === null ? (cmd.image_path as string | null) : undefined;
+
+            const patchType: FlowNodeType | undefined =
+              patchTypeRaw === 'diamond' ? 'rhombus' : patchTypeRaw === 'circle' || patchTypeRaw === 'rectangle' ? patchTypeRaw : undefined;
+
+            const hasAnyPatch =
+              patchTitle !== undefined ||
+              patchType !== undefined ||
+              patchLocked !== undefined ||
+              hasXY ||
+              patchImagePath !== undefined;
+
+            if (hasAnyPatch) {
+              setNodes((prev) =>
+                prev.map((n) => {
+                  if (String(n.id) !== cardId) return n;
+
+                  const nextType = patchType ?? (n.type as FlowNodeType);
+                  const nextPos = hasXY ? { x: patchX, y: patchY } : n.position;
+                  const nextTitle = patchTitle ?? n.data.title;
+                  const nextLocked = patchLocked ?? n.data.isLocked;
+
+                  const nextImageSrc =
+                    patchImagePath === undefined
+                      ? n.data.imageSrc
+                      : !patchImagePath
+                        ? null
+                        : patchImagePath.startsWith('/uploads/')
+                          ? `${API_URL}${patchImagePath}`
+                          : patchImagePath;
+
+                  return {
+                    ...n,
+                    type: nextType,
+                    position: nextPos,
+                    draggable: canEditCards && !nextLocked,
+                    data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc }
+                  };
+                })
+              );
+              return;
+            }
+          }
+
+          const until = suppressSocketReloadByCardIdRef.current.get(cardId);
+          if (cardId && until && until > Date.now()) return;
+          if (cardId && until) suppressSocketReloadByCardIdRef.current.delete(cardId);
+        }
+
         if (reason === 'card_created' || reason === 'card_updated' || reason === 'card_deleted' || reason === 'cards_changed') {
           setReloadSeq((v) => v + 1);
         }
@@ -266,7 +372,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     });
 
     return () => unsubscribe?.();
-  }, [isAuth, numericBoardId]);
+  }, [canEditCards, isAuth, numericBoardId]);
 
   useEffect(() => {
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
@@ -291,6 +397,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const [draftSaving, setDraftSaving] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const showTopAlarm = useUIStore((s) => s.showTopAlarm);
+  const suppressSocketReloadByCardIdRef = useRef<Map<string, number>>(new Map());
 
   const onNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
     setNodes((prev) => applyNodeChanges(changes, prev));
@@ -361,6 +468,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         const nextNodes: RFNode<FlowNodeData>[] = cards.map((c) => ({
           id: String(c.id),
           type: mapApiTypeToNodeType(c.type),
+          className: 'flow_node_wrapper',
+          dragHandle: `.${classes.flow_drag_handle}`,
           position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
           draggable: canEditCards && !Boolean(c.is_locked),
           data: {
@@ -372,10 +481,22 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
 
         if (cancelled) return;
         setNodes((prev) => {
+          const editing = editingStateRef.current;
           const draft = prev.filter((n) => String(n.id).startsWith('draft-'));
           const draftIds = new Set(draft.map((n) => String(n.id)));
-          const merged = [...draft, ...nextNodes.filter((n) => !draftIds.has(String(n.id)))];
-          return merged;
+          const preserveActive =
+            editing.isEditing && editing.activeNodeId && !String(editing.activeNodeId).startsWith('draft-')
+              ? prev.find((n) => String(n.id) === String(editing.activeNodeId)) ?? null
+              : null;
+
+          const preserveIds = new Set<string>(draftIds);
+          if (preserveActive) preserveIds.add(String(preserveActive.id));
+
+          return [
+            ...draft,
+            ...(preserveActive && !draftIds.has(String(preserveActive.id)) ? [preserveActive] : []),
+            ...nextNodes.filter((n) => !preserveIds.has(String(n.id))),
+          ];
         });
       } catch (e) {
         try {
@@ -384,6 +505,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           const nextNodes: RFNode<FlowNodeData>[] = cards.map((c) => ({
             id: String(c.id),
             type: mapApiTypeToNodeType(c.type),
+            className: 'flow_node_wrapper',
+            dragHandle: `.${classes.flow_drag_handle}`,
             position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
             draggable: canEditCards && !Boolean(c.is_locked),
             data: {
@@ -394,9 +517,22 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           }));
           if (cancelled) return;
           setNodes((prev) => {
+            const editing = editingStateRef.current;
             const draft = prev.filter((n) => String(n.id).startsWith('draft-'));
             const draftIds = new Set(draft.map((n) => String(n.id)));
-            return [...draft, ...nextNodes.filter((n) => !draftIds.has(String(n.id)))];
+            const preserveActive =
+              editing.isEditing && editing.activeNodeId && !String(editing.activeNodeId).startsWith('draft-')
+                ? prev.find((n) => String(n.id) === String(editing.activeNodeId)) ?? null
+                : null;
+
+            const preserveIds = new Set<string>(draftIds);
+            if (preserveActive) preserveIds.add(String(preserveActive.id));
+
+            return [
+              ...draft,
+              ...(preserveActive && !draftIds.has(String(preserveActive.id)) ? [preserveActive] : []),
+              ...nextNodes.filter((n) => !preserveIds.has(String(n.id))),
+            ];
           });
         } catch (e2) {
           // ignore
@@ -721,6 +857,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       const target = e.target as globalThis.Node | null;
       const panelEl = createPanelRef.current;
       if (panelEl && target && panelEl.contains(target)) return;
+      const targetEl = target instanceof HTMLElement ? target : null;
+      if (targetEl?.closest?.('.react-flow__node')) return;
 
       activePointerId = e.pointerId;
       startX = e.clientX;
@@ -743,6 +881,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       const target = e.target as globalThis.Node | null;
       const panelEl = createPanelRef.current;
       if (panelEl && target && panelEl.contains(target)) return;
+      const targetEl = target instanceof HTMLElement ? target : null;
+      if (targetEl?.closest?.('.react-flow__node')) return;
 
       if (!moved) cancelCardSettings();
     };
@@ -928,20 +1068,25 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           prev.map((n) => (String(n.id) === String(nodeId) ? { ...n, id: createdId } : n))
         );
       } else {
-        if (flowCardSettings.title !== title) {
-          await axiosInstance.patch(`/api/boards/${numericBoardId}/cards/${serverNodeId}/title`, { title });
-        }
+        const patch = {} as Partial<{ title: string; type: string; is_locked: boolean; x: number; y: number }>;
+        if (flowCardSettings.title !== title) patch.title = title;
         if (flowCardSettings.type !== flowCardSettingsDraft.type) {
-          await axiosInstance.patch(`/api/boards/${numericBoardId}/cards/${serverNodeId}/type`, { type: typeForDb });
+          patch.type = typeForDb;
+          patch.x = node.position.x;
+          patch.y = node.position.y;
         }
-        if (flowCardSettings.isLocked !== flowCardSettingsDraft.isLocked) {
-          await axiosInstance.patch(`/api/boards/${numericBoardId}/cards/${serverNodeId}/lock`, { is_locked: flowCardSettingsDraft.isLocked });
+        if (flowCardSettings.isLocked !== flowCardSettingsDraft.isLocked) patch.is_locked = Boolean(flowCardSettingsDraft.isLocked);
+
+        if (Object.keys(patch).length) {
+          suppressSocketReloadByCardIdRef.current.set(String(serverNodeId), Date.now() + 1500);
+          await axiosInstance.patch(`/api/boards/${numericBoardId}/cards/${serverNodeId}`, patch);
         }
       }
 
       let nextImageSrc = flowCardSettingsDraft.imageSrc;
 
       if (pendingImageFile) {
+        suppressSocketReloadByCardIdRef.current.set(String(serverNodeId), Date.now() + 1500);
         setImageUploading(true);
         const form = new FormData();
         form.append('image', pendingImageFile);
@@ -952,6 +1097,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         );
         nextImageSrc = resolveImageSrc(res.data?.image_path ?? null);
       } else if (flowCardSettings.imageSrc && !flowCardSettingsDraft.imageSrc) {
+        suppressSocketReloadByCardIdRef.current.set(String(serverNodeId), Date.now() + 1500);
         const res = await axiosInstance.patch<{ image_path: string | null }>(
           `/api/boards/${numericBoardId}/cards/${serverNodeId}/image`,
           { image: null }
@@ -1054,14 +1200,36 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           onInit={setReactFlow}
           nodeTypes={NODE_TYPES}
           onNodesChange={onNodesChange}
+          onNodeDragStart={(_, node) => {
+            const typed = node as RFNode<FlowNodeData>;
+            const id = String(typed.id);
+            draggingNodeIdRef.current = id;
+            draggingNodeStartPosRef.current = {
+              id,
+              x: Number(typed.position?.x) || 0,
+              y: Number(typed.position?.y) || 0,
+            };
+          }}
           onNodeDragStop={(_, node) => {
             const typed = node as RFNode<FlowNodeData>;
+            const id = String(typed.id);
+            if (draggingNodeIdRef.current !== id) return;
+            draggingNodeIdRef.current = null;
+            const start = draggingNodeStartPosRef.current;
+            draggingNodeStartPosRef.current = null;
+
             const x = Number(typed.position?.x);
             const y = Number(typed.position?.y);
             if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+            if (start && start.id === id) {
+              const moved = Math.hypot(x - start.x, y - start.y) >= 1;
+              if (!moved) return;
+            }
             void persistCardPosition(String(typed.id), x, y);
           }}
-          onNodeClick={(_, node) => {
+          onNodeClick={(event, node) => {
+            const target = event.target as Element | null;
+            if (!target?.closest(`.${classes.flow_drag_handle}`)) return;
             const typed = node as RFNode<FlowNodeData>;
             if (flowCardSettingsOpen && activeNodeId && String(typed.id) === String(activeNodeId)) {
               closeContextMenu();

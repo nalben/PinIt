@@ -2134,7 +2134,7 @@ exports.updateCardLock = async (req, res) => {
     }
 
     await db.execute(`UPDATE cards SET is_locked = ? WHERE id = ? AND board_id = ?`, [is_locked ? 1 : 0, cardId, boardId]);
-    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId, is_locked: is_locked ? 1 : 0 }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, is_locked: is_locked ? 1 : 0 });
   } catch (e) {
     console.error(e);
@@ -2217,7 +2217,7 @@ exports.updateCardImage = async (req, res) => {
       await safeUnlinkUpload(oldImage);
     }
 
-    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId, image_path: newImage }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, image_path: newImage });
   } catch (e) {
     if (req.file && newImage) {
@@ -2225,6 +2225,151 @@ exports.updateCardImage = async (req, res) => {
     }
     console.error(e);
     return res.status(500).json({ message: 'Ошибка обновления картинки' });
+  }
+};
+
+exports.updateCard = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹' });
+    }
+
+    const body = req.body || {};
+
+    const hasTitle = Object.prototype.hasOwnProperty.call(body, 'title');
+    const hasType = Object.prototype.hasOwnProperty.call(body, 'type');
+    const hasLocked = Object.prototype.hasOwnProperty.call(body, 'is_locked');
+    const hasX = Object.prototype.hasOwnProperty.call(body, 'x');
+    const hasY = Object.prototype.hasOwnProperty.call(body, 'y');
+
+    if (!hasTitle && !hasType && !hasLocked && !hasX && !hasY) {
+      return res.status(400).json({ message: 'РќРµС‚ РїРѕР»РµР№ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ' });
+    }
+
+    let rawTitle = null;
+    if (hasTitle) {
+      rawTitle = String(body?.title || '').trim();
+      if (!rawTitle || rawTitle.length > 50) {
+        return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Р·Р°РіРѕР»РѕРІРѕРє' });
+      }
+    }
+
+    let rawType = null;
+    if (hasType) {
+      rawType = String(body?.type || '').trim();
+      const allowedTypes = new Set(['rectangle', 'circle', 'diamond']);
+      if (!allowedTypes.has(rawType)) {
+        return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РёРї' });
+      }
+    }
+
+    const is_locked = hasLocked ? Boolean(body?.is_locked) : null;
+
+    let x = null;
+    let y = null;
+    if (hasX || hasY) {
+      x = Number(body?.x);
+      y = Number(body?.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹' });
+      }
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'РќРµС‚ РґРѕСЃС‚СѓРїР°' });
+    }
+
+    const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
+    if (!cardRows.length) {
+      return res.status(404).json({ message: 'Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°' });
+    }
+
+    const set = [];
+    const params = [];
+
+    if (rawTitle !== null) {
+      set.push('title = ?');
+      params.push(rawTitle);
+    }
+
+    if (rawType !== null) {
+      set.push('type = ?');
+      params.push(rawType);
+    }
+
+    if (is_locked !== null) {
+      set.push('is_locked = ?');
+      params.push(is_locked ? 1 : 0);
+    }
+
+    if (x !== null && y !== null) {
+      set.push('x = ?');
+      set.push('y = ?');
+      params.push(x);
+      params.push(y);
+    }
+
+    if (!set.length) {
+      return res.status(400).json({ message: 'РќРµС‚ РїРѕР»РµР№ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ' });
+    }
+
+    params.push(cardId, boardId);
+    await db.execute(`UPDATE cards SET ${set.join(', ')} WHERE id = ? AND board_id = ?`, params);
+
+    const payload = { id: cardId, board_id: boardId };
+    const socketPatch = { reason: 'card_updated', card_id: cardId };
+    if (rawTitle !== null) {
+      payload.title = rawTitle;
+      socketPatch.title = rawTitle;
+    }
+    if (rawType !== null) {
+      payload.type = rawType;
+      socketPatch.type = rawType;
+    }
+    if (is_locked !== null) {
+      const lockedValue = is_locked ? 1 : 0;
+      payload.is_locked = lockedValue;
+      socketPatch.is_locked = lockedValue;
+    }
+    if (x !== null && y !== null) {
+      payload.x = x;
+      payload.y = y;
+      socketPatch.x = x;
+      socketPatch.y = y;
+    }
+
+    emitBoardsUpdatedToBoardUsers(req, boardId, socketPatch, [user_id]);
+    return res.status(200).json(payload);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ' });
   }
 };
 
@@ -2278,7 +2423,7 @@ exports.updateCardType = async (req, res) => {
     }
 
     await db.execute(`UPDATE cards SET type = ? WHERE id = ? AND board_id = ?`, [rawType, cardId, boardId]);
-    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId, type: rawType }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, type: rawType });
   } catch (e) {
     console.error(e);
@@ -2335,7 +2480,7 @@ exports.updateCardTitle = async (req, res) => {
     }
 
     await db.execute(`UPDATE cards SET title = ? WHERE id = ? AND board_id = ?`, [rawTitle, cardId, boardId]);
-    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId, title: rawTitle }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, title: rawTitle });
   } catch (e) {
     console.error(e);
@@ -2392,7 +2537,7 @@ exports.updateCardPosition = async (req, res) => {
     }
 
     await db.execute(`UPDATE cards SET x = ?, y = ? WHERE id = ? AND board_id = ?`, [x, y, cardId, boardId]);
-    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId }, [user_id]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_moved', card_id: cardId, x, y }, [user_id]);
     return res.status(200).json({ id: cardId, board_id: boardId, x, y });
   } catch (e) {
     console.error(e);
