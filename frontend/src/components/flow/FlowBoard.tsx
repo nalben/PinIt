@@ -103,7 +103,7 @@ const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
           <LockClose />
         </div>
       ) : null}
-      <div className={classes.node_rectangle_title}>{data.title}</div>
+      <div className={`${classes.node_rectangle_title} ${classes.flow_drag_handle}`.trim()}>{data.title}</div>
     </div>
   );
 };
@@ -173,6 +173,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const longPressTimeoutRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ pointerId: number; clientX: number; clientY: number } | null>(null);
   const suppressClickRef = useRef(false);
+  const manualPanRef = useRef<{
+    pointerId: number;
+    clientX: number;
+    clientY: number;
+    viewport: { x: number; y: number; zoom: number };
+    moved: boolean;
+  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     isOpen: boolean;
     x: number; // viewport (fixed) coordinates
@@ -337,6 +344,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                   const nextPos = hasXY ? { x: patchX, y: patchY } : n.position;
                   const nextTitle = patchTitle ?? n.data.title;
                   const nextLocked = patchLocked ?? n.data.isLocked;
+                  const nextDragHandle = nextType === 'rectangle' ? `.${classes.node_rectangle}` : `.${classes.flow_drag_handle}`;
 
                   const nextImageSrc =
                     patchImagePath === undefined
@@ -350,6 +358,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                   return {
                     ...n,
                     type: nextType,
+                    dragHandle: nextDragHandle,
                     position: nextPos,
                     draggable: canEditCards && !nextLocked,
                     data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc }
@@ -465,19 +474,23 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         const res = await axiosInstance.get<ApiCard[]>(url);
         const cards = Array.isArray(res.data) ? res.data : [];
 
-        const nextNodes: RFNode<FlowNodeData>[] = cards.map((c) => ({
-          id: String(c.id),
-          type: mapApiTypeToNodeType(c.type),
-          className: 'flow_node_wrapper',
-          dragHandle: `.${classes.flow_drag_handle}`,
-          position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
-          draggable: canEditCards && !Boolean(c.is_locked),
-          data: {
-            title: (c.title ?? 'title').trim() || 'title',
-            imageSrc: resolveImageSrc(c.image_path ?? null),
-            isLocked: Boolean(c.is_locked),
-          },
-        }));
+        const nextNodes: RFNode<FlowNodeData>[] = cards.map((c) => {
+          const nodeType = mapApiTypeToNodeType(c.type);
+          const dragHandle = nodeType === 'rectangle' ? `.${classes.node_rectangle}` : `.${classes.flow_drag_handle}`;
+          return {
+            id: String(c.id),
+            type: nodeType,
+            className: 'flow_node_wrapper',
+            dragHandle,
+            position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
+            draggable: canEditCards && !Boolean(c.is_locked),
+            data: {
+              title: (c.title ?? 'title').trim() || 'title',
+              imageSrc: resolveImageSrc(c.image_path ?? null),
+              isLocked: Boolean(c.is_locked),
+            },
+          };
+        });
 
         if (cancelled) return;
         setNodes((prev) => {
@@ -502,19 +515,23 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         try {
           const res = await axiosInstance.get<ApiCard[]>(`/api/boards/public/${numericBoardId}/cards`);
           const cards = Array.isArray(res.data) ? res.data : [];
-          const nextNodes: RFNode<FlowNodeData>[] = cards.map((c) => ({
-            id: String(c.id),
-            type: mapApiTypeToNodeType(c.type),
-            className: 'flow_node_wrapper',
-            dragHandle: `.${classes.flow_drag_handle}`,
-            position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
-            draggable: canEditCards && !Boolean(c.is_locked),
-            data: {
-              title: (c.title ?? 'title').trim() || 'title',
-              imageSrc: resolveImageSrc(c.image_path ?? null),
-              isLocked: Boolean(c.is_locked),
-            },
-          }));
+          const nextNodes: RFNode<FlowNodeData>[] = cards.map((c) => {
+            const nodeType = mapApiTypeToNodeType(c.type);
+            const dragHandle = nodeType === 'rectangle' ? `.${classes.node_rectangle}` : `.${classes.flow_drag_handle}`;
+            return {
+              id: String(c.id),
+              type: nodeType,
+              className: 'flow_node_wrapper',
+              dragHandle,
+              position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
+              draggable: canEditCards && !Boolean(c.is_locked),
+              data: {
+                title: (c.title ?? 'title').trim() || 'title',
+                imageSrc: resolveImageSrc(c.image_path ?? null),
+                isLocked: Boolean(c.is_locked),
+              },
+            };
+          });
           if (cancelled) return;
           setNodes((prev) => {
             const editing = editingStateRef.current;
@@ -688,6 +705,36 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     longPressStartRef.current = null;
   }, []);
 
+  const handlePointerDownCapture = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!reactFlow) return;
+    if (!e.isPrimary) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+    const targetEl = e.target as Element | null;
+    const panelEl = createPanelRef.current;
+    const menuEl = contextMenuRef.current;
+    if (panelEl && targetEl && panelEl.contains(targetEl)) return;
+    if (menuEl && targetEl && menuEl.contains(targetEl)) return;
+
+    const nodeEl = targetEl?.closest('.react-flow__node.flow_node_wrapper');
+    if (!nodeEl) return;
+    if (targetEl?.closest(`.${classes.node_rectangle}`)) return;
+    if (targetEl?.closest(`.${classes.flow_drag_handle}`)) return;
+
+    manualPanRef.current = {
+      pointerId: e.pointerId,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      viewport: reactFlow.getViewport(),
+      moved: false,
+    };
+    containerRef.current?.setPointerCapture(e.pointerId);
+
+    closeContextMenu();
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType !== 'touch') return;
     if (!e.isPrimary) return;
@@ -715,6 +762,19 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pan = manualPanRef.current;
+    if (pan && e.pointerId === pan.pointerId) {
+      const dx = e.clientX - pan.clientX;
+      const dy = e.clientY - pan.clientY;
+      if (!pan.moved && Math.hypot(dx, dy) > 2) pan.moved = true;
+      reactFlow?.setViewport(
+        { x: pan.viewport.x + dx, y: pan.viewport.y + dy, zoom: pan.viewport.zoom },
+        { duration: 0 }
+      );
+      e.preventDefault();
+      return;
+    }
+
     const start = longPressStartRef.current;
     if (!start) return;
     if (e.pointerId !== start.pointerId) return;
@@ -722,6 +782,24 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pan = manualPanRef.current;
+    if (pan && e.pointerId === pan.pointerId) {
+      manualPanRef.current = null;
+      try {
+        containerRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+
+      if (!pan.moved) {
+        closeContextMenu();
+        if (flowCardSettingsOpen) cancelCardSettings();
+      }
+
+      e.preventDefault();
+      return;
+    }
+
     const start = longPressStartRef.current;
     if (!start) return;
     if (e.pointerId !== start.pointerId) return;
@@ -761,6 +839,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
 
           const prevType = n.type as FlowNodeType;
           const nextType = patch.type ?? prevType;
+          const nextDragHandle = nextType === 'rectangle' ? `.${classes.node_rectangle}` : `.${classes.flow_drag_handle}`;
           const position =
             nextType === prevType
               ? n.position
@@ -776,6 +855,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           return {
             ...n,
             type: nextType,
+            dragHandle: nextDragHandle,
             position,
             draggable: canEditCards && !nextLocked,
             data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc }
@@ -921,6 +1001,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     const draftNode: RFNode<FlowNodeData> = {
       id,
       type: startType,
+      className: 'flow_node_wrapper',
+      dragHandle: `.${classes.node_rectangle}`,
       position,
       data: { title: startTitle, imageSrc: null, isLocked: false },
       draggable: canEditCards,
@@ -1183,6 +1265,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       onContextMenu={handleContextMenu}
       onMouseDown={handleMouseDown}
       onClickCapture={handleClickCapture}
+      onPointerDownCapture={handlePointerDownCapture}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -1229,8 +1312,11 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           }}
           onNodeClick={(event, node) => {
             const target = event.target as Element | null;
-            if (!target?.closest(`.${classes.flow_drag_handle}`)) return;
             const typed = node as RFNode<FlowNodeData>;
+            const clickedShape =
+              Boolean(target?.closest(`.${classes.flow_drag_handle}`)) ||
+              (String(typed.type) === 'rectangle' && Boolean(target?.closest(`.${classes.node_rectangle}`)));
+            if (!clickedShape) return;
             if (flowCardSettingsOpen && activeNodeId && String(typed.id) === String(activeNodeId)) {
               closeContextMenu();
               return;

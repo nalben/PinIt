@@ -4,6 +4,22 @@
     position: relative;
 }
 
+.flow_hit_svg{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+}
+
+.flow_drag_handle{
+    pointer-events: all;
+    fill: rgba(0, 0, 0, 0.001);
+    stroke: transparent;
+    cursor: pointer;
+    touch-action: none;
+}
+
 .space_container_readonly{
     :global(.react-flow__node){
         cursor: grab;
@@ -15,6 +31,13 @@
     & .node_rectangle,
     & .node_rhombus,
     & .node_circle{
+        cursor: grab;
+        &:active{
+            cursor: grabbing;
+        }
+    }
+
+    & .flow_drag_handle{
         cursor: grab;
         &:active{
             cursor: grabbing;
@@ -404,7 +427,7 @@
     border: 3px solid var(--pink);
     background: rgba(0, 0, 0, 0.12);
     border-radius: 10px;
-    cursor: pointer;
+    cursor: grab;
     position: relative;
 }
 
@@ -421,6 +444,8 @@
     backdrop-filter: blur(8px);
     border-radius: 10px;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+    position: relative;
+    z-index: 11;
 }
 
 .node_rhombus{
@@ -428,9 +453,10 @@
     justify-content: center;
     align-items: center;
     position: relative;
-    cursor: pointer;
+    cursor: grab;
 
     & span{
+        pointer-events: none;
         position: absolute;
         top: 112%;
         left: 50%;
@@ -452,6 +478,7 @@
     border-radius: 100%;
     corner-shape: bevel;
     background: rgba(0, 0, 0, 0.12);
+    position: relative;
 }
 
 .node_circle{
@@ -459,8 +486,9 @@
     justify-content: center;
     align-items: center;
     position: relative;
-    cursor: pointer;
+    cursor: grab;
     & span{
+        pointer-events: none;
         position: absolute;
         top: 112%;
         left: 50%;
@@ -539,4 +567,5 @@
     height: 120px;
     width: 120px;
     background: rgba(0, 0, 0, 0.12);
+    position: relative;
 }
