@@ -806,6 +806,20 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     cancelLongPress();
   };
 
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    const pan = manualPanRef.current;
+    if (pan && e.pointerId === pan.pointerId) {
+      manualPanRef.current = null;
+      try {
+        containerRef.current?.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+      e.preventDefault();
+    }
+    cancelLongPress();
+  };
+
   const handleClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!suppressClickRef.current) return;
 
@@ -1269,7 +1283,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={cancelLongPress}
+      onPointerCancel={handlePointerCancel}
       onWheelCapture={() => closeContextMenu()}
     >
       <ReactFlowProvider>
