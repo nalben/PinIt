@@ -166,7 +166,7 @@ export const useUIStore = create<UIState>((set) => {
         set({ topAlarm: null });
         topAlarmUnmountTimeout = null;
       }, 220);
-      }, 2200);
+      }, 4000);
   },
 
   registerEscapeHandler: (id, handler) => {

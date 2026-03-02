@@ -4,6 +4,24 @@
     position: relative;
 }
 
+:global(.react-flow__nodesselection-rect),
+:global(.react-flow__selection){
+    border: 1px dotted rgba(231, 205, 115, 0.9) !important;
+    background: rgba(231, 205, 115, 0.12) !important;
+}
+
+:global(.react-flow__node.flow_node_wrapper.selected) .node_rectangle{
+    box-shadow: 0 0 0 2px rgba(231, 205, 115, 0.98), 0 0 28px rgba(231, 205, 115, 0.38);
+}
+
+:global(.react-flow__node.flow_node_wrapper.selected) .rhombus_content{
+    box-shadow: 0 0 0 2px rgba(231, 205, 115, 0.98), 0 0 28px rgba(231, 205, 115, 0.38);
+}
+
+:global(.react-flow__node.flow_node_wrapper.selected) .circle_content{
+    box-shadow: 0 0 0 2px rgba(231, 205, 115, 0.98), 0 0 28px rgba(231, 205, 115, 0.38);
+}
+
 .flow_hit_svg{
     position: absolute;
     inset: 0;
@@ -18,6 +36,38 @@
     stroke: transparent;
     cursor: pointer;
     touch-action: none;
+}
+
+@keyframes flow-shimmer {
+    0% { transform: translateX(-150%); }
+    100% { transform: translateX(150%); }
+}
+
+.node_image_skeleton{
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+    z-index: 1;
+}
+
+.node_image_skeleton::after{
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: var(--skeleton-shimmer);
+    animation: flow-shimmer 1.2s infinite;
+}
+
+.node_image_skeleton_rect{
+    border-radius: 10px;
+}
+
+.node_image_skeleton_round{
+    border-radius: inherit;
 }
 
 .space_container_readonly{

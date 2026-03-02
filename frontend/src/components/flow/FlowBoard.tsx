@@ -8,6 +8,7 @@ import ReactFlow, {
   MiniMapNodeProps,
   Node as RFNode,
   NodeProps,
+  SelectionMode,
   applyNodeChanges,
   ReactFlowInstance,
   ReactFlowProvider
@@ -26,7 +27,7 @@ import { connectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 
 type FlowNodeType = FlowCardShape;
-type FlowNodeData = { title: string; imageSrc: string | null; isLocked: boolean };
+type FlowNodeData = { title: string; imageSrc: string | null; isLocked: boolean; imageLoaded?: boolean };
 
 export type FlowBoardHandle = {
   createDraftNodeAtCenter: () => void;
@@ -86,15 +87,17 @@ const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {
 };
 
 const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
+  const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   return (
     <div
       className={classes.node_rectangle}
       style={
-        data.imageSrc
+        data.imageSrc && data.imageLoaded
           ? { backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
           : undefined
       }
     >
+      {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_rect}`.trim()} aria-hidden="true" /> : null}
       <svg className={classes.flow_hit_svg} viewBox="0 0 240 80" aria-hidden="true">
         <rect className={classes.flow_drag_handle} x="0" y="0" width="240" height="80" rx="10" ry="10" />
       </svg>
@@ -109,16 +112,18 @@ const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
 };
 
 const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
+  const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   return (
     <div className={classes.node_rhombus}>
       <div
         className={classes.rhombus_content}
         style={
-          data.imageSrc
+          data.imageSrc && data.imageLoaded
             ? { backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : undefined
         }
       >
+        {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
         <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
           <polygon className={classes.flow_drag_handle} points="60,0 120,60 60,120 0,60" />
         </svg>
@@ -134,16 +139,18 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
 };
 
 const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
+  const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   return (
-    <div className={`${classes.node_circle} ${data.imageSrc ? classes.node_circle_has_image : ''}`.trim()}>
+    <div className={`${classes.node_circle} ${data.imageSrc && data.imageLoaded ? classes.node_circle_has_image : ''}`.trim()}>
       <div
         className={classes.circle_content}
         style={
-          data.imageSrc
+          data.imageSrc && data.imageLoaded
             ? { backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
             : undefined
         }
       >
+        {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
         <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
           <circle className={classes.flow_drag_handle} cx="60" cy="60" r="60" />
         </svg>
@@ -185,6 +192,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const longPressTimeoutRef = useRef<number | null>(null);
   const longPressStartRef = useRef<{ pointerId: number; clientX: number; clientY: number } | null>(null);
   const suppressClickRef = useRef(false);
+  const imagePreloadStartedRef = useRef<Set<string>>(new Set());
   const manualPanRef = useRef<{
     pointerId: number;
     clientX: number;
@@ -234,6 +242,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const cardToNode = useCallback(
     (c: ApiCard): RFNode<FlowNodeData> => {
       const nodeType = mapApiTypeToNodeType(c.type);
+      const imageSrc = resolveImageSrc(c.image_path ?? null);
+      const imageLoaded = !imageSrc;
       return {
         id: String(c.id),
         type: nodeType,
@@ -243,8 +253,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         draggable: canEditCards && !Boolean(c.is_locked),
         data: {
           title: (c.title ?? 'title').trim() || 'title',
-          imageSrc: resolveImageSrc(c.image_path ?? null),
+          imageSrc,
           isLocked: Boolean(c.is_locked),
+          imageLoaded,
         },
       };
     },
@@ -411,6 +422,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                         : patchImagePath.startsWith('/uploads/')
                           ? `${API_URL}${patchImagePath}`
                           : patchImagePath;
+                  const nextImageLoaded =
+                    nextImageSrc === n.data.imageSrc ? Boolean(n.data.imageLoaded) : !nextImageSrc;
 
                   return {
                     ...n,
@@ -418,7 +431,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                     dragHandle: nextDragHandle,
                     position: nextPos,
                     draggable: canEditCards && !nextLocked,
-                    data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc }
+                    data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc, imageLoaded: nextImageLoaded }
                   };
                 })
               );
@@ -464,6 +477,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const showTopAlarm = useUIStore((s) => s.showTopAlarm);
   const suppressSocketReloadByCardIdRef = useRef<Map<string, number>>(new Map());
+
+  const reportError = useCallback(
+    (message: string, error?: unknown) => {
+      showTopAlarm(message);
+      if (process.env.NODE_ENV !== 'production' && error) console.error(error);
+    },
+    [showTopAlarm]
+  );
 
   const onNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
     setNodes((prev) => applyNodeChanges(changes, prev));
@@ -682,6 +703,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     if (!reactFlow) return;
     if (!e.isPrimary) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.ctrlKey || e.metaKey) return;
 
     const targetEl = e.target as Element | null;
     const panelEl = createPanelRef.current;
@@ -838,6 +860,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           const nextTitle = patch.title ?? n.data.title;
           const nextLocked = patch.isLocked ?? n.data.isLocked;
           const nextImageSrc = patch.imageSrc !== undefined ? patch.imageSrc : n.data.imageSrc;
+          const nextImageLoaded = nextImageSrc === n.data.imageSrc ? Boolean(n.data.imageLoaded) : !nextImageSrc;
 
           return {
             ...n,
@@ -845,13 +868,47 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             dragHandle: nextDragHandle,
             position,
             draggable: canEditCards && !nextLocked,
-            data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc }
+            data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc, imageLoaded: nextImageLoaded }
           };
         })
       );
     },
     [canEditCards]
   );
+
+  useEffect(() => {
+    nodes.forEach((n) => {
+      const src = n.data.imageSrc;
+      if (!src) return;
+      if (n.data.imageLoaded) return;
+      const key = `${String(n.id)}|${src}`;
+      if (imagePreloadStartedRef.current.has(key)) return;
+      imagePreloadStartedRef.current.add(key);
+
+      const img = new Image();
+      img.onload = () => {
+        setNodes((prev) =>
+          prev.map((p) => {
+            if (String(p.id) !== String(n.id)) return p;
+            if (p.data.imageSrc !== src) return p;
+            if (p.data.imageLoaded) return p;
+            return { ...p, data: { ...p.data, imageLoaded: true } };
+          })
+        );
+      };
+      img.onerror = () => {
+        setNodes((prev) =>
+          prev.map((p) => {
+            if (String(p.id) !== String(n.id)) return p;
+            if (p.data.imageSrc !== src) return p;
+            if (p.data.imageLoaded) return p;
+            return { ...p, data: { ...p.data, imageLoaded: true } };
+          })
+        );
+      };
+      img.src = src;
+    });
+  }, [nodes]);
 
   const clearPendingImage = useCallback(() => {
     if (pendingObjectUrlRef.current) {
@@ -1094,7 +1151,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       setDeleteConfirmOpen(false);
       closeFlowCardSettings();
     } catch (e) {
-      console.error(e);
+      reportError('Не удалось удалить карточку.', e);
     }
   };
 
@@ -1184,7 +1241,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
 
       closeFlowCardSettings();
     } catch (e) {
-      console.error(e);
+      reportError('Не удалось сохранить изменения карточки.', e);
     } finally {
       setImageUploading(false);
       setDraftSaving(false);
@@ -1258,16 +1315,18 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       onWheelCapture={() => closeContextMenu()}
     >
       <ReactFlowProvider>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          fitView
-          zoomOnDoubleClick={false}
-          proOptions={{ hideAttribution: true }}
-          onMoveStart={() => closeContextMenu()}
-          onInit={setReactFlow}
-          nodeTypes={NODE_TYPES}
-          onNodesChange={onNodesChange}
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            fitView
+            zoomOnDoubleClick={false}
+            selectionKeyCode={['Control', 'Meta']}
+            selectionMode={SelectionMode.Partial}
+            proOptions={{ hideAttribution: true }}
+            onMoveStart={() => closeContextMenu()}
+            onInit={setReactFlow}
+            nodeTypes={NODE_TYPES}
+            onNodesChange={onNodesChange}
           onNodeDragStart={(_, node) => {
             const typed = node as RFNode<FlowNodeData>;
             const id = String(typed.id);
@@ -1296,6 +1355,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             void persistCardPosition(String(typed.id), x, y);
           }}
           onNodeClick={(event, node) => {
+            if ((event as unknown as { ctrlKey?: boolean; metaKey?: boolean }).ctrlKey || (event as unknown as { metaKey?: boolean }).metaKey) return;
             const target = event.target as Element | null;
             const typed = node as RFNode<FlowNodeData>;
             const clickedShape =
