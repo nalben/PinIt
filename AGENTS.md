@@ -1082,6 +1082,13 @@ Update (2026-03-03)
 - `frontend/src/components/flow/FlowBoard.tsx` renders card links with a custom straight edge type (`flowStraight`) that computes endpoints on the shape border so link lines don’t show through transparent nodes.
 - `frontend/src/components/flow/FlowBoard.tsx` exposes `FlowBoardHandle.startLinkMode()` and `frontend/src/pages/board/Board.tsx` adds a `link.svg` button to start a 2-click linking mode with a centered persistent overlay prompt; node clicks in this mode do not open the edit panel.
 - Connection handle hover-visibility is gated to desktop (`__PLATFORM__ === 'desktop'`) so it does not appear on mobile/touch devices.
+- `frontend/src/components/flow/FlowBoard.tsx` was split into focused local modules/hooks (no runtime contract changes intended; behavior preserved):
+  - `frontend/src/components/flow/flowBoardModel.ts` defines FlowBoard-local TypeScript types (`FlowNodeType`, `FlowNodeData`, `ApiCard`, `ApiCardLink`, etc.).
+  - `frontend/src/components/flow/flowBoardUtils.ts` contains pure helpers/constants used by FlowBoard (edge builder, image URL resolver, node size table, geometry helpers for straight edges, link-handle positioning).
+  - `frontend/src/components/flow/useFlowBoardBoardsUpdatedSocket.ts` owns the `connectSocket({ onBoardsUpdate })` subscription and applies `boards:updated` commands for the current board (card delete/move/update/create and link create/delete) + triggers reload sequence increments where needed.
+  - `frontend/src/components/flow/useFlowBoardContextMenu.ts` owns the right-click context menu state (`x/y/anchorX/anchorY`) + open/close logic + viewport clamping and global listeners while open.
+  - `frontend/src/components/flow/useFlowBoardPointerGestures.ts` owns long-press context menu (touch) and manual pan gesture handling (pointer capture + viewport updates) and suppress-click behavior.
+  - `frontend/src/components/flow/useFlowBoardLinkMode.ts` owns 2-click link-mode state (`off/first/second`) and Escape-to-cancel; FlowBoard uses it to create links between two clicked nodes.
 
 1. Frontend routing and app entry
 
