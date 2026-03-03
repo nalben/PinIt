@@ -18,7 +18,8 @@
 }
 
 :global(.react-flow__node.flow_node_wrapper.selected) .rhombus_content{
-    box-shadow: 0 0 0 0px var(--cyan), 0 0 28px var(--cyan);
+    box-shadow: none;
+    filter: drop-shadow(0 0 28px var(--cyan));
     border-color: var(--cyan);
 }
 
@@ -88,7 +89,8 @@
 }
 
 :global(.react-flow__node.flow_node_link_hover) .rhombus_content{
-    box-shadow: 0 0 0 0px var(--pink), 0 0 20px rgba(231, 205, 115, 0.55);
+    box-shadow: none;
+    filter: drop-shadow(0 0 20px rgba(231, 205, 115, 0.55));
     border-color: var(--pink);
 }
 
@@ -651,6 +653,14 @@
     corner-shape: bevel;
     background: rgba(0, 0, 0, 0.12);
     position: relative;
+
+    // `corner-shape` is not inherited; ensure image/glass/skeleton clip matches the rhombus shape.
+    & .node_glass,
+    & .node_image_layer,
+    & .node_image_skeleton{
+        border-radius: 100%;
+        corner-shape: bevel;
+    }
 }
 
 .node_circle{

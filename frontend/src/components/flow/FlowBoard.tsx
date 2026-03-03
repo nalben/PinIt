@@ -213,11 +213,21 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   let tx = targetX;
   let ty = targetY;
 
+  const MIN_EDGE_RENDER_LEN_PX = 12;
+  const OVERLAP_AABB_TOLERANCE_PX = 4;
+
   if (sRect && tRect) {
     const sType = (sNode?.type as FlowNodeType | undefined) ?? 'rectangle';
     const tType = (tNode?.type as FlowNodeType | undefined) ?? 'rectangle';
     const dx = tRect.cx - sRect.cx;
     const dy = tRect.cy - sRect.cy;
+
+    const overlapsAabb =
+      Math.abs(dx) < sRect.hw + tRect.hw - OVERLAP_AABB_TOLERANCE_PX &&
+      Math.abs(dy) < sRect.hh + tRect.hh - OVERLAP_AABB_TOLERANCE_PX;
+
+    if (overlapsAabb) return null;
+
     const p1 = getBoundaryPoint(sType, sRect.cx, sRect.cy, dx, dy, sRect.hw, sRect.hh);
     const p2 = getBoundaryPoint(tType, tRect.cx, tRect.cy, -dx, -dy, tRect.hw, tRect.hh);
     sx = p1.x;
@@ -225,6 +235,8 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
     tx = p2.x;
     ty = p2.y;
   }
+
+  if (Math.hypot(tx - sx, ty - sy) < MIN_EDGE_RENDER_LEN_PX) return null;
 
   const path = `M${sx},${sy}L${tx},${ty}`;
   return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
@@ -383,6 +395,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     let finalFromX = fromX;
     let finalFromY = fromY;
 
+    const MIN_EDGE_RENDER_LEN_PX = 12;
+    const OVERLAP_AABB_TOLERANCE_PX = 4;
+
     const sourceId = connectingFromNodeIdRef.current;
     const sNode = sourceId ? rf.getNode(sourceId) : null;
     const sRect = getNodeRect(sNode);
@@ -395,6 +410,12 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         const tType = (tNode?.type as FlowNodeType | undefined) ?? 'rectangle';
         const dx = tRect.cx - sRect.cx;
         const dy = tRect.cy - sRect.cy;
+
+        const overlapsAabb =
+          Math.abs(dx) < sRect.hw + tRect.hw - OVERLAP_AABB_TOLERANCE_PX &&
+          Math.abs(dy) < sRect.hh + tRect.hh - OVERLAP_AABB_TOLERANCE_PX;
+        if (overlapsAabb) return null;
+
         const p1 = getBoundaryPoint(sType, sRect.cx, sRect.cy, dx, dy, sRect.hw, sRect.hh);
         const p2 = getBoundaryPoint(tType, tRect.cx, tRect.cy, -dx, -dy, tRect.hw, tRect.hh);
         finalFromX = p1.x;
@@ -410,6 +431,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         finalToY = tRect.cy;
       }
     }
+
+    if (Math.hypot(finalToX - finalFromX, finalToY - finalFromY) < MIN_EDGE_RENDER_LEN_PX) return null;
 
     return (
       <g>
