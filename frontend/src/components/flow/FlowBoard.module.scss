@@ -4,6 +4,8 @@
     position: relative;
 }
 
+.space_container_connecting{}
+
 :global(.react-flow__nodesselection-rect),
 :global(.react-flow__selection){
     border: 1px solid rgba(231, 205, 115, 0.9) !important;
@@ -74,7 +76,7 @@
 .flow_link_handle_target{}
 
 @media (hover: hover) and (pointer: fine) {
-    .space_container_desktop.space_container_can_edit :global(.react-flow__node.flow_node_wrapper:hover) .flow_link_handle_source{
+    .space_container_desktop.space_container_can_edit:not(.space_container_connecting) :global(.react-flow__node.flow_node_wrapper:hover) .flow_link_handle_source{
         opacity: 1;
         pointer-events: all !important;
     }
@@ -577,6 +579,25 @@
     border-radius: 10px;
     cursor: grab;
     position: relative;
+}
+
+.node_glass{
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: transparent;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    border-radius: inherit;
+}
+
+.node_image_layer{
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: inherit;
 }
 
 .node_rectangle_title{

@@ -9,7 +9,6 @@ import ReactFlow, {
   Edge,
   EdgeProps,
   Handle,
-  MarkerType,
   MiniMap,
   MiniMapNodeProps,
   Node as RFNode,
@@ -23,105 +22,34 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import classes from './FlowBoard.module.scss';
-import axiosInstance, { API_URL } from '@/api/axiosInstance';
+import axiosInstance from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import LockClose from '@/assets/icons/monochrome/lock_close.svg';
 import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
 import boardClasses from '@/pages/board/Board.module.scss';
-import { FlowCardShape, useUIStore } from '@/store/uiStore';
+import { useUIStore } from '@/store/uiStore';
 import { connectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
-
-type FlowNodeType = FlowCardShape;
-type FlowNodeData = {
-  title: string;
-  imageSrc: string | null;
-  isLocked: boolean;
-  imageLoaded?: boolean;
-};
+import type { ApiCard, ApiCardLink, ApiLinkStyle, FlowNodeData, FlowNodeType } from './flowBoardModel';
+import {
+  buildEdgeFromLink,
+  getBoundaryPoint,
+  getLinkHandleStyle,
+  getNodeRect,
+  mapApiTypeToNodeType,
+  NODE_SIZES,
+  resolveImageSrc
+} from './flowBoardUtils';
 
 export type FlowBoardHandle = {
   createDraftNodeAtCenter: () => void;
   startLinkMode: () => void;
 };
 
-type ApiCardType = 'circle' | 'rectangle' | 'diamond';
-type ApiCard = {
-  id: number;
-  board_id: number;
-  type: ApiCardType;
-  title: string | null;
-  image_path: string | null;
-  is_locked: number | boolean | null;
-  x: number;
-  y: number;
-  created_at: string;
-};
-
-type ApiLinkStyle = 'line' | 'arrow';
-type ApiCardLink = {
-  id: number;
-  board_id: number;
-  from_card_id: number;
-  to_card_id: number;
-  style: ApiLinkStyle;
-  color: string;
-  created_at: string;
-};
-
 const DEFAULT_LINK_STYLE: ApiLinkStyle = 'line';
 const DEFAULT_LINK_COLOR = '#e7cd73';
-
-const getBoundaryPoint = (
-  shape: FlowNodeType,
-  cx: number,
-  cy: number,
-  dx: number,
-  dy: number,
-  hw: number,
-  hh: number,
-) => {
-  const absDx = Math.abs(dx);
-  const absDy = Math.abs(dy);
-
-  if (!Number.isFinite(absDx) || !Number.isFinite(absDy) || (absDx === 0 && absDy === 0)) return { x: cx, y: cy };
-
-  // small outward gap so the line doesn't show "under" transparent nodes
-  const EDGE_GAP = 8;
-  const a = Math.max(1, hw + EDGE_GAP);
-  const b = Math.max(1, hh + EDGE_GAP);
-
-  if (shape === 'circle') {
-    const len = Math.hypot(dx, dy) || 1;
-    const r = Math.max(1, Math.min(a, b));
-    const t = r / len;
-    return { x: cx + dx * t, y: cy + dy * t };
-  }
-
-  if (shape === 'rhombus') {
-    const denom = absDx / a + absDy / b;
-    const t = denom > 0 ? 1 / denom : 1;
-    return { x: cx + dx * t, y: cy + dy * t };
-  }
-
-  // rectangle (axis-aligned)
-  const tx = absDx > 0 ? a / absDx : Infinity;
-  const ty = absDy > 0 ? b / absDy : Infinity;
-  const t = Math.min(tx, ty);
-  return { x: cx + dx * t, y: cy + dy * t };
-};
-
-const buildEdgeFromLink = (l: ApiCardLink): Edge => ({
-  id: `link-${l.id}`,
-  source: String(l.from_card_id),
-  target: String(l.to_card_id),
-  type: 'flowStraight',
-  style: { stroke: l.color || 'var(--pink)', strokeWidth: 2 },
-  markerEnd: l.style === 'arrow' ? { type: MarkerType.ArrowClosed, color: l.color || 'var(--pink)' } : undefined,
-  data: { linkId: l.id },
-});
 
 const MAX_CARD_IMAGE_SIZE_MB = 5;
 const MAX_CARD_IMAGE_SIZE_BYTES = MAX_CARD_IMAGE_SIZE_MB * 1024 * 1024;
@@ -157,49 +85,35 @@ const MiniMapNode: React.FC<MiniMapNodeProps> = (props) => {
   return <rect {...commonProps} x={x} y={y} width={width} height={height} rx={props.borderRadius} ry={props.borderRadius} />;
 };
 
-const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {
-  rectangle: { width: 240, height: 80 },
-  rhombus: { width: 120, height: 120 },
-  circle: { width: 120, height: 120 }
-};
-
-const getNodeRect = (n: ReturnType<ReturnType<typeof useReactFlow>['getNode']>): { cx: number; cy: number; hw: number; hh: number } | null => {
-  if (!n) return null;
-  const nodeType = (n.type as FlowNodeType | undefined) ?? 'rectangle';
-  const size = NODE_SIZES[nodeType] ?? NODE_SIZES.rectangle;
-  const posAbs = (n as unknown as { positionAbsolute?: { x: number; y: number } | null })?.positionAbsolute;
-  const pos = (n as unknown as { position?: { x: number; y: number } | null })?.position;
-  const base = posAbs || pos;
-  if (!base) return null;
-  return { cx: base.x + size.width / 2, cy: base.y + size.height / 2, hw: size.width / 2, hh: size.height / 2 };
-};
-
-const ConnectionHandles = ({ isConnectable }: { isConnectable: boolean }) => {
+const ConnectionHandles = ({ isConnectable, shape }: { isConnectable: boolean; shape: FlowNodeType }) => {
   const sourceClass = `${classes.flow_link_handle} ${classes.flow_link_handle_source} nodrag`.trim();
   const targetClass = `${classes.flow_link_handle} ${classes.flow_link_handle_target} nodrag`.trim();
-  const centerStyle = { left: '50%', top: '50%' } as const;
-  const centerClassSource = `${sourceClass} ${classes.flow_link_handle_center}`.trim();
-  const centerClassTarget = `${targetClass} ${classes.flow_link_handle_center}`.trim();
+  const style = getLinkHandleStyle(shape);
   return (
     <>
-      <Handle type="source" id="s" position={Position.Top} className={centerClassSource} style={centerStyle} isConnectable={isConnectable} />
-      <Handle type="target" id="t" position={Position.Top} className={centerClassTarget} style={centerStyle} isConnectable={isConnectable} />
+      <Handle type="source" id="s" position={Position.Top} className={sourceClass} style={style} isConnectable={isConnectable} />
+      <Handle type="target" id="t" position={Position.Top} className={targetClass} style={style} isConnectable={isConnectable} />
     </>
   );
 };
 
-const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
+const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
+  const isDraft = String(id).startsWith('draft-');
+  const hasImage = Boolean(data.imageSrc && data.imageLoaded);
   return (
     <div
       className={classes.node_rectangle}
-      style={
-        data.imageSrc && data.imageLoaded
-          ? { backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-          : undefined
-      }
     >
-      <ConnectionHandles isConnectable={!data.isLocked} />
+      <div className={classes.node_glass} aria-hidden="true" />
+      {hasImage ? (
+        <div
+          className={classes.node_image_layer}
+          style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+          aria-hidden="true"
+        />
+      ) : null}
+      {isDraft ? null : <ConnectionHandles shape="rectangle" isConnectable={!data.isLocked} />}
       {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_rect}`.trim()} aria-hidden="true" /> : null}
       <svg className={classes.flow_hit_svg} viewBox="0 0 240 80" aria-hidden="true">
         <rect className={classes.flow_drag_handle} x="0" y="0" width="240" height="80" rx="10" ry="10" />
@@ -214,19 +128,24 @@ const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
   );
 };
 
-const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
+const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
+  const isDraft = String(id).startsWith('draft-');
+  const hasImage = Boolean(data.imageSrc && data.imageLoaded);
   return (
     <div className={classes.node_rhombus}>
-      <ConnectionHandles isConnectable={!data.isLocked} />
+      {isDraft ? null : <ConnectionHandles shape="rhombus" isConnectable={!data.isLocked} />}
       <div
         className={classes.rhombus_content}
-        style={
-          data.imageSrc && data.imageLoaded
-            ? { backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-            : undefined
-        }
       >
+        <div className={classes.node_glass} aria-hidden="true" />
+        {hasImage ? (
+          <div
+            className={classes.node_image_layer}
+            style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            aria-hidden="true"
+          />
+        ) : null}
         {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
         <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
           <polygon className={classes.flow_drag_handle} points="60,0 120,60 60,120 0,60" />
@@ -242,19 +161,24 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
   );
 };
 
-const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
+const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
+  const isDraft = String(id).startsWith('draft-');
+  const hasImage = Boolean(data.imageSrc && data.imageLoaded);
   return (
     <div className={`${classes.node_circle} ${data.imageSrc && data.imageLoaded ? classes.node_circle_has_image : ''}`.trim()}>
-      <ConnectionHandles isConnectable={!data.isLocked} />
+      {isDraft ? null : <ConnectionHandles shape="circle" isConnectable={!data.isLocked} />}
       <div
         className={classes.circle_content}
-        style={
-          data.imageSrc && data.imageLoaded
-            ? { backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-            : undefined
-        }
       >
+        <div className={classes.node_glass} aria-hidden="true" />
+        {hasImage ? (
+          <div
+            className={classes.node_image_layer}
+            style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+            aria-hidden="true"
+          />
+        ) : null}
         {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
         <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
           <circle className={classes.flow_drag_handle} cx="60" cy="60" r="60" />
@@ -271,11 +195,6 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
 };
 
 const NODE_TYPES = { rectangle: RectangleNode, rhombus: RhombusNode, circle: CircleNode } as const;
-
-const mapApiTypeToNodeType = (type: ApiCardType): FlowNodeType => {
-  if (type === 'diamond') return 'rhombus';
-  return type;
-};
 
 const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   const { id, source, target, style, markerEnd, sourceX, sourceY, targetX, targetY } = props;
@@ -309,12 +228,6 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
 };
 
 const EDGE_TYPES = { flowStraight: FlowStraightEdge } as const;
-
-const resolveImageSrc = (image_path: string | null) => {
-  if (!image_path) return null;
-  if (image_path.startsWith('/uploads/')) return `${API_URL}${image_path}`;
-  return image_path;
-};
 
 const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(({ canEditCards = false }, ref) => {
   const { boardId } = useParams<{ boardId: string }>();
@@ -360,6 +273,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const [reloadSeq, setReloadSeq] = useState(0);
   const [reloadLinksSeq, setReloadLinksSeq] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [connectingSourceNodeId, setConnectingSourceNodeId] = useState<string | null>(null);
   const connectingFromNodeIdRef = useRef<string | null>(null);
   const connectingHoverTargetNodeIdRef = useRef<string | null>(null);
   const [connectingHoverTargetNodeId, setConnectingHoverTargetNodeId] = useState<string | null>(null);
@@ -415,14 +329,18 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       prev.map((n) => {
         const id = String(n.id);
         const nextClassParts = ['flow_node_wrapper'];
-        if (linkSourceNodeId && id === String(linkSourceNodeId)) nextClassParts.push('flow_node_link_source');
+        if (isConnecting) {
+          if (connectingSourceNodeId && id === String(connectingSourceNodeId)) nextClassParts.push('flow_node_link_source');
+        } else {
+          if (linkSourceNodeId && id === String(linkSourceNodeId)) nextClassParts.push('flow_node_link_source');
+        }
         if (isConnecting && connectingHoverTargetNodeId && id === String(connectingHoverTargetNodeId)) nextClassParts.push('flow_node_link_hover');
         const nextClass = nextClassParts.join(' ');
         if (String(n.className || '') === nextClass) return n;
         return { ...n, className: nextClass };
       })
     );
-  }, [connectingHoverTargetNodeId, isConnecting, linkSourceNodeId]);
+  }, [connectingHoverTargetNodeId, connectingSourceNodeId, isConnecting, linkSourceNodeId]);
 
   const cancelLinkMode = useCallback(() => {
     setLinkModeStep('off');
@@ -716,14 +634,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                   const nextLocked = patchLocked ?? n.data.isLocked;
                   const nextDragHandle = getNodeDragHandleSelector(nextType);
 
-                  const nextImageSrc =
-                    patchImagePath === undefined
-                      ? n.data.imageSrc
-                      : !patchImagePath
-                        ? null
-                        : patchImagePath.startsWith('/uploads/')
-                          ? `${API_URL}${patchImagePath}`
-                          : patchImagePath;
+                  const nextImageSrc = patchImagePath === undefined ? n.data.imageSrc : resolveImageSrc(patchImagePath);
                   const nextImageLoaded =
                     nextImageSrc === n.data.imageSrc ? Boolean(n.data.imageLoaded) : !nextImageSrc;
 
@@ -832,6 +743,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
 
   const onNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
     setNodes((prev) => applyNodeChanges(changes, prev));
+  }, []);
+
+  const addEdgeFromLink = useCallback((link: ApiCardLink) => {
+    setEdges((prev) => {
+      const edge = buildEdgeFromLink(link);
+      if (prev.some((e) => String(e.id) === String(edge.id))) return prev;
+      return [...prev, edge];
+    });
   }, []);
 
   const closeContextMenu = useCallback(() => {
@@ -1268,7 +1187,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         })
       );
     },
-    [canEditCards]
+    [canEditCards, getNodeDragHandleSelector]
   );
 
   useEffect(() => {
@@ -1280,27 +1199,20 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       if (imagePreloadStartedRef.current.has(key)) return;
       imagePreloadStartedRef.current.add(key);
 
+      const markLoaded = () => {
+        setNodes((prev) =>
+          prev.map((p) => {
+            if (String(p.id) !== String(n.id)) return p;
+            if (p.data.imageSrc !== src) return p;
+            if (p.data.imageLoaded) return p;
+            return { ...p, data: { ...p.data, imageLoaded: true } };
+          })
+        );
+      };
+
       const img = new Image();
-      img.onload = () => {
-        setNodes((prev) =>
-          prev.map((p) => {
-            if (String(p.id) !== String(n.id)) return p;
-            if (p.data.imageSrc !== src) return p;
-            if (p.data.imageLoaded) return p;
-            return { ...p, data: { ...p.data, imageLoaded: true } };
-          })
-        );
-      };
-      img.onerror = () => {
-        setNodes((prev) =>
-          prev.map((p) => {
-            if (String(p.id) !== String(n.id)) return p;
-            if (p.data.imageSrc !== src) return p;
-            if (p.data.imageLoaded) return p;
-            return { ...p, data: { ...p.data, imageLoaded: true } };
-          })
-        );
-      };
+      img.onload = markLoaded;
+      img.onerror = markLoaded;
       img.src = src;
     });
   }, [nodes]);
@@ -1738,7 +1650,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             onNodesChange={onNodesChange}
             onConnectStart={(_, params) => {
               if (!canEditCards) return;
-              connectingFromNodeIdRef.current = params?.nodeId ? String(params.nodeId) : null;
+              const sourceId = params?.nodeId ? String(params.nodeId) : null;
+              connectingFromNodeIdRef.current = sourceId;
+              setConnectingSourceNodeId(sourceId);
               connectingHoverTargetNodeIdRef.current = null;
               setConnectingHoverTargetNodeId(null);
               createdViaOnConnectRef.current = false;
@@ -1748,6 +1662,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               const source = connectingFromNodeIdRef.current;
               const target = connectingHoverTargetNodeIdRef.current;
               connectingFromNodeIdRef.current = null;
+              setConnectingSourceNodeId(null);
               connectingHoverTargetNodeIdRef.current = null;
               setConnectingHoverTargetNodeId(null);
               setIsConnecting(false);
@@ -1758,11 +1673,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               if (!source || !target) return;
               const link = await persistLinkCreate(source, target, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR);
               if (!link) return;
-              setEdges((prev) => {
-                const edge = buildEdgeFromLink(link);
-                if (prev.some((e) => String(e.id) === String(edge.id))) return prev;
-                return [...prev, edge];
-              });
+              addEdgeFromLink(link);
             }}
             onConnect={async (params) => {
               const source = params?.source ? String(params.source) : '';
@@ -1771,11 +1682,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               createdViaOnConnectRef.current = true;
               const link = await persistLinkCreate(source, target, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR);
               if (!link) return;
-              setEdges((prev) => {
-                const edge = buildEdgeFromLink(link);
-                if (prev.some((e) => String(e.id) === String(edge.id))) return prev;
-                return [...prev, edge];
-              });
+              addEdgeFromLink(link);
             }}
             onSelectionChange={(sel) => {
               const selectedNodes = sel?.nodes ?? [];
@@ -1870,11 +1777,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               void (async () => {
                 const link = await persistLinkCreate(firstId, clickedId, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR);
                 if (!link) return;
-                setEdges((prev) => {
-                  const edge = buildEdgeFromLink(link);
-                  if (prev.some((e) => String(e.id) === String(edge.id))) return prev;
-                  return [...prev, edge];
-                });
+                addEdgeFromLink(link);
                 setSelectedNodeOnly(clickedId);
                 cancelLinkMode();
               })();
