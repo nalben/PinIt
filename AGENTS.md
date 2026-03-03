@@ -1089,6 +1089,8 @@ Update (2026-03-03)
   - `frontend/src/components/flow/useFlowBoardContextMenu.ts` owns the right-click context menu state (`x/y/anchorX/anchorY`) + open/close logic + viewport clamping and global listeners while open.
   - `frontend/src/components/flow/useFlowBoardPointerGestures.ts` owns long-press context menu (touch) and manual pan gesture handling (pointer capture + viewport updates) and suppress-click behavior.
   - `frontend/src/components/flow/useFlowBoardLinkMode.ts` owns 2-click link-mode state (`off/first/second`) and Escape-to-cancel; FlowBoard uses it to create links between two clicked nodes.
+- DB migration script added to extend card links with label metadata:
+  - `api/sql/2026-03-03-cardlinks-label.sql` adds `cardlinks.label VARCHAR(70) NULL` and `cardlinks.is_label_visible TINYINT(1) NOT NULL DEFAULT 1`.
 
 1. Frontend routing and app entry
 
