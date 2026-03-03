@@ -33,7 +33,6 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   const [button, dropdown] = children;
   const wrapperRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [positionClass, setPositionClass] = useState("");
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const [internalOpen, setInternalOpen] = useState(false);
 
@@ -42,10 +41,10 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 
   const toggleDropdown = () => {
     if (controlledOpen !== undefined) {
-      controlledOpen ? onClose?.() : setInternalOpen(prev => !prev);
-    } else {
-      setInternalOpen(prev => !prev);
+      if (controlledOpen) onClose?.();
+      return;
     }
+    setInternalOpen(prev => !prev);
   };
 
   const handleDropdownClick = (event: React.MouseEvent) => {
@@ -68,25 +67,29 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     }
   };
 
+  const positionClass = [
+    profile ? styles.profile : "",
+    noti ? styles.noti : "",
+    !profile && !noti
+      ? left
+        ? styles.left
+        : right
+          ? styles.right
+          : middle
+            ? styles.middle
+            : styles.middle
+      : "",
+    middleleft ? styles.middleleft : "",
+    up || upDel ? styles.up : "",
+    upDel ? styles.upDel : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   const updatePosition = () => {
     const wrapper = wrapperRef.current;
     const menu = dropdownRef.current;
     if (!wrapper || !menu) return;
-
-    const classes: string[] = [];
-    if (profile) classes.push(styles.profile);
-    if (noti) classes.push(styles.noti);
-    if (!profile && !noti) {
-      if (left) classes.push(styles.left);
-      if (right) classes.push(styles.right);
-      if (middle) classes.push(styles.middle);
-      if (!left && !right && !middle) classes.push(styles.middle);
-    }
-    if (middleleft) classes.push(styles.middleleft);
-    if (up || upDel) classes.push(styles.up);
-    if (upDel) classes.push(styles.upDel);
-
-    setPositionClass(classes.join(" "));
 
     if (profile) {
       // Profile dropdown: always pinned to the right edge of the screen.
@@ -166,20 +169,20 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
           onClick={handleDropdownClick}
         >
           {React.isValidElement(dropdown) &&
-            React.Children.map(dropdown.props.children, (child, index) => {
-              const extraClass =
-                React.isValidElement(child) &&
-                (child.props as { [key: string]: string })["data-dropdown-class"];
-              return (
-                <div
-                  key={index}
-                  className={`${styles.item} ${extraClass || ""}`}
-                  onClick={(event) => handleItemClick(event, child)}
-                >
-                  {child}
-                </div>
-              );
-            })}
+            React.Children.toArray(dropdown.props.children)
+              .filter((child): child is React.ReactElement => React.isValidElement(child))
+              .map((child, index) => {
+                const extraClass = (child.props as { [key: string]: string })["data-dropdown-class"];
+                return (
+                  <div
+                    key={index}
+                    className={`${styles.item} ${extraClass || ""}`}
+                    onClick={(event) => handleItemClick(event, child)}
+                  >
+                    {child}
+                  </div>
+                );
+              })}
         </div>
       )}
     </div>

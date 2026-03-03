@@ -860,7 +860,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                           onClick={deleteBoard}
                           disabled={isDeleting || isSaving || metaInitialLoading}
                         >
-                          {isDeleting ? 'Удаление...' : 'Удалить'}
+                          {'Удалить'}
                         </button>
                         <button
                           type="button"
@@ -879,7 +879,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                   variant="mini"
                   kind="button"
                   type="button"
-                  text={isSaving ? 'Сохранение...' : 'Сохранить'}
+                  text={'Сохранить'}
                   onClick={submit}
                   disabled={!isOwner || isSaving || isDeleting || metaInitialLoading}
                 />

@@ -506,9 +506,9 @@ const FriendsModal = () => {
   }, [friendsModalOpen]);
 
   const friendsListContent = useMemo(() => {
-    if (!isInitialized) return <p>загрузка...</p>;
+    if (!isInitialized) return null;
     if (!isAuth) return <p>войдите, чтобы пользоваться друзьями</p>;
-    if (isFriendsLoading) return <p>загрузка...</p>;
+    if (isFriendsLoading) return null;
 
     if (friends.length === 0) {
       return <p>у вас пока нет друзей</p>;

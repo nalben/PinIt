@@ -864,7 +864,7 @@ const Board = () => {
                                                     onClick={() => void deleteSelectedLink()}
                                                     disabled={!canEditCards || !isLoggedIn || linkDeleteLoading}
                                                 >
-                                                    {linkDeleteLoading ? 'Удаление...' : 'Да, удалить'}
+                                                    {'Да, удалить'}
                                                 </button>
                                                 <button
                                                     type="button"
@@ -971,7 +971,7 @@ const Board = () => {
                                             onClick={leaveBoard}
                                             disabled={leaveLoading || participantsInitialLoading}
                                         >
-                                            {leaveLoading ? 'Выход...' : 'Покинуть'}
+                                            {'Покинуть'}
                                         </button>
                                         <button
                                             type="button"

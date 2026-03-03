@@ -385,7 +385,7 @@ const isProfileActive = () => {
                       !isProfileLoading && <Default />
                     )}
                     <span className={classes.profile_header_top}>
-                      {user?.username || 'Загрузка...'}
+                      {user?.username || ''}
                     </span>
                   </div>
                   <div>
@@ -406,7 +406,7 @@ const isProfileActive = () => {
                           !isProfileLoading && <Default />
                         )}
                         <div className={classes.profile_name_drop_con}>
-                          <span className={classes.name_drop}>{user?.username || 'Загрузка...'}</span>
+                          <span className={classes.name_drop}>{user?.username || ''}</span>
                           <div className={classes.email_drop}>
                             {user?.email ? (
                               <span className={classes.email_drop_item}>{user.email}</span>
