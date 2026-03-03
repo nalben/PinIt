@@ -688,10 +688,8 @@ const Board = () => {
         const current = participants.find((p) => p.id === participantId);
         if (!current) return;
         if (current.role === 'owner') return;
-        if (current.role === nextRole) {
-            setRoleDropdownParticipantId(null);
-            return;
-        }
+        setRoleDropdownParticipantId(null);
+        if (current.role === nextRole) return;
 
         setRoleLoadingParticipantId(participantId);
         try {
@@ -1116,7 +1114,6 @@ const Board = () => {
                                             {isOwner ? (
                                                 <DropdownWrapper
                                                     upDel
-                                                    closeOnClick={false}
                                                     isOpen={roleDropdownParticipantId === p.id}
                                                     onClose={() => setRoleDropdownParticipantId(null)}
                                                 >
