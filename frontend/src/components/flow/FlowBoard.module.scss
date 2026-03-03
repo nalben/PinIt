@@ -598,6 +598,58 @@
     }
 }
 
+.danger_action_row{
+    display: flex;
+    width: 100%;
+    & div, button{
+        width: 100%;
+    }
+}
+
+.danger_action_trigger{
+    width: 100%;
+    border: var(--border);
+    border-color: var(--error);
+    background-color: transparent;
+    color: var(--error);
+    padding: 10px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    font-family: "Nata Sans", sans-serif;
+    font-size: fluid-prop(18, 13, 1920, 320);
+    &:hover{
+        opacity: 0.75;
+    }
+    &:disabled{
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+.confirm_danger{
+    & > button{
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--error);
+        font-family: "Nata Sans", sans-serif;
+        font-size: fluid-prop(16,12,1920,320);
+        cursor: pointer;
+    }
+}
+
+.confirm_cancel{
+    & > button{
+        width: 100%;
+        border: none;
+        background: transparent;
+        color: var(--pink);
+        font-family: "Nata Sans", sans-serif;
+        font-size: fluid-prop(16,12,1920,320);
+        cursor: pointer;
+    }
+}
+
 .save_btn_soft_disabled{
     opacity: 0.55;
 }

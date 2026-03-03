@@ -1,19 +1,19 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import classes from './Board.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
-import { RECENT_BOARDS_LS_KEY, UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
+import { UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
 import { useUIStore } from '@/store/uiStore';
 import FlowBoard, { type FlowBoardHandle } from '@/components/flow/FlowBoard';
+import { useBoardAccess } from '@/components/flowboard/hooks/useBoardAccess';
+import { useParticipantsListScroll } from '@/components/flowboard/hooks/useParticipantsListScroll';
+import { resolveAvatarSrc } from '@/components/flowboard/utils/avatar';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import BoardSettingsModal from '@/components/boards/boardsettingsmodal/BoardSettingsModal';
 import AuthTrigger from '@/components/auth/AuthTrigger';
-import AuthModal from '@/components/auth/authmodal/AuthModal';
-import LoginForm from '@/components/auth/login/Login';
-import RegisterForm from '@/components/auth/register/Register';
-import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
+import { InviteAuthModals, type InviteAuthView } from '@/components/flowboard/components/InviteAuthModals';
 import Close from '@/assets/icons/monochrome/back.svg';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
@@ -28,13 +28,6 @@ import LinkIcon from '@/assets/icons/monochrome/link.svg'
 type BoardParticipantRole = 'owner' | 'guest' | 'editer';
 
 const PENDING_INVITE_LS_KEY = 'pinit_pendingInviteUrl';
-type AuthView = 'login' | 'register' | 'reset';
-
-const resolveAvatarSrc = (avatar?: string | null) => {
-    if (!avatar) return null;
-    if (avatar.startsWith('/uploads/')) return `${API_URL}${avatar}`;
-    return avatar;
-};
 
 const Board = () => {
     const { boardId } = useParams<{ boardId: string }>();
@@ -64,7 +57,7 @@ const Board = () => {
     const [linkDeleteConfirmOpen, setLinkDeleteConfirmOpen] = useState(false);
     const [linkDeleteLoading, setLinkDeleteLoading] = useState(false);
     const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
-    const [forcedAuthView, setForcedAuthView] = useState<AuthView>('login');
+    const [forcedAuthView, setForcedAuthView] = useState<InviteAuthView>('login');
     const [hasMounted, setHasMounted] = useState(false);
     const effectiveBoardMenuOpen = hasMounted ? isBoardMenuOpen : false;
 
@@ -78,14 +71,13 @@ const Board = () => {
     const participantsListRef = useRef<HTMLDivElement | null>(null);
     const flowBoardRef = useRef<FlowBoardHandle | null>(null);
     const boardMenuRef = useRef<HTMLDivElement | null>(null);
-    const [hasParticipantsListScroll, setHasParticipantsListScroll] = useState(false);
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
     const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<UnifiedBoard> | null>(null);
     const [loadedBoardImageSrc, setLoadedBoardImageSrc] = useState<string | null>(null);
     const [failedBoardImageSrc, setFailedBoardImageSrc] = useState<string | null>(null);
     const [loadedParticipantAvatarSrcs, setLoadedParticipantAvatarSrcs] = useState<Record<string, true>>({});
     const [failedParticipantAvatarSrcs, setFailedParticipantAvatarSrcs] = useState<Record<string, true>>({});
-    const tokenPresent = Boolean(localStorage.getItem('token'));
+    const hasAuthToken = useAuthStore((s) => s.hasToken);
     const inviteToken = useMemo(() => {
         try {
             const value = new URLSearchParams(location.search).get('invite');
@@ -199,7 +191,7 @@ const Board = () => {
         });
     };
 
-    const getPendingInviteUrlForThisBoard = () => {
+    const getPendingInviteUrlForThisBoard = useCallback(() => {
         if (!hasValidBoardId) return null;
 
         let raw: string | null = null;
@@ -235,7 +227,7 @@ const Board = () => {
         } catch {
             return null;
         }
-    };
+    }, [hasValidBoardId, numericBoardId]);
 
     const abortInviteAuth = () => {
         try {
@@ -497,304 +489,18 @@ const Board = () => {
         };
     }, [boardInfo?.imageSrc]);
 
-    useEffect(() => {
-        if (!hasValidBoardId) {
-            setIsBoardMetaLoading(false);
-            return;
-        }
-        setIsBoardMetaLoading(true);
-        setBoardMetaOverride(null);
-    }, [hasValidBoardId, numericBoardId]);
-
-    useEffect(() => {
-        if (!hasValidBoardId) return;
-        const id = numericBoardId;
-        if (!Number.isFinite(id) || id <= 0) return;
-
-        let cancelled = false;
-        const redirectToSpaces = () => {
-            if (cancelled) return;
-            navigate('/spaces', { replace: true });
-        };
-
-        const applyAuthBoardPatch = (patch: Partial<UnifiedBoard>) => {
-            useBoardsUnifiedStore.setState((s) => {
-                const prev = s.entitiesById[id];
-                const nextEntities = {
-                    ...s.entitiesById,
-                    [id]: { ...(prev ?? { id, title: '', created_at: new Date().toISOString() }), ...prev, ...patch, id },
-                };
-
-                const apply = <T extends { id: number }>(list: T[]) => list.map((b) => (b.id === id ? ({ ...b, ...patch } as T) : b));
-
-                return {
-                    ...s,
-                    entitiesById: nextEntities,
-                    myBoards: apply(s.myBoards),
-                    recentBoards: apply(s.recentBoards),
-                    guestBoards: apply(s.guestBoards),
-                    friendsBoards: apply(s.friendsBoards),
-                    publicBoards: apply(s.publicBoards),
-                };
-            });
-        };
-
-        (async () => {
-            try {
-                // If token exists, wait for auth bootstrap to decide auth/non-auth flow.
-                if (tokenPresent && !isInitialized) {
-                    if (inviteToken) {
-                        try {
-                            const { data } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/invite-link/preview`, {
-                                params: { token: inviteToken },
-                            });
-                            if (cancelled) return;
-                            if (data && typeof data === 'object') {
-                                const payload = data as Partial<UnifiedBoard>;
-                                const resolvedId = Number((payload as { board_id?: unknown }).board_id ?? payload.id);
-                                if (Number.isFinite(resolvedId) && resolvedId > 0 && resolvedId !== id) {
-                                    navigate(`/spaces/${resolvedId}?invite=${encodeURIComponent(inviteToken)}`, { replace: true });
-                                    return;
-                                }
-                                setBoardMetaOverride({ ...payload, id });
-                            }
-                        } catch {
-                            // ignore
-                        }
-                    }
-                    return;
-                }
-
-                if (isLoggedIn) {
-                    if (inviteToken) {
-                        try {
-                            const { data } = await axiosInstance.get<{ board_id: number }>(`/api/boards/invite-link/resolve`, {
-                                params: { token: inviteToken },
-                            });
-                            if (cancelled) return;
-
-                            const resolvedBoardId = Number(data?.board_id);
-                            if (Number.isFinite(resolvedBoardId) && resolvedBoardId > 0 && resolvedBoardId !== id) {
-                                navigate(`/spaces/${resolvedBoardId}?invite=${encodeURIComponent(inviteToken)}`, { replace: true });
-                                return;
-                            }
-                        } catch (err: unknown) {
-                            const status = (err as { response?: { status?: number } })?.response?.status;
-                            if (status === 404) {
-                                redirectToSpaces();
-                                return;
-                            }
-                        }
-                    }
-
-                    const tryLoadAccessibleBoard = async () => {
-                        const { data } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/${id}`);
-                        if (cancelled) return null;
-                        if (data && typeof data === 'object') {
-                            setBoardMetaOverride({ ...data, id });
-                            applyAuthBoardPatch(data);
-                            if (inviteToken) {
-                                navigate(`/spaces/${id}`, { replace: true });
-                            }
-                            return data;
-                        }
-                        return null;
-                    };
-
-                    try {
-                        const accessible = await tryLoadAccessibleBoard();
-                        if (accessible) {
-                            try {
-                                await axiosInstance.post(`/api/boards/${id}/visit`);
-                            } catch {
-                                // ignore
-                            }
-                            void useBoardsUnifiedStore.getState().refreshRecentSilent();
-                            return;
-                        }
-                    } catch (err: unknown) {
-                        const status = (err as { response?: { status?: number } })?.response?.status;
-
-                        // Not owner/guest -> maybe public; check public endpoint and join as guest
-                        if (status === 404 || status === 403) {
-                            if (inviteToken) {
-                                try {
-                                    const { data: acceptData } = await axiosInstance.post<{ board_id: number }>(`/api/boards/invite-link/accept`, {
-                                        token: inviteToken,
-                                    });
-                                    if (cancelled) return;
-
-                                    const acceptedBoardId = Number(acceptData?.board_id);
-                                    if (Number.isFinite(acceptedBoardId) && acceptedBoardId > 0) {
-                                        if (acceptedBoardId !== id) {
-                                            navigate(`/spaces/${acceptedBoardId}`, { replace: true });
-                                            return;
-                                        }
-
-                                        try {
-                                            const joined = await tryLoadAccessibleBoard();
-                                            if (joined) {
-                                                try {
-                                                    await axiosInstance.post(`/api/boards/${id}/visit`);
-                                                } catch {
-                                                    // ignore
-                                                }
-                                                void useBoardsUnifiedStore.getState().refreshRecentSilent();
-                                                return;
-                                            }
-                                        } catch {
-                                            // ignore
-                                        }
-                                    }
-                                } catch {
-                                    // ignore
-                                }
-                            }
-
-                            try {
-                                const { data: publicData } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/public/${id}`);
-                                if (cancelled) return;
-                                if (!publicData || typeof publicData !== 'object') {
-                                    redirectToSpaces();
-                                    return;
-                                }
-
-                                try {
-                                    await axiosInstance.post(`/api/boards/${id}/join-public`);
-                                } catch {
-                                    redirectToSpaces();
-                                    return;
-                                }
-
-                                try {
-                                    const joined = await tryLoadAccessibleBoard();
-                                    if (!joined) {
-                                        redirectToSpaces();
-                                        return;
-                                    }
-                                } catch {
-                                    redirectToSpaces();
-                                    return;
-                                }
-
-                                setBoardMetaOverride({ ...publicData, id, is_public: true });
-
-                                try {
-                                    await axiosInstance.post(`/api/boards/${id}/visit`);
-                                } catch {
-                                    // ignore
-                                }
-                                void useBoardsUnifiedStore.getState().refreshRecentSilent();
-                                return;
-                            } catch {
-                                redirectToSpaces();
-                                return;
-                            }
-                        }
-                    }
-
-                    redirectToSpaces();
-                    return;
-                }
-
-                // Non-auth: allow only public
-                try {
-                    const inviteGate = Boolean(inviteToken || getPendingInviteUrlForThisBoard());
-                    if (inviteToken) {
-                        try {
-                            const { data: preview } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/invite-link/preview`, {
-                                params: { token: inviteToken },
-                            });
-                            if (cancelled) return;
-                            if (preview && typeof preview === 'object') {
-                                const payload = preview as Partial<UnifiedBoard>;
-                                const resolvedId = Number((payload as { board_id?: unknown }).board_id ?? payload.id);
-                                if (Number.isFinite(resolvedId) && resolvedId > 0 && resolvedId !== id) {
-                                    navigate(`/spaces/${resolvedId}?invite=${encodeURIComponent(inviteToken)}`, { replace: true });
-                                    return;
-                                }
-                                setBoardMetaOverride({ ...payload, id });
-                            }
-                        } catch {
-                            // ignore
-                        }
-                    }
-
-                    const { data } = await axiosInstance.get<Partial<UnifiedBoard>>(`/api/boards/public/${id}`);
-                    if (cancelled) return;
-                    if (!data || typeof data !== 'object') {
-                        if (!inviteGate) redirectToSpaces();
-                        return;
-                    }
-
-                    setBoardMetaOverride({ ...data, id, is_public: true });
-
-                    const persistRecent = (entry: UnifiedBoard) => {
-                        const readCurrent = (): UnifiedBoard[] => {
-                            try {
-                                const raw = localStorage.getItem(RECENT_BOARDS_LS_KEY);
-                                if (!raw) return [];
-                                const parsed: unknown = JSON.parse(raw);
-                                return Array.isArray(parsed) ? (parsed as UnifiedBoard[]) : [];
-                            } catch {
-                                return [];
-                            }
-                        };
-
-                        const current = readCurrent();
-                        const withoutThis = current.filter((b) => Number(b?.id) !== entry.id);
-                        const updated = [entry, ...withoutThis].slice(0, 20);
-
-                        try {
-                            localStorage.setItem(RECENT_BOARDS_LS_KEY, JSON.stringify(updated));
-                        } catch {
-                            // ignore
-                        }
-
-                        useBoardsUnifiedStore.setState((s) => {
-                            const nextEntities = { ...s.entitiesById };
-                            const nextIds: number[] = [];
-                            for (const b of updated) {
-                                const id = Number(b?.id);
-                                if (!Number.isFinite(id) || id <= 0) continue;
-                                nextIds.push(id);
-                                nextEntities[id] = { ...(nextEntities[id] ?? b), ...b, id };
-                            }
-                            return {
-                                ...s,
-                                entitiesById: nextEntities,
-                                recentIds: nextIds,
-                                recentBoards: updated,
-                                hasLoadedOnceRecent: true,
-                            };
-                        });
-                    };
-
-                    const now = new Date().toISOString();
-                    persistRecent({
-                        id,
-                        title: typeof data?.title === 'string' && data.title.trim() ? data.title : 'Доска',
-                        description: typeof data?.description === 'string' || data?.description === null ? data.description : null,
-                        created_at: typeof data?.created_at === 'string' ? data.created_at : now,
-                        last_visited_at: now,
-                        image: typeof data?.image === 'string' || data?.image === null ? data.image : null,
-                        is_public: true,
-                    });
-                } catch {
-                    const inviteGate = Boolean(inviteToken || getPendingInviteUrlForThisBoard());
-                    if (!inviteGate) redirectToSpaces();
-                    return;
-                }
-            } finally {
-                if (cancelled) return;
-                setIsBoardMetaLoading(false);
-            }
-        })();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [hasValidBoardId, inviteToken, isInitialized, isLoggedIn, navigate, numericBoardId, tokenPresent]);
+    useBoardAccess({
+        hasValidBoardId,
+        numericBoardId,
+        inviteToken,
+        isInitialized,
+        isLoggedIn,
+        hasAuthToken,
+        navigate,
+        setIsBoardMetaLoading,
+        setBoardMetaOverride,
+        getPendingInviteUrlForThisBoard,
+    });
 
     const resolvedMyRole: BoardParticipantRole | null = (() => {
         if (!isLoggedIn) return null;
@@ -895,29 +601,10 @@ const Board = () => {
     const shouldShowOwnerActions = canManageParticipants && !participantsInitialLoading;
     const ownerParticipant = participants.find((p) => p.role === 'owner') ?? null;
     const ownerAvatarSrc = ownerParticipant ? resolveAvatarSrc(ownerParticipant.avatar) : null;
-
-    useLayoutEffect(() => {
-        const el = participantsListRef.current;
-        if (!el) return;
-        const next = el.scrollHeight > el.clientHeight + 1;
-        setHasParticipantsListScroll((prev) => (prev === next ? prev : next));
+    const hasParticipantsListScroll = useParticipantsListScroll({
+        listRef: participantsListRef,
+        watchKey: `${participantsInitialLoading}:${participants.length}:${effectiveBoardMenuOpen}`,
     });
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-
-        const onResize = () => {
-            const el = participantsListRef.current;
-            if (!el) return;
-            const next = el.scrollHeight > el.clientHeight + 1;
-            setHasParticipantsListScroll((prev) => (prev === next ? prev : next));
-        };
-
-        window.addEventListener('resize', onResize);
-        return () => {
-            window.removeEventListener('resize', onResize);
-        };
-    }, []);
 
     useEffect(() => {
         if (__ENV__ !== 'development') return;
@@ -1532,33 +1219,14 @@ const Board = () => {
                 />
             ) : null}
 
-            <AuthModal isOpen={forcedAuthOpen && forcedAuthView === 'login'} onClose={abortInviteAuth} closeOnOverlayClick={false}>
-                <div className={classes.invite_auth_hint}>Войдите в аккаунт, чтобы присоединиться к доске</div>
-                <LoginForm
-                    onOpenReset={() => setForcedAuthView('reset')}
-                    onOpenRegister={() => setForcedAuthView('register')}
-                    onClose={closeInviteAuthAfterSuccess}
-                />
-            </AuthModal>
-
-            <AuthModal
-                isOpen={forcedAuthOpen && forcedAuthView === 'register'}
-                onClose={abortInviteAuth}
-                closeOnOverlayClick={false}
-            >
-                <div className={classes.invite_auth_hint}>Войдите в аккаунт, чтобы присоединиться к доске</div>
-                <RegisterForm onClose={closeInviteAuthAfterSuccess} />
-            </AuthModal>
-
-            <AuthModal
-                isOpen={forcedAuthOpen && forcedAuthView === 'reset'}
-                onClose={abortInviteAuth}
-                closeOnOverlayClick={false}
-                onBack={() => setForcedAuthView('login')}
-            >
-                <div className={classes.invite_auth_hint}>Войдите в аккаунт, чтобы присоединиться к доске</div>
-                <ResetPasswordForm onClose={closeInviteAuthAfterSuccess} />
-            </AuthModal>
+            <InviteAuthModals
+                isOpen={forcedAuthOpen}
+                view={forcedAuthView}
+                hintClassName={classes.invite_auth_hint}
+                onAbort={abortInviteAuth}
+                onSuccess={closeInviteAuthAfterSuccess}
+                onOpenView={setForcedAuthView}
+            />
         </div>
     );
 };

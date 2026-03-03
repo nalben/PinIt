@@ -11,6 +11,7 @@ interface User {
 
 interface AuthState {
   isAuth: boolean;
+  hasToken: boolean;
   user: User | null;
   isInitialized: boolean;
   login: (user: User) => void;
@@ -20,23 +21,24 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>(set => ({
   isAuth: false,
+  hasToken: Boolean(localStorage.getItem("token")),
   user: null,
   isInitialized: false,
   login: user => {
     localStorage.setItem("userId", String(user.id));
     localStorage.setItem("username", user.username);
-    set({ isAuth: true, user, isInitialized: true });
+    set({ isAuth: true, hasToken: true, user, isInitialized: true });
   },
   logout: () => {
     localStorage.removeItem("token");
     localStorage.removeItem("userId");
     localStorage.removeItem("username");
-    set({ isAuth: false, user: null, isInitialized: true });
+    set({ isAuth: false, hasToken: false, user: null, isInitialized: true });
   },
   bootstrap: async () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      set({ isAuth: false, user: null, isInitialized: true });
+      set({ isAuth: false, hasToken: false, user: null, isInitialized: true });
       return;
     }
 
@@ -46,12 +48,12 @@ export const useAuthStore = create<AuthState>(set => ({
       if (data && data.id > 0 && data.username) {
         localStorage.setItem("userId", String(data.id));
         localStorage.setItem("username", data.username);
-        set({ isAuth: true, user: data, isInitialized: true });
+        set({ isAuth: true, hasToken: true, user: data, isInitialized: true });
       } else {
         localStorage.removeItem("token");
         localStorage.removeItem("userId");
         localStorage.removeItem("username");
-        set({ isAuth: false, user: null, isInitialized: true });
+        set({ isAuth: false, hasToken: false, user: null, isInitialized: true });
       }
     } catch (err: any) {
       const status = err?.response?.status;
@@ -59,11 +61,11 @@ export const useAuthStore = create<AuthState>(set => ({
         localStorage.removeItem("token");
         localStorage.removeItem("userId");
         localStorage.removeItem("username");
-        set({ isAuth: false, user: null, isInitialized: true });
+        set({ isAuth: false, hasToken: false, user: null, isInitialized: true });
         return;
       }
 
-      set((s) => ({ ...s, isInitialized: true }));
+      set((s) => ({ ...s, hasToken: Boolean(localStorage.getItem("token")), isInitialized: true }));
     }
   },
 }));

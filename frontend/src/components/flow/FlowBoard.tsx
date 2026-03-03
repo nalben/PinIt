@@ -30,7 +30,6 @@ import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import LockClose from '@/assets/icons/monochrome/lock_close.svg';
 import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
-import boardClasses from '@/pages/board/Board.module.scss';
 import { useUIStore } from '@/store/uiStore';
 import { useAuthStore } from '@/store/authStore';
 import type { ApiCard, ApiCardLink, ApiLinkStyle, FlowNodeData, FlowNodeType } from './flowBoardModel';
@@ -47,6 +46,9 @@ import { useFlowBoardBoardsUpdatedSocket } from './useFlowBoardBoardsUpdatedSock
 import { useFlowBoardContextMenu } from './useFlowBoardContextMenu';
 import { useFlowBoardPointerGestures } from './useFlowBoardPointerGestures';
 import { useFlowBoardLinkMode } from './useFlowBoardLinkMode';
+import { useFlowSelection } from '@/components/flowboard/hooks/useFlowSelection';
+import { parseFlowEdgeData } from '@/components/flowboard/utils/flowEdgeData';
+import { FlowLinkModeAlarm } from '@/components/flowboard/components/FlowLinkModeAlarm';
 
 export type FlowBoardHandle = {
   createDraftNodeAtCenter: () => void;
@@ -319,7 +321,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const { boardId } = useParams<{ boardId: string }>();
   const numericBoardId = Number(boardId);
   const isAuth = useAuthStore((s) => s.isAuth);
-  const hasToken = Boolean(localStorage.getItem('token'));
+  const hasToken = useAuthStore((s) => s.hasToken);
   const [selectionModifierPressed, setSelectionModifierPressed] = useState(false);
 
   useEffect(() => {
@@ -371,6 +373,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const [connectingHoverTargetNodeId, setConnectingHoverTargetNodeId] = useState<string | null>(null);
   const createdViaOnConnectRef = useRef(false);
   const [linkSourceNodeId, setLinkSourceNodeId] = useState<string | null>(null);
+  const {
+    clearSelectedElements,
+    clearSelectedEdges,
+    setSelectedNodeOnly,
+    selectEdgeAndNodes,
+    setEdgeHighlightBySelectedNodes,
+  } = useFlowSelection<FlowNodeData>({ setNodes, setEdges });
   const flowCardSettingsOpen = useUIStore((s) => s.flowCardSettingsOpen);
   const flowCardSettings = useUIStore((s) => s.flowCardSettings);
   const flowCardSettingsDraft = useUIStore((s) => s.flowCardSettingsDraft);
@@ -500,25 +509,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     });
   }, [boardMenuView, edges, selectedLink, selectedLinkDraft]);
 
-  const setEdgeHighlightBySelectedNodes = useCallback((selectedNodeIds: Set<string>) => {
-    setEdges((prev) =>
-      prev.map((e) => {
-        const isConnected = selectedNodeIds.has(String(e.source)) || selectedNodeIds.has(String(e.target));
-        const prevClass = typeof e.className === 'string' ? e.className : '';
-        const hasFlag = prevClass.split(/\s+/).includes('flow_edge_highlight');
-        if (isConnected === hasFlag) return e;
-        const cleaned = prevClass
-          .split(/\s+/)
-          .filter(Boolean)
-          .filter((c) => c !== 'flow_edge_highlight')
-          .join(' ')
-          .trim();
-        const nextClass = `${cleaned} ${isConnected ? 'flow_edge_highlight' : ''}`.trim();
-        return { ...e, className: nextClass };
-      })
-    );
-  }, []);
-
   const activeNodeId = flowCardSettingsOpen ? flowCardSettings?.nodeId ?? null : null;
   const isEditing = Boolean(flowCardSettingsOpen && flowCardSettings && flowCardSettingsDraft && activeNodeId);
   const editingStateRef = useRef<{ isEditing: boolean; activeNodeId: string | null }>({ isEditing: false, activeNodeId: null });
@@ -580,16 +570,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       })
     );
   }, [connectingHoverTargetNodeId, connectingSourceNodeId, isConnecting, linkSourceNodeId]);
-
-  const setSelectedNodeOnly = useCallback((nodeId: string | null) => {
-    setNodes((prev) =>
-      prev.map((n) => {
-        const isSelected = nodeId ? String(n.id) === String(nodeId) : false;
-        if (Boolean((n as RFNode<FlowNodeData>).selected) === isSelected) return n;
-        return { ...n, selected: isSelected };
-      })
-    );
-  }, []);
 
   const pickNodeIdAtClientPoint = useCallback((clientX: number, clientY: number) => {
     const elements = document.elementsFromPoint(clientX, clientY) as unknown as HTMLElement[];
@@ -1464,14 +1444,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                 event.preventDefault();
                 event.stopPropagation();
                 setSelectionModifierPressed(false);
-                setNodes((prev) => prev.map((n) => ((n as unknown as { selected?: boolean }).selected ? { ...n, selected: false } : n)));
-                setEdges((prev) => prev.map((e) => ((e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e)));
+                clearSelectedElements();
                 return;
               }
 
               if (boardMenuView === 'link' && selectedLink) {
                 closeLinkInspector();
-                setEdges((prev) => prev.map((e) => ((e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e)));
+                clearSelectedEdges();
               }
             }}
             onConnectStart={(_, params) => {
@@ -1526,8 +1505,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             onPaneClick={() => {
               closeLinkInspector();
               closeContextMenu();
-              setNodes((prev) => (prev.some((n) => Boolean((n as unknown as { selected?: boolean }).selected)) ? prev.map((n) => (Boolean((n as unknown as { selected?: boolean }).selected) ? { ...n, selected: false } : n)) : prev));
-              setEdges((prev) => (prev.some((e) => Boolean((e as unknown as { selected?: boolean }).selected)) ? prev.map((e) => (Boolean((e as unknown as { selected?: boolean }).selected) ? { ...e, selected: false } : e)) : prev));
+              clearSelectedElements();
             }}
             onEdgeClick={(event, edge) => {
               if (!canEditCards || !hasToken) return;
@@ -1535,24 +1513,10 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               event.preventDefault();
               event.stopPropagation();
 
-              const d = (edge as unknown as { data?: unknown })?.data as
-                | {
-                    linkId?: unknown;
-                    fromCardId?: unknown;
-                    toCardId?: unknown;
-                    style?: unknown;
-                    color?: unknown;
-                    label?: unknown;
-                    isLabelVisible?: unknown;
-                  }
-                | undefined;
+              const parsed = parseFlowEdgeData({ edge, defaultColor: DEFAULT_LINK_COLOR });
+              if (!parsed) return;
 
-              const linkId = typeof d?.linkId === 'number' ? d.linkId : Number(d?.linkId);
-              if (!Number.isFinite(linkId) || linkId <= 0) return;
-
-              const fromCardId = typeof d?.fromCardId === 'number' ? d.fromCardId : Number(edge.source);
-              const toCardId = typeof d?.toCardId === 'number' ? d.toCardId : Number(edge.target);
-              if (!Number.isFinite(fromCardId) || !Number.isFinite(toCardId)) return;
+              const { linkId, fromCardId, toCardId, style, color, label, isLabelVisible } = parsed;
 
               const fromTitle = nodes.find((n) => String(n.id) === String(edge.source))?.data?.title ?? null;
               const toTitle = nodes.find((n) => String(n.id) === String(edge.target))?.data?.title ?? null;
@@ -1562,23 +1526,21 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               setEdgeHighlightBySelectedNodes(new Set());
 
               const edgeId = `link-${linkId}`;
-              setEdges((prev) =>
-                prev.map((e) => (String(e.id) === edgeId ? { ...e, selected: true } : (e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e))
-              );
-
-              const fromIdStr = String(fromCardId);
-              const toIdStr = String(toCardId);
-              setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === fromIdStr || String(n.id) === toIdStr })));
+              selectEdgeAndNodes({
+                edgeId,
+                fromNodeId: String(fromCardId),
+                toNodeId: String(toCardId),
+              });
 
               openLinkInspector({
                 linkId,
                 boardId: numericBoardId,
                 fromCardId,
                 toCardId,
-                style: d?.style === 'arrow' ? 'arrow' : 'line',
-                color: typeof d?.color === 'string' ? d.color : DEFAULT_LINK_COLOR,
-                label: typeof d?.label === 'string' ? d.label : null,
-                isLabelVisible: d?.isLabelVisible === undefined ? true : Boolean(d?.isLabelVisible),
+                style,
+                color,
+                label,
+                isLabelVisible,
                 fromTitle,
                 toTitle,
               });
@@ -1679,7 +1641,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               closeLinkInspector();
               closeContextMenu();
 
-              setEdges((prev) => prev.map((e) => ((e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e)));
+              clearSelectedEdges();
               setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === clickedId })));
               setEdgeHighlightBySelectedNodes(new Set([clickedId]));
 
@@ -1728,18 +1690,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         </ReactFlow>
       </ReactFlowProvider>
-      {linkModeStep !== 'off' ? (
-        <div className={classes.link_mode_alarm} aria-live="polite">
-          <div className={classes.link_mode_alarm_inner}>
-            <div className={classes.link_mode_alarm_text}>
-              {linkModeStep === 'first' ? 'Выберите первую запись для связки' : 'Выберите вторую запись для связки'}
-            </div>
-            <button type="button" className={classes.link_mode_alarm_cancel} onClick={cancelLinkMode}>
-              Отмена
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <FlowLinkModeAlarm step={linkModeStep} onCancel={cancelLinkMode} />
       {contextMenu.isOpen && (
         <div
           ref={contextMenuRef}
@@ -1908,13 +1859,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             </div>
 
             <div className={classes.form_field}>
-              <div className={boardClasses.leave_board_row}>
+              <div className={classes.danger_action_row}>
                 <DropdownWrapper upDel closeOnClick={false} isOpen={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)}>
                 {[
                   <button
                     key="trigger"
                     type="button"
-                    className={boardClasses.leave_board_trigger}
+                    className={classes.danger_action_trigger}
                     onClick={() => setDeleteConfirmOpen((prev) => !prev)}
                     disabled={!isEditing || draftSaving || imageUploading}
                     aria-label="Удалить запись"
@@ -1924,7 +1875,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                   <div key="menu">
                     <button
                       type="button"
-                      data-dropdown-class={boardClasses.participant_confirm_danger}
+                      data-dropdown-class={classes.confirm_danger}
                       onClick={() => void deleteActive()}
                       disabled={!isEditing || draftSaving || imageUploading}
                     >
@@ -1932,7 +1883,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                     </button>
                     <button
                       type="button"
-                      data-dropdown-class={boardClasses.participant_confirm_cancel}
+                      data-dropdown-class={classes.confirm_cancel}
                       onClick={() => setDeleteConfirmOpen(false)}
                       disabled={!isEditing || draftSaving || imageUploading}
                     >

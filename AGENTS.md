@@ -1102,6 +1102,92 @@ Update (2026-03-03)
 - DB migration script added to extend card links with label metadata:
   - `api/sql/2026-03-03-cardlinks-label.sql` adds `cardlinks.label VARCHAR(70) NULL` and `cardlinks.is_label_visible TINYINT(1) NOT NULL DEFAULT 1`.
 
+Update (2026-03-03, `components/flowboard` usage and function-sorting rules)
+
+- New folder exists: `frontend/src/components/flowboard/` with strict subfolders:
+  - `components/` for extracted JSX/UI blocks.
+  - `hooks/` for reusable state/effects orchestration.
+  - `utils/` for pure helpers/parsers (no React state/effects).
+- Current files and source-of-truth responsibilities:
+  - `components/InviteAuthModals.tsx`: shared auth-modals block for invite flow UI (`login/register/reset` switching).
+  - `components/FlowLinkModeAlarm.tsx`: shared centered overlay for 2-click link mode prompts.
+  - `hooks/useBoardAccess.ts`: board access/loading flow orchestration for `/spaces/:boardId` (auth/non-auth/public/invite paths).
+  - `hooks/useParticipantsListScroll.ts`: participants list overflow detection (layout + resize observer handling).
+  - `hooks/useFlowSelection.ts`: shared node/edge selection actions (`clear/select/highlight`) for FlowBoard.
+  - `utils/linkSocketPayload.ts`: parser/normalizer for `boards:updated` link payload (`link_created/link_updated`).
+  - `utils/flowEdgeData.ts`: parser/normalizer for ReactFlow edge `data` into typed link inspector payload.
+  - `utils/avatar.ts`: avatar URL resolver (uploads path handling).
+- Verified consumers:
+  - `Board.tsx` uses `useBoardAccess`, `useParticipantsListScroll`, `resolveAvatarSrc`, `InviteAuthModals`.
+  - `FlowBoard.tsx` uses `useFlowSelection`, `parseFlowEdgeData`, `FlowLinkModeAlarm`.
+  - `useFlowBoardBoardsUpdatedSocket.ts` uses `parseLinkFromBoardsUpdated`.
+
+Rules: where to put NEW code
+
+- Put new code in `components/flowboard/components/` if:
+  - it renders JSX/TSX,
+  - it can be reused by 2+ screens OR it removes >~40 lines of repeated markup from a parent,
+  - and it mainly receives data/callbacks through props.
+- Put new code in `components/flowboard/hooks/` if:
+  - it combines 2+ related effects/state transitions,
+  - it coordinates async flows (API/socket/timers/listeners),
+  - and it is not tied to a single inline render fragment.
+- Put new code in `components/flowboard/utils/` if:
+  - it is deterministic and side-effect-free,
+  - it parses/normalizes payloads or builds derived values,
+  - and it does not require React hooks/component lifecycle.
+
+Rules: function sorting decision tree (mandatory)
+
+1. If function touches JSX output directly -> `components/`.
+2. If function uses `useState`/`useEffect`/refs/listeners -> `hooks/`.
+3. If function only transforms input to output -> `utils/`.
+4. If function does network/store orchestration + local UI state -> start in `hooks/`, extract all pure transforms to `utils/`.
+5. If function is specific to exactly one component and <~20 lines with no reuse potential -> keep local; otherwise extract.
+6. If you duplicate logic in 2 places, do not copy/paste; move shared part to `hooks/` or `utils/` immediately.
+
+Rules: inside-file function ordering (mandatory)
+
+- For `utils/*.ts`:
+  - 1) imports
+  - 2) public types
+  - 3) private tiny helpers
+  - 4) exported main parser/transform functions
+- For `hooks/*.ts`:
+  - 1) imports
+  - 2) input/output types of hook
+  - 3) local helper functions
+  - 4) hook body (`useXxx`)
+  - 5) returned API sorted by usage frequency (primary actions first)
+- For `components/*.tsx`:
+  - 1) imports
+  - 2) prop types
+  - 3) constant literals
+  - 4) component function
+  - 5) minimal export surface (single named export unless default is required by existing consumers)
+
+Rules: naming conventions for new functions/files
+
+- Hook names: `use<Domain><Action>` (`useBoardAccess`, `useFlowSelection`).
+- Pure parser/normalizer names: `parse<Domain><Source>` or `resolve<Domain><Field>`.
+- UI component names: `<Domain><Block>` (`InviteAuthModals`, `FlowLinkModeAlarm`).
+- Avoid generic names like `helpers.ts`, `utils.ts`, `common.ts` in this folder.
+
+Rules: dependency boundaries
+
+- `utils/` must not import from React, Zustand stores, or axios.
+- `hooks/` may import `utils/`, stores, axios, socket manager.
+- `components/` may import `hooks/` and `utils/`, but should avoid direct API calls when a hook can own that.
+- Keep event/payload contracts centralized in `utils` parsers when reused by more than one consumer.
+
+Rules: extraction threshold for future refactors
+
+- If a file exceeds ~800 lines and contains mixed responsibilities (UI + networking + parsing + selection), extraction is required.
+- If a new feature adds a second branch with similar condition tree (same endpoint family or same socket reason), extract parser/handler instead of growing `if/else` chain inline.
+- For any new socket reason handling in flow:
+  - parse payload in `utils/`,
+  - keep imperative edge/node updates in hook/component.
+
 1. Frontend routing and app entry
 
 - Root layout component is `frontend/src/components/app/App.tsx` (not `frontend/src/App.tsx`).
@@ -1140,6 +1226,7 @@ Update (2026-03-03)
 - `frontend/src/components/app/AppInit.tsx` only runs `authStore.bootstrap()`.
 - `frontend/src/components/app/App.tsx` connects socket only when `isInitialized && isAuth`; disconnects when auth is absent.
 - `authStore.bootstrap()` validates token via `GET /api/profile/me` and clears token/user storage on 401/403.
+- `frontend/src/store/authStore.ts` now also tracks `hasToken` (derived from localStorage token and kept in sync on `login`/`logout`/`bootstrap`), and board/flow pages read this flag instead of directly reading `localStorage` in components.
 
 5. Board/public access and cache behavior
 

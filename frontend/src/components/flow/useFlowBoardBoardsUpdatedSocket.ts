@@ -4,6 +4,7 @@ import type { Edge, Node as RFNode } from 'reactflow';
 import { connectSocket } from '@/services/socketManager';
 import type { ApiCardLink, ApiLinkStyle, FlowNodeData, FlowNodeType } from './flowBoardModel';
 import { buildEdgeFromLink, resolveImageSrc } from './flowBoardUtils';
+import { parseLinkFromBoardsUpdated } from '@/components/flowboard/utils/linkSocketPayload';
 
 type BoardsUpdatedCmd = {
   reason?: unknown;
@@ -159,71 +160,30 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
         }
 
         if (reason === 'link_created') {
-          const linkIdRaw = cmd?.link_id;
-          const fromRaw = cmd?.from_card_id;
-          const toRaw = cmd?.to_card_id;
-          const styleRaw = cmd?.style;
-          const colorRaw = cmd?.color;
-          const labelRaw = cmd?.label;
-          const visibleRaw = cmd?.is_label_visible;
-          const link_id = typeof linkIdRaw === 'number' ? linkIdRaw : Number(linkIdRaw);
-          const from_card_id = typeof fromRaw === 'number' ? fromRaw : Number(fromRaw);
-          const to_card_id = typeof toRaw === 'number' ? toRaw : Number(toRaw);
-          const style = styleRaw === 'arrow' || styleRaw === 'line' ? (styleRaw as ApiLinkStyle) : defaultLinkStyle;
-          const color = typeof colorRaw === 'string' ? colorRaw : defaultLinkColor;
-          const label = labelRaw === null ? null : typeof labelRaw === 'string' ? labelRaw : null;
-          const is_label_visible = visibleRaw === undefined ? 1 : Number(visibleRaw) ? 1 : 0;
-
-          if (!Number.isFinite(link_id) || !Number.isFinite(from_card_id) || !Number.isFinite(to_card_id)) return;
-          addEdgeFromLink({
-            id: link_id,
-            board_id: numericBoardId,
-            from_card_id,
-            to_card_id,
-            style,
-            color,
-            label,
-            is_label_visible,
-            created_at: ''
+          const link = parseLinkFromBoardsUpdated({
+            cmd,
+            numericBoardId,
+            defaultLinkStyle,
+            defaultLinkColor,
           });
+          if (!link) return;
+          addEdgeFromLink(link);
           return;
         }
 
         if (reason === 'link_updated') {
-          const linkIdRaw = cmd?.link_id;
-          const fromRaw = cmd?.from_card_id;
-          const toRaw = cmd?.to_card_id;
-          const styleRaw = cmd?.style;
-          const colorRaw = cmd?.color;
-          const labelRaw = cmd?.label;
-          const visibleRaw = cmd?.is_label_visible;
-
-          const link_id = typeof linkIdRaw === 'number' ? linkIdRaw : Number(linkIdRaw);
-          const from_card_id = typeof fromRaw === 'number' ? fromRaw : Number(fromRaw);
-          const to_card_id = typeof toRaw === 'number' ? toRaw : Number(toRaw);
-          const style = styleRaw === 'arrow' || styleRaw === 'line' ? (styleRaw as ApiLinkStyle) : defaultLinkStyle;
-          const color = typeof colorRaw === 'string' ? colorRaw : defaultLinkColor;
-          const label = labelRaw === null ? null : typeof labelRaw === 'string' ? labelRaw : null;
-          const is_label_visible = visibleRaw === undefined ? 1 : Number(visibleRaw) ? 1 : 0;
-
-          if (!Number.isFinite(link_id) || !Number.isFinite(from_card_id) || !Number.isFinite(to_card_id)) return;
-
-          const edgeId = `link-${link_id}`;
+          const link = parseLinkFromBoardsUpdated({
+            cmd,
+            numericBoardId,
+            defaultLinkStyle,
+            defaultLinkColor,
+          });
+          if (!link) return;
+          const edgeId = `link-${link.id}`;
           setEdges((prev) =>
             prev.map((e) => {
               if (String(e.id) !== edgeId) return e;
-              const next = {
-                id: link_id,
-                board_id: numericBoardId,
-                from_card_id,
-                to_card_id,
-                style,
-                color,
-                label,
-                is_label_visible,
-                created_at: ''
-              };
-              const rebuilt = buildEdgeFromLink(next);
+              const rebuilt = buildEdgeFromLink(link);
               return { ...rebuilt, selected: (e as unknown as { selected?: boolean }).selected };
             })
           );
