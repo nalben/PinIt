@@ -200,7 +200,7 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
 const NODE_TYPES = { rectangle: RectangleNode, rhombus: RhombusNode, circle: CircleNode } as const;
 
 const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
-  const { id, source, target, style, markerEnd, sourceX, sourceY, targetX, targetY } = props;
+  const { id, source, target, style, markerEnd, sourceX, sourceY, targetX, targetY, data } = props;
   const rf = useReactFlow();
 
   const sNode = rf.getNode(source);
@@ -239,7 +239,25 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   if (Math.hypot(tx - sx, ty - sy) < MIN_EDGE_RENDER_LEN_PX) return null;
 
   const path = `M${sx},${sy}L${tx},${ty}`;
-  return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+
+  const labelRaw = (data as unknown as { label?: unknown })?.label;
+  const isLabelVisibleRaw = (data as unknown as { isLabelVisible?: unknown })?.isLabelVisible;
+  const isLabelVisible = isLabelVisibleRaw === undefined ? true : Boolean(isLabelVisibleRaw);
+  const label = typeof labelRaw === 'string' ? labelRaw.trim() : '';
+  const labelClass = `${classes.flow_edge_label} ${!isLabelVisible ? classes.flow_edge_label_hidden : ''}`.trim();
+  const mx = (sx + tx) / 2;
+  const my = (sy + ty) / 2;
+
+  return (
+    <g>
+      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
+      {label ? (
+        <text className={labelClass} x={mx} y={my} textAnchor="middle" dominantBaseline="central">
+          {label}
+        </text>
+      ) : null}
+    </g>
+  );
 };
 
 const EDGE_TYPES = { flowStraight: FlowStraightEdge } as const;
@@ -277,6 +295,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const openFlowCardSettings = useUIStore((s) => s.openFlowCardSettings);
   const closeFlowCardSettings = useUIStore((s) => s.closeFlowCardSettings);
   const setFlowCardSettingsDraft = useUIStore((s) => s.setFlowCardSettingsDraft);
+  const openLinkInspector = useUIStore((s) => s.openLinkInspector);
+  const closeLinkInspector = useUIStore((s) => s.closeLinkInspector);
 
   const activeNodeId = flowCardSettingsOpen ? flowCardSettings?.nodeId ?? null : null;
   const isEditing = Boolean(flowCardSettingsOpen && flowCardSettings && flowCardSettingsDraft && activeNodeId);
@@ -1256,6 +1276,51 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               const selectedNodes = sel?.nodes ?? [];
               if (selectedNodes.length === 1) setLinkSourceNodeId(String(selectedNodes[0].id));
               else setLinkSourceNodeId(null);
+            }}
+            onPaneClick={() => {
+              closeLinkInspector();
+              closeContextMenu();
+            }}
+            onEdgeClick={(event, edge) => {
+              event.preventDefault();
+              event.stopPropagation();
+
+              const d = (edge as unknown as { data?: unknown })?.data as
+                | {
+                    linkId?: unknown;
+                    fromCardId?: unknown;
+                    toCardId?: unknown;
+                    style?: unknown;
+                    color?: unknown;
+                    label?: unknown;
+                    isLabelVisible?: unknown;
+                  }
+                | undefined;
+
+              const linkId = typeof d?.linkId === 'number' ? d.linkId : Number(d?.linkId);
+              if (!Number.isFinite(linkId) || linkId <= 0) return;
+
+              const fromCardId = typeof d?.fromCardId === 'number' ? d.fromCardId : Number(edge.source);
+              const toCardId = typeof d?.toCardId === 'number' ? d.toCardId : Number(edge.target);
+              if (!Number.isFinite(fromCardId) || !Number.isFinite(toCardId)) return;
+
+              const fromTitle = nodes.find((n) => String(n.id) === String(edge.source))?.data?.title ?? null;
+              const toTitle = nodes.find((n) => String(n.id) === String(edge.target))?.data?.title ?? null;
+
+              if (flowCardSettingsOpen) closeFlowCardSettings();
+
+              openLinkInspector({
+                linkId,
+                boardId: numericBoardId,
+                fromCardId,
+                toCardId,
+                style: d?.style === 'arrow' ? 'arrow' : 'line',
+                color: typeof d?.color === 'string' ? d.color : DEFAULT_LINK_COLOR,
+                label: typeof d?.label === 'string' ? d.label : null,
+                isLabelVisible: d?.isLabelVisible === undefined ? true : Boolean(d?.isLabelVisible),
+                fromTitle,
+                toTitle,
+              });
             }}
             onNodeDragStart={(_, node) => {
               const typed = node as RFNode<FlowNodeData>;

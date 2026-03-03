@@ -5,6 +5,20 @@ export type FriendsModalView = 'list' | 'search';
 export type BoardSettingsModalView = 'settings' | 'participants';
 export type BoardSettingsParticipantsInnerView = 'friends' | 'guests';
 export type FlowCardShape = 'rectangle' | 'rhombus' | 'circle';
+export type FlowLinkStyle = 'line' | 'arrow';
+export type BoardMenuView = 'board' | 'link';
+export type SelectedLinkSnapshot = {
+  linkId: number;
+  boardId: number;
+  fromCardId: number;
+  toCardId: number;
+  style: FlowLinkStyle;
+  color: string;
+  label: string | null;
+  isLabelVisible: boolean;
+  fromTitle?: string | null;
+  toTitle?: string | null;
+};
 
 type EscapeHandler = {
   priority: number;
@@ -31,6 +45,8 @@ interface UIState {
   friendsModalOpen: boolean;
   friendsModalView: FriendsModalView;
   isBoardMenuOpen: boolean;
+  boardMenuView: BoardMenuView;
+  selectedLink: SelectedLinkSnapshot | null;
   restoreBoardMenuAfterFlowCardSettings: boolean;
   boardSettingsModalOpen: boolean;
   boardSettingsModalView: BoardSettingsModalView;
@@ -54,6 +70,8 @@ interface UIState {
   openBoardMenu: () => void;
   closeBoardMenu: () => void;
   toggleBoardMenu: () => void;
+  openLinkInspector: (snapshot: SelectedLinkSnapshot) => void;
+  closeLinkInspector: () => void;
   openBoardSettingsModal: (view?: BoardSettingsModalView) => void;
   closeBoardSettingsModal: () => void;
   setBoardSettingsModalView: (view: BoardSettingsModalView) => void;
@@ -88,6 +106,8 @@ export const useUIStore = create<UIState>((set) => {
   friendsModalOpen: false,
   friendsModalView: 'list',
   isBoardMenuOpen: true,
+  boardMenuView: 'board',
+  selectedLink: null,
   restoreBoardMenuAfterFlowCardSettings: false,
   boardSettingsModalOpen: false,
   boardSettingsModalView: 'settings',
@@ -113,11 +133,26 @@ export const useUIStore = create<UIState>((set) => {
   setFriendsModalView: (view) => set({ friendsModalView: view }),
 
   openBoardMenu: () => set({ isBoardMenuOpen: true }),
-  closeBoardMenu: () => set({ isBoardMenuOpen: false }),
+  closeBoardMenu: () =>
+    set((s) => ({
+      isBoardMenuOpen: false,
+      boardMenuView: s.boardMenuView === 'link' ? 'board' : s.boardMenuView,
+      selectedLink: s.boardMenuView === 'link' ? null : s.selectedLink,
+    })),
   toggleBoardMenu: () =>
     set((s) => ({
       isBoardMenuOpen: !s.isBoardMenuOpen,
+      boardMenuView: s.isBoardMenuOpen && s.boardMenuView === 'link' ? 'board' : s.boardMenuView,
+      selectedLink: s.isBoardMenuOpen && s.boardMenuView === 'link' ? null : s.selectedLink,
     })),
+
+  openLinkInspector: (snapshot) =>
+    set({
+      isBoardMenuOpen: true,
+      boardMenuView: 'link',
+      selectedLink: snapshot,
+    }),
+  closeLinkInspector: () => set({ boardMenuView: 'board', selectedLink: null }),
 
   openBoardSettingsModal: (view = 'settings') => set({ boardSettingsModalOpen: true, boardSettingsModalView: view }),
   closeBoardSettingsModal: () => set({ boardSettingsModalOpen: false, boardSettingsModalView: 'settings' }),

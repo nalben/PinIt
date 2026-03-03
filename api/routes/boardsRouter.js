@@ -90,6 +90,7 @@ router.patch('/:board_id/cards/:card_id/position', boardsController.updateCardPo
 router.delete('/:board_id/cards/:card_id', boardsController.deleteCard);
 router.get('/:board_id/links', boardsController.getBoardLinks);
 router.post('/:board_id/links', boardsController.createCardLink);
+router.patch('/:board_id/links/:link_id', boardsController.updateCardLink);
 router.delete('/:board_id/links/:link_id', boardsController.deleteCardLink);
 router.get('/:board_id/participants', boardsController.getBoardParticipants);
 router.get('/:board_id/full', boardsController.getBoardFull);

@@ -1072,8 +1072,8 @@ Update (2026-03-02)
   - `card_updated`: applies patch fields in-memory when present; otherwise reloads cards list (with a short local suppress window to avoid reloading after own save).
   - `card_created`: reloads cards list (with a short local suppress window to avoid reloading after own create).
 - `boards:updated` now also emits link-level updates for card links (`cardlinks` table):
-  - `reason: 'link_created' | 'link_deleted'` with `link_id`.
-  - For `link_created` payload includes `from_card_id`, `to_card_id`, `style`, `color`.
+  - `reason: 'link_created' | 'link_updated' | 'link_deleted'` with `link_id`.
+  - For `link_created` and `link_updated` payload includes `from_card_id`, `to_card_id`, `style`, `color`, `label`, `is_label_visible`.
 - For non-auth users on public boards, `frontend/src/components/flow/FlowBoard.tsx` polls cards and links via `GET /api/boards/public/:board_id/cards` and `GET /api/boards/public/:board_id/links` every 10 seconds (no socket available without token).
 
 Update (2026-03-03)
@@ -1082,6 +1082,14 @@ Update (2026-03-03)
 - `frontend/src/components/flow/FlowBoard.tsx` renders card links with a custom straight edge type (`flowStraight`) that computes endpoints on the shape border so link lines don’t show through transparent nodes.
 - `frontend/src/components/flow/FlowBoard.tsx` exposes `FlowBoardHandle.startLinkMode()` and `frontend/src/pages/board/Board.tsx` adds a `link.svg` button to start a 2-click linking mode with a centered persistent overlay prompt; node clicks in this mode do not open the edit panel.
 - Connection handle hover-visibility is gated to desktop (`__PLATFORM__ === 'desktop'`) so it does not appear on mobile/touch devices.
+- `cardlinks` table extended with link label fields:
+  - `label VARCHAR(70) NULL`
+  - `is_label_visible TINYINT(1) NOT NULL DEFAULT 1`
+  - SQL migration: `api/sql/2026-03-03-cardlinks-label.sql`
+- New authenticated link update endpoint:
+  - `PATCH /api/boards/:board_id/links/:link_id` — updates `cardlinks.style`, `cardlinks.label`, `cardlinks.is_label_visible` (owner/`editer` only) and emits `boards:updated` with `reason: 'link_updated'`.
+- `frontend/src/components/flow/FlowBoard.tsx` renders `cardlinks.label` as an SVG text label over the edge; when `is_label_visible=0` the label is hidden by default and appears on hover/selected.
+- `frontend/src/pages/board/Board.tsx` right menu can switch to a link inspector view when an edge is clicked (shows from/to, style, label, label visibility and allows saving via the PATCH endpoint).
 - `frontend/src/components/flow/FlowBoard.tsx` was split into focused local modules/hooks (no runtime contract changes intended; behavior preserved):
   - `frontend/src/components/flow/flowBoardModel.ts` defines FlowBoard-local TypeScript types (`FlowNodeType`, `FlowNodeData`, `ApiCard`, `ApiCardLink`, etc.).
   - `frontend/src/components/flow/flowBoardUtils.ts` contains pure helpers/constants used by FlowBoard (edge builder, image URL resolver, node size table, geometry helpers for straight edges, link-handle positioning).

@@ -29,6 +29,7 @@ export type ApiCardLink = {
   to_card_id: number;
   style: ApiLinkStyle;
   color: string;
+  label: string | null;
+  is_label_visible: number | boolean | null;
   created_at: string;
 };
-

@@ -24,9 +24,23 @@ export const buildEdgeFromLink = (l: ApiCardLink): Edge => ({
   source: String(l.from_card_id),
   target: String(l.to_card_id),
   type: 'flowStraight',
+  className: 'flow_edge',
   style: { stroke: l.color || 'var(--pink)', strokeWidth: 2 },
   markerEnd: l.style === 'arrow' ? { type: MarkerType.ArrowClosed, color: l.color || 'var(--pink)' } : undefined,
-  data: { linkId: l.id },
+  data: {
+    linkId: l.id,
+    fromCardId: l.from_card_id,
+    toCardId: l.to_card_id,
+    style: l.style,
+    color: l.color,
+    label: l.label ?? null,
+    isLabelVisible:
+      l.is_label_visible === null || l.is_label_visible === undefined
+        ? true
+        : typeof l.is_label_visible === 'number'
+          ? Boolean(l.is_label_visible)
+          : Boolean(l.is_label_visible),
+  },
 });
 
 export const getBoundaryPoint = (
@@ -95,4 +109,3 @@ export const getLinkHandleStyle = (shape: FlowNodeType) => {
     transform: 'translate(50%, 50%)',
   } as const;
 };
-

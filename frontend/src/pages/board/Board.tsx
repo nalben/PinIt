@@ -50,6 +50,11 @@ const Board = () => {
     const toggleBoardMenu = useUIStore((s) => s.toggleBoardMenu);
     const openBoardMenu = useUIStore((s) => s.openBoardMenu);
     const closeBoardMenu = useUIStore((s) => s.closeBoardMenu);
+    const boardMenuView = useUIStore((s) => s.boardMenuView);
+    const selectedLink = useUIStore((s) => s.selectedLink);
+    const openLinkInspector = useUIStore((s) => s.openLinkInspector);
+    const closeLinkInspector = useUIStore((s) => s.closeLinkInspector);
+    const showTopAlarm = useUIStore((s) => s.showTopAlarm);
     const openBoardSettingsModal = useUIStore((s) => s.openBoardSettingsModal);
     const closeBoardSettingsModal = useUIStore((s) => s.closeBoardSettingsModal);
     const setBoardSettingsModalParticipantsInnerViewNext = useUIStore((s) => s.setBoardSettingsModalParticipantsInnerViewNext);
@@ -91,6 +96,60 @@ const Board = () => {
     const participantsLoadingFlags = useBoardDetailsStore((s) => (hasValidBoardId ? s.participantsLoadingByBoardId[numericBoardId] : undefined));
     const accessLost = useBoardDetailsStore((s) => (hasValidBoardId ? Boolean(s.accessLostBoards[numericBoardId]) : false));
     const participantsInitialLoading = Boolean(participantsLoadingFlags?.initial) && !participantsData;
+
+    const [linkDraft, setLinkDraft] = useState<null | { style: 'line' | 'arrow'; label: string; isLabelVisible: boolean }>(null);
+
+    useEffect(() => {
+        if (boardMenuView !== 'link' || !selectedLink) {
+            setLinkDraft(null);
+            return;
+        }
+
+        setLinkDraft({
+            style: selectedLink.style,
+            label: selectedLink.label ?? '',
+            isLabelVisible: Boolean(selectedLink.isLabelVisible),
+        });
+    }, [boardMenuView, selectedLink?.linkId]);
+
+    const saveSelectedLink = async () => {
+        if (!hasValidBoardId) return;
+        if (!selectedLink) return;
+        if (!linkDraft) return;
+        if (!isLoggedIn) return;
+        if (!canEditCards) return;
+
+        const label = linkDraft.label.trim().slice(0, 70);
+
+        try {
+            const { data } = await axiosInstance.patch<{
+                id: number;
+                board_id: number;
+                from_card_id: number;
+                to_card_id: number;
+                style: 'line' | 'arrow';
+                color: string;
+                label: string | null;
+                is_label_visible: number | boolean | null;
+                created_at: string;
+            }>(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}`, {
+                style: linkDraft.style,
+                label: label ? label : null,
+                is_label_visible: linkDraft.isLabelVisible,
+            });
+
+            openLinkInspector({
+                ...selectedLink,
+                style: data.style,
+                color: data.color,
+                label: data.label ?? null,
+                isLabelVisible: typeof data.is_label_visible === 'number' ? Boolean(data.is_label_visible) : Boolean(data.is_label_visible),
+            });
+        } catch (e) {
+            showTopAlarm('Не удалось сохранить связь.');
+            if (process.env.NODE_ENV !== 'production') console.error(e);
+        }
+    };
 
     const getPendingInviteUrlForThisBoard = () => {
         if (!hasValidBoardId) return null;
@@ -890,33 +949,118 @@ const Board = () => {
                     ) : null}
                 </div>
                 <div className={classes.board_menu_}>
-                    <div className={classes.board_info}>
-                        {isBoardMetaLoading || !boardInfo?.title ? (
-                            <>
-                                <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
-                                <div className={`${classes.skeleton} ${classes.board_info_line_skeleton}`} />
-                                <div className={`${classes.skeleton} ${classes.board_info_line_sm_skeleton}`} />
-                            </>
-                        ) : (
-                            <>
-                                {boardInfo?.imageSrc ? (
-                                    loadedBoardImageSrc === boardInfo.imageSrc ? (
-                                        <img src={boardInfo.imageSrc} alt={boardInfo.title ?? 'board'} />
-                                    ) : failedBoardImageSrc === boardInfo.imageSrc ? (
-                                        <Default />
-                                    ) : (
-                                        <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
-                                    )
-                                ) : boardInfo?.imageState === 'unknown' ? (
+                    {boardMenuView === 'link' && selectedLink ? (
+                        <div className={`${classes.board_info} ${classes.link_inspector}`.trim()}>
+                            <div className={classes.link_inspector_header}>
+                                <button
+                                    type="button"
+                                    className={classes.link_inspector_back}
+                                    onClick={() => closeLinkInspector()}
+                                    aria-label="Назад к информации о доске"
+                                >
+                                    ←
+                                </button>
+                                <div className={classes.link_inspector_title}>Связь</div>
+                            </div>
+
+                            <div className={classes.link_inspector_meta}>
+                                <div>
+                                    <span>От:</span> {selectedLink.fromTitle || `#${selectedLink.fromCardId}`}
+                                </div>
+                                <div>
+                                    <span>К:</span> {selectedLink.toTitle || `#${selectedLink.toCardId}`}
+                                </div>
+                            </div>
+
+                            <div className={classes.link_inspector_form}>
+                                <div className={classes.link_inspector_field}>
+                                    <div className={classes.link_inspector_label}>Вид</div>
+                                    <select
+                                        value={linkDraft?.style ?? selectedLink.style}
+                                        onChange={(e) =>
+                                            setLinkDraft((prev) =>
+                                                prev ? { ...prev, style: e.currentTarget.value === 'arrow' ? 'arrow' : 'line' } : prev
+                                            )
+                                        }
+                                        disabled={!canEditCards || !isLoggedIn}
+                                    >
+                                        <option value="line">Линия</option>
+                                        <option value="arrow">Стрелка</option>
+                                    </select>
+                                </div>
+
+                                <div className={classes.link_inspector_field}>
+                                    <div className={classes.link_inspector_label}>Подпись</div>
+                                    <input
+                                        value={linkDraft?.label ?? (selectedLink.label ?? '')}
+                                        maxLength={70}
+                                        onChange={(e) =>
+                                            setLinkDraft((prev) => (prev ? { ...prev, label: e.currentTarget.value } : prev))
+                                        }
+                                        disabled={!canEditCards || !isLoggedIn}
+                                    />
+                                </div>
+
+                                <label className={classes.link_inspector_checkbox}>
+                                    <input
+                                        type="checkbox"
+                                        checked={Boolean(linkDraft?.isLabelVisible ?? selectedLink.isLabelVisible)}
+                                        onChange={(e) =>
+                                            setLinkDraft((prev) => (prev ? { ...prev, isLabelVisible: e.currentTarget.checked } : prev))
+                                        }
+                                        disabled={!canEditCards || !isLoggedIn}
+                                    />
+                                    Показывать подпись
+                                </label>
+
+                                <div className={classes.link_inspector_actions}>
+                                    <Mainbtn
+                                        variant="mini"
+                                        kind="button"
+                                        type="button"
+                                        text="Сохранить"
+                                        onClick={() => void saveSelectedLink()}
+                                        disabled={!canEditCards || !isLoggedIn || !linkDraft}
+                                    />
+                                    <Mainbtn
+                                        variant="mini"
+                                        kind="button"
+                                        type="button"
+                                        text="Назад"
+                                        onClick={() => closeLinkInspector()}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className={classes.board_info}>
+                            {isBoardMetaLoading || !boardInfo?.title ? (
+                                <>
                                     <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
-                                ) : (
-                                    <Default />
-                                )}
-                                {boardInfo?.title ? <span>{boardInfo.title}</span> : null}
-                                {boardInfo?.description ? <p>{boardInfo.description}</p> : null}
-                            </>
-                        )}
-                    </div>
+                                    <div className={`${classes.skeleton} ${classes.board_info_line_skeleton}`} />
+                                    <div className={`${classes.skeleton} ${classes.board_info_line_sm_skeleton}`} />
+                                </>
+                            ) : (
+                                <>
+                                    {boardInfo?.imageSrc ? (
+                                        loadedBoardImageSrc === boardInfo.imageSrc ? (
+                                            <img src={boardInfo.imageSrc} alt={boardInfo.title ?? 'board'} />
+                                        ) : failedBoardImageSrc === boardInfo.imageSrc ? (
+                                            <Default />
+                                        ) : (
+                                            <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
+                                        )
+                                    ) : boardInfo?.imageState === 'unknown' ? (
+                                        <div className={`${classes.skeleton} ${classes.board_info_img_skeleton}`} />
+                                    ) : (
+                                        <Default />
+                                    )}
+                                    {boardInfo?.title ? <span>{boardInfo.title}</span> : null}
+                                    {boardInfo?.description ? <p>{boardInfo.description}</p> : null}
+                                </>
+                            )}
+                        </div>
+                    )}
                     {isLoggedIn && !isOwnerBoard && ownerParticipant ? (
                         <div>
                             <div className={classes.owner_block}>

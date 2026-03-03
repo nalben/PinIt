@@ -2111,7 +2111,7 @@ exports.getBoardLinks = async (req, res) => {
     }
 
     const [rows] = await db.execute(
-      `SELECT id, board_id, from_card_id, to_card_id, style, color, created_at
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, label, is_label_visible, created_at
        FROM cardlinks
        WHERE board_id = ?
        ORDER BY created_at ASC, id ASC`,
@@ -2160,7 +2160,7 @@ exports.getPublicBoardLinks = async (req, res) => {
     }
 
     const [rows] = await db.execute(
-      `SELECT id, board_id, from_card_id, to_card_id, style, color, created_at
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, label, is_label_visible, created_at
        FROM cardlinks
        WHERE board_id = ?
        ORDER BY created_at ASC, id ASC`,
@@ -2184,6 +2184,10 @@ exports.createCardLink = async (req, res) => {
     const styleRaw = String(req.body?.style || 'line');
     const style = styleRaw === 'arrow' ? 'arrow' : 'line';
     const color = typeof req.body?.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(req.body.color) ? req.body.color : '#000000';
+    const labelRaw = req.body?.label;
+    const label =
+      labelRaw === null ? null : typeof labelRaw === 'string' ? labelRaw.trim().slice(0, 70) : null;
+    const is_label_visible = req.body?.is_label_visible === undefined ? 1 : Boolean(req.body?.is_label_visible) ? 1 : 0;
 
     if (
       !Number.isFinite(user_id) ||
@@ -2238,13 +2242,13 @@ exports.createCardLink = async (req, res) => {
       style,
     ]);
     await db.execute(
-      `INSERT INTO cardlinks (board_id, from_card_id, to_card_id, style, color)
-       VALUES (?, ?, ?, ?, ?)`,
-      [boardId, fromCardId, toCardId, style, color]
+      `INSERT INTO cardlinks (board_id, from_card_id, to_card_id, style, color, label, is_label_visible)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [boardId, fromCardId, toCardId, style, color, label, is_label_visible]
     );
 
     const [rows] = await db.execute(
-      `SELECT id, board_id, from_card_id, to_card_id, style, color, created_at
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, label, is_label_visible, created_at
        FROM cardlinks
        WHERE board_id = ? AND from_card_id = ? AND to_card_id = ? AND style = ?
        LIMIT 1`,
@@ -2263,12 +2267,138 @@ exports.createCardLink = async (req, res) => {
       to_card_id: Number(link.to_card_id),
       style: link.style,
       color: link.color,
+      label: link.label ?? null,
+      is_label_visible: Number(link.is_label_visible) ? 1 : 0,
     }, [user_id]);
 
     return res.status(200).json(link);
   } catch (e) {
     console.error(e);
     return res.status(500).json({ message: 'Ошибка создания связи' });
+  }
+};
+
+exports.updateCardLink = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const linkId = Number(req.params?.link_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(linkId) ||
+      linkId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [existingRows] = await db.execute(
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, label, is_label_visible, created_at
+       FROM cardlinks
+       WHERE id = ? AND board_id = ?
+       LIMIT 1`,
+      [linkId, boardId]
+    );
+
+    if (!existingRows.length) {
+      return res.status(404).json({ message: 'Связь не найдена' });
+    }
+
+    const existing = existingRows[0];
+
+    const nextStyleRaw = req.body?.style;
+    const nextStyle =
+      nextStyleRaw === undefined ? existing.style : String(nextStyleRaw) === 'arrow' ? 'arrow' : 'line';
+
+    const labelRaw = req.body?.label;
+    const nextLabel =
+      labelRaw === undefined
+        ? existing.label ?? null
+        : labelRaw === null
+          ? null
+          : typeof labelRaw === 'string'
+            ? labelRaw.trim().slice(0, 70)
+            : existing.label ?? null;
+
+    const visibleRaw = req.body?.is_label_visible;
+    const nextIsLabelVisible =
+      visibleRaw === undefined ? (Number(existing.is_label_visible) ? 1 : 0) : Boolean(visibleRaw) ? 1 : 0;
+
+    const hasAnyChange =
+      String(existing.style) !== String(nextStyle) ||
+      String(existing.label ?? '') !== String(nextLabel ?? '') ||
+      Number(existing.is_label_visible) !== Number(nextIsLabelVisible);
+
+    if (!hasAnyChange) {
+      return res.status(200).json(existing);
+    }
+
+    if (String(existing.style) !== String(nextStyle)) {
+      await db.execute(
+        `DELETE FROM cardlinks
+         WHERE board_id = ? AND from_card_id = ? AND to_card_id = ? AND style = ? AND id <> ?`,
+        [boardId, Number(existing.from_card_id), Number(existing.to_card_id), nextStyle, linkId]
+      );
+    }
+
+    await db.execute(
+      `UPDATE cardlinks
+       SET style = ?, label = ?, is_label_visible = ?
+       WHERE id = ? AND board_id = ?`,
+      [nextStyle, nextLabel, nextIsLabelVisible, linkId, boardId]
+    );
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, label, is_label_visible, created_at
+       FROM cardlinks
+       WHERE id = ? AND board_id = ?
+       LIMIT 1`,
+      [linkId, boardId]
+    );
+
+    if (!rows.length) {
+      return res.status(500).json({ message: 'Ошибка обновления связи' });
+    }
+
+    const link = rows[0];
+    emitBoardsUpdatedToBoardUsers(req, boardId, {
+      reason: 'link_updated',
+      link_id: Number(link.id),
+      from_card_id: Number(link.from_card_id),
+      to_card_id: Number(link.to_card_id),
+      style: link.style,
+      color: link.color,
+      label: link.label ?? null,
+      is_label_visible: Number(link.is_label_visible) ? 1 : 0,
+    }, [user_id]);
+
+    return res.status(200).json(link);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления связи' });
   }
 };
 

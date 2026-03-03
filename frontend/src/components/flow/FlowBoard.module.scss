@@ -44,6 +44,35 @@
     touch-action: none;
 }
 
+.flow_edge_label{
+    pointer-events: none;
+    user-select: none;
+    fill: var(--cyan);
+    font-size: 14px;
+    font-weight: 700;
+    paint-order: stroke;
+    stroke: rgba(0, 0, 0, 0.85);
+    stroke-width: 4px;
+    opacity: 1;
+}
+
+.flow_edge_label_hidden{
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+:global(.react-flow__edge.flow_edge:hover) .flow_edge_label_hidden,
+:global(.react-flow__edge.flow_edge.selected) .flow_edge_label_hidden{
+    opacity: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    :global(.react-flow__edge.flow_edge:hover) :global(.react-flow__edge-path){
+        stroke-width: 3px !important;
+        filter: drop-shadow(0 0 14px rgba(231, 205, 115, 0.35));
+    }
+}
+
 .flow_link_handle{
     width: 14px !important;
     height: 14px !important;
