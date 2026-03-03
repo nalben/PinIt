@@ -1530,6 +1530,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               setEdges((prev) => (prev.some((e) => Boolean((e as unknown as { selected?: boolean }).selected)) ? prev.map((e) => (Boolean((e as unknown as { selected?: boolean }).selected) ? { ...e, selected: false } : e)) : prev));
             }}
             onEdgeClick={(event, edge) => {
+              if (!canEditCards || !hasToken) return;
+
               event.preventDefault();
               event.stopPropagation();
 

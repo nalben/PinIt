@@ -356,6 +356,35 @@ const Board = () => {
         }
     }, [boardMenuView, selectedLink]);
 
+    useEffect(() => {
+        if (!hasValidBoardId) return;
+        if (!isInitialized) return;
+        if (isLoggedIn) return;
+
+        let cancelled = false;
+
+        const checkPublicStillAvailable = async () => {
+            try {
+                const res = await axiosInstance.get<{ is_public?: number | boolean | null }>(`/api/boards/public/${numericBoardId}`);
+                const raw = res.data?.is_public;
+                const isPublic = typeof raw === 'number' ? raw === 1 : typeof raw === 'boolean' ? raw : null;
+                if (isPublic === false) throw new Error('board is private');
+            } catch {
+                if (cancelled) return;
+                navigate('/spaces', { replace: true });
+            }
+        };
+
+        void checkPublicStillAvailable();
+        const id = window.setInterval((): void => {
+            void checkPublicStillAvailable();
+        }, 10_000);
+        return () => {
+            cancelled = true;
+            window.clearInterval(id);
+        };
+    }, [hasValidBoardId, isInitialized, isLoggedIn, navigate, numericBoardId]);
+
     useEscapeHandler({
         id: 'board:link-delete-confirm',
         priority: 1200,
@@ -778,6 +807,13 @@ const Board = () => {
     const canEditCards = resolvedMyRole === 'owner' || resolvedMyRole === 'editer';
 
     useEffect(() => {
+        if (boardMenuView !== 'link') return;
+        if (!selectedLink) return;
+        if (canEditCards) return;
+        closeLinkInspector();
+    }, [boardMenuView, canEditCards, closeLinkInspector, selectedLink]);
+
+    useEffect(() => {
         if (!effectiveBoardMenuOpen) return;
         if (boardMenuView !== 'link') return;
         if (!selectedLink) return;
@@ -1051,7 +1087,7 @@ const Board = () => {
                     ) : null}
                 </div>
                 <div className={classes.board_menu_}>
-                    {boardMenuView === 'link' && selectedLink ? (
+                    {boardMenuView === 'link' && selectedLink && canEditCards ? (
                         <div className={classes.link_inspector_root}>
                             <div className={classes.link_inspector_header}>
                                 <div className={classes.link_inspector_title}>Связь</div>
