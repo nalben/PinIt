@@ -1066,8 +1066,22 @@ Update (2026-03-02)
   - For `reason: 'card_moved'` payload also includes `x` and `y` (new coordinates).
   - For `reason: 'card_updated'` payload may include a patch of updated card fields: `title`, `type`, `is_locked`, `image_path`, `x`, `y`.
 - `frontend/src/pages/board/Board.tsx` derives card-edit permissions from live `my_role` (participants) so role changes to `editer` enable card editing immediately (and hide create-node action when not allowed).
-- `frontend/src/components/flow/FlowBoard.tsx` listens to `boards:updated` and reloads cards list on `card_*` reasons for the current board.
-- For non-auth users on public boards, `frontend/src/components/flow/FlowBoard.tsx` polls cards via `GET /api/boards/public/:board_id/cards` every 10 seconds (no socket available without token).
+- `frontend/src/components/flow/FlowBoard.tsx` listens to `boards:updated` for the current board and applies card changes without refetch when possible:
+  - `card_moved`: updates node position in-memory (no cards list reload).
+  - `card_deleted`: removes the node in-memory (no cards list reload).
+  - `card_updated`: applies patch fields in-memory when present; otherwise reloads cards list (with a short local suppress window to avoid reloading after own save).
+  - `card_created`: reloads cards list (with a short local suppress window to avoid reloading after own create).
+- `boards:updated` now also emits link-level updates for card links (`cardlinks` table):
+  - `reason: 'link_created' | 'link_deleted'` with `link_id`.
+  - For `link_created` payload includes `from_card_id`, `to_card_id`, `style`, `color`.
+- For non-auth users on public boards, `frontend/src/components/flow/FlowBoard.tsx` polls cards and links via `GET /api/boards/public/:board_id/cards` and `GET /api/boards/public/:board_id/links` every 10 seconds (no socket available without token).
+
+Update (2026-03-03)
+
+- `frontend/src/components/flow/FlowBoard.tsx` uses hover-based linking (snap on hover over a target node) and creates links on connect end without showing target handles.
+- `frontend/src/components/flow/FlowBoard.tsx` renders card links with a custom straight edge type (`flowStraight`) that computes endpoints on the shape border so link lines don’t show through transparent nodes.
+- `frontend/src/components/flow/FlowBoard.tsx` exposes `FlowBoardHandle.startLinkMode()` and `frontend/src/pages/board/Board.tsx` adds a `link.svg` button to start a 2-click linking mode with a centered persistent overlay prompt; node clicks in this mode do not open the edit panel.
+- Connection handle hover-visibility is gated to desktop (`__PLATFORM__ === 'desktop'`) so it does not appear on mobile/touch devices.
 
 1. Frontend routing and app entry
 

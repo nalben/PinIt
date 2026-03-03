@@ -3,15 +3,23 @@ import { useParams } from 'react-router-dom';
 import ReactFlow, {
   Background,
   BackgroundVariant,
+  ConnectionLineType,
+  ConnectionLineComponentProps,
+  BaseEdge,
   Edge,
+  EdgeProps,
+  Handle,
+  MarkerType,
   MiniMap,
   MiniMapNodeProps,
   Node as RFNode,
   NodeProps,
+  Position,
   SelectionMode,
   applyNodeChanges,
   ReactFlowInstance,
-  ReactFlowProvider
+  ReactFlowProvider,
+  useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import classes from './FlowBoard.module.scss';
@@ -27,10 +35,16 @@ import { connectSocket } from '@/services/socketManager';
 import { useAuthStore } from '@/store/authStore';
 
 type FlowNodeType = FlowCardShape;
-type FlowNodeData = { title: string; imageSrc: string | null; isLocked: boolean; imageLoaded?: boolean };
+type FlowNodeData = {
+  title: string;
+  imageSrc: string | null;
+  isLocked: boolean;
+  imageLoaded?: boolean;
+};
 
 export type FlowBoardHandle = {
   createDraftNodeAtCenter: () => void;
+  startLinkMode: () => void;
 };
 
 type ApiCardType = 'circle' | 'rectangle' | 'diamond';
@@ -45,6 +59,69 @@ type ApiCard = {
   y: number;
   created_at: string;
 };
+
+type ApiLinkStyle = 'line' | 'arrow';
+type ApiCardLink = {
+  id: number;
+  board_id: number;
+  from_card_id: number;
+  to_card_id: number;
+  style: ApiLinkStyle;
+  color: string;
+  created_at: string;
+};
+
+const DEFAULT_LINK_STYLE: ApiLinkStyle = 'line';
+const DEFAULT_LINK_COLOR = '#e7cd73';
+
+const getBoundaryPoint = (
+  shape: FlowNodeType,
+  cx: number,
+  cy: number,
+  dx: number,
+  dy: number,
+  hw: number,
+  hh: number,
+) => {
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  if (!Number.isFinite(absDx) || !Number.isFinite(absDy) || (absDx === 0 && absDy === 0)) return { x: cx, y: cy };
+
+  // small outward gap so the line doesn't show "under" transparent nodes
+  const EDGE_GAP = 8;
+  const a = Math.max(1, hw + EDGE_GAP);
+  const b = Math.max(1, hh + EDGE_GAP);
+
+  if (shape === 'circle') {
+    const len = Math.hypot(dx, dy) || 1;
+    const r = Math.max(1, Math.min(a, b));
+    const t = r / len;
+    return { x: cx + dx * t, y: cy + dy * t };
+  }
+
+  if (shape === 'rhombus') {
+    const denom = absDx / a + absDy / b;
+    const t = denom > 0 ? 1 / denom : 1;
+    return { x: cx + dx * t, y: cy + dy * t };
+  }
+
+  // rectangle (axis-aligned)
+  const tx = absDx > 0 ? a / absDx : Infinity;
+  const ty = absDy > 0 ? b / absDy : Infinity;
+  const t = Math.min(tx, ty);
+  return { x: cx + dx * t, y: cy + dy * t };
+};
+
+const buildEdgeFromLink = (l: ApiCardLink): Edge => ({
+  id: `link-${l.id}`,
+  source: String(l.from_card_id),
+  target: String(l.to_card_id),
+  type: 'flowStraight',
+  style: { stroke: l.color || 'var(--pink)', strokeWidth: 2 },
+  markerEnd: l.style === 'arrow' ? { type: MarkerType.ArrowClosed, color: l.color || 'var(--pink)' } : undefined,
+  data: { linkId: l.id },
+});
 
 const MAX_CARD_IMAGE_SIZE_MB = 5;
 const MAX_CARD_IMAGE_SIZE_BYTES = MAX_CARD_IMAGE_SIZE_MB * 1024 * 1024;
@@ -86,6 +163,31 @@ const NODE_SIZES: Record<FlowNodeType, { width: number; height: number }> = {
   circle: { width: 120, height: 120 }
 };
 
+const getNodeRect = (n: ReturnType<ReturnType<typeof useReactFlow>['getNode']>): { cx: number; cy: number; hw: number; hh: number } | null => {
+  if (!n) return null;
+  const nodeType = (n.type as FlowNodeType | undefined) ?? 'rectangle';
+  const size = NODE_SIZES[nodeType] ?? NODE_SIZES.rectangle;
+  const posAbs = (n as unknown as { positionAbsolute?: { x: number; y: number } | null })?.positionAbsolute;
+  const pos = (n as unknown as { position?: { x: number; y: number } | null })?.position;
+  const base = posAbs || pos;
+  if (!base) return null;
+  return { cx: base.x + size.width / 2, cy: base.y + size.height / 2, hw: size.width / 2, hh: size.height / 2 };
+};
+
+const ConnectionHandles = ({ isConnectable }: { isConnectable: boolean }) => {
+  const sourceClass = `${classes.flow_link_handle} ${classes.flow_link_handle_source} nodrag`.trim();
+  const targetClass = `${classes.flow_link_handle} ${classes.flow_link_handle_target} nodrag`.trim();
+  const centerStyle = { left: '50%', top: '50%' } as const;
+  const centerClassSource = `${sourceClass} ${classes.flow_link_handle_center}`.trim();
+  const centerClassTarget = `${targetClass} ${classes.flow_link_handle_center}`.trim();
+  return (
+    <>
+      <Handle type="source" id="s" position={Position.Top} className={centerClassSource} style={centerStyle} isConnectable={isConnectable} />
+      <Handle type="target" id="t" position={Position.Top} className={centerClassTarget} style={centerStyle} isConnectable={isConnectable} />
+    </>
+  );
+};
+
 const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   return (
@@ -97,6 +199,7 @@ const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
           : undefined
       }
     >
+      <ConnectionHandles isConnectable={!data.isLocked} />
       {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_rect}`.trim()} aria-hidden="true" /> : null}
       <svg className={classes.flow_hit_svg} viewBox="0 0 240 80" aria-hidden="true">
         <rect className={classes.flow_drag_handle} x="0" y="0" width="240" height="80" rx="10" ry="10" />
@@ -115,6 +218,7 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   return (
     <div className={classes.node_rhombus}>
+      <ConnectionHandles isConnectable={!data.isLocked} />
       <div
         className={classes.rhombus_content}
         style={
@@ -142,6 +246,7 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   return (
     <div className={`${classes.node_circle} ${data.imageSrc && data.imageLoaded ? classes.node_circle_has_image : ''}`.trim()}>
+      <ConnectionHandles isConnectable={!data.isLocked} />
       <div
         className={classes.circle_content}
         style={
@@ -171,6 +276,39 @@ const mapApiTypeToNodeType = (type: ApiCardType): FlowNodeType => {
   if (type === 'diamond') return 'rhombus';
   return type;
 };
+
+const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
+  const { id, source, target, style, markerEnd, sourceX, sourceY, targetX, targetY } = props;
+  const rf = useReactFlow();
+
+  const sNode = rf.getNode(source);
+  const tNode = rf.getNode(target);
+  const sRect = getNodeRect(sNode);
+  const tRect = getNodeRect(tNode);
+
+  let sx = sourceX;
+  let sy = sourceY;
+  let tx = targetX;
+  let ty = targetY;
+
+  if (sRect && tRect) {
+    const sType = (sNode?.type as FlowNodeType | undefined) ?? 'rectangle';
+    const tType = (tNode?.type as FlowNodeType | undefined) ?? 'rectangle';
+    const dx = tRect.cx - sRect.cx;
+    const dy = tRect.cy - sRect.cy;
+    const p1 = getBoundaryPoint(sType, sRect.cx, sRect.cy, dx, dy, sRect.hw, sRect.hh);
+    const p2 = getBoundaryPoint(tType, tRect.cx, tRect.cy, -dx, -dy, tRect.hw, tRect.hh);
+    sx = p1.x;
+    sy = p1.y;
+    tx = p2.x;
+    ty = p2.y;
+  }
+
+  const path = `M${sx},${sy}L${tx},${ty}`;
+  return <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />;
+};
+
+const EDGE_TYPES = { flowStraight: FlowStraightEdge } as const;
 
 const resolveImageSrc = (image_path: string | null) => {
   if (!image_path) return null;
@@ -215,10 +353,20 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   });
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
   const [nodes, setNodes] = useState<RFNode<FlowNodeData>[]>([]);
-  const [edges] = useState<Edge[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
   const draggingNodeIdRef = useRef<string | null>(null);
   const draggingNodeStartPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const dragStartSelectedPositionsRef = useRef<Map<string, { x: number; y: number }> | null>(null);
   const [reloadSeq, setReloadSeq] = useState(0);
+  const [reloadLinksSeq, setReloadLinksSeq] = useState(0);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const connectingFromNodeIdRef = useRef<string | null>(null);
+  const connectingHoverTargetNodeIdRef = useRef<string | null>(null);
+  const [connectingHoverTargetNodeId, setConnectingHoverTargetNodeId] = useState<string | null>(null);
+  const createdViaOnConnectRef = useRef(false);
+  const [linkSourceNodeId, setLinkSourceNodeId] = useState<string | null>(null);
+  const [linkModeStep, setLinkModeStep] = useState<'off' | 'first' | 'second'>('off');
+  const linkModeFirstNodeIdRef = useRef<string | null>(null);
   const flowCardSettingsOpen = useUIStore((s) => s.flowCardSettingsOpen);
   const flowCardSettings = useUIStore((s) => s.flowCardSettings);
   const flowCardSettingsDraft = useUIStore((s) => s.flowCardSettingsDraft);
@@ -262,10 +410,134 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     [canEditCards, getNodeDragHandleSelector]
   );
 
+  useEffect(() => {
+    setNodes((prev) =>
+      prev.map((n) => {
+        const id = String(n.id);
+        const nextClassParts = ['flow_node_wrapper'];
+        if (linkSourceNodeId && id === String(linkSourceNodeId)) nextClassParts.push('flow_node_link_source');
+        if (isConnecting && connectingHoverTargetNodeId && id === String(connectingHoverTargetNodeId)) nextClassParts.push('flow_node_link_hover');
+        const nextClass = nextClassParts.join(' ');
+        if (String(n.className || '') === nextClass) return n;
+        return { ...n, className: nextClass };
+      })
+    );
+  }, [connectingHoverTargetNodeId, isConnecting, linkSourceNodeId]);
+
+  const cancelLinkMode = useCallback(() => {
+    setLinkModeStep('off');
+    linkModeFirstNodeIdRef.current = null;
+  }, []);
+
+  const setSelectedNodeOnly = useCallback((nodeId: string | null) => {
+    setNodes((prev) =>
+      prev.map((n) => {
+        const isSelected = nodeId ? String(n.id) === String(nodeId) : false;
+        if (Boolean((n as RFNode<FlowNodeData>).selected) === isSelected) return n;
+        return { ...n, selected: isSelected };
+      })
+    );
+  }, []);
+
+  const pickNodeIdAtClientPoint = useCallback((clientX: number, clientY: number) => {
+    const elements = document.elementsFromPoint(clientX, clientY) as unknown as HTMLElement[];
+    if (!elements?.length) return null;
+
+    let nodeId: string | null = null;
+    for (const el of elements) {
+      const nodeEl = el?.closest?.('.react-flow__node') as HTMLElement | null;
+      const id = nodeEl?.dataset?.id ? String(nodeEl.dataset.id) : null;
+      if (id) {
+        nodeId = id;
+        break;
+      }
+    }
+
+    if (!nodeId) return null;
+    const sourceId = connectingFromNodeIdRef.current;
+    if (sourceId && nodeId === String(sourceId)) return null;
+    return nodeId;
+  }, []);
+
+  useEffect(() => {
+    if (linkModeStep === 'off') return;
+
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      cancelLinkMode();
+    };
+
+    window.addEventListener('keydown', onKeyDownCapture, true);
+    return () => window.removeEventListener('keydown', onKeyDownCapture, true);
+  }, [cancelLinkMode, linkModeStep]);
+
+  useEffect(() => {
+    if (!isConnecting) return;
+
+    const onPointerMoveCapture = (e: PointerEvent) => {
+      const next = pickNodeIdAtClientPoint(e.clientX, e.clientY);
+      const prev = connectingHoverTargetNodeIdRef.current;
+      if (String(prev || '') === String(next || '')) return;
+      connectingHoverTargetNodeIdRef.current = next;
+      setConnectingHoverTargetNodeId(next);
+    };
+
+    window.addEventListener('pointermove', onPointerMoveCapture, true);
+    return () => window.removeEventListener('pointermove', onPointerMoveCapture, true);
+  }, [isConnecting, pickNodeIdAtClientPoint]);
+
+  const HoverConnectionLine: React.FC<ConnectionLineComponentProps> = (props) => {
+    const { fromX, fromY, toX, toY } = props;
+    const rf = useReactFlow();
+    const hoverId = connectingHoverTargetNodeId;
+
+    let finalToX = toX;
+    let finalToY = toY;
+    let finalFromX = fromX;
+    let finalFromY = fromY;
+
+    const sourceId = connectingFromNodeIdRef.current;
+    const sNode = sourceId ? rf.getNode(sourceId) : null;
+    const sRect = getNodeRect(sNode);
+
+    if (hoverId && sRect) {
+      const tNode = rf.getNode(hoverId);
+      const tRect = getNodeRect(tNode);
+      if (tRect) {
+        const sType = (sNode?.type as FlowNodeType | undefined) ?? 'rectangle';
+        const tType = (tNode?.type as FlowNodeType | undefined) ?? 'rectangle';
+        const dx = tRect.cx - sRect.cx;
+        const dy = tRect.cy - sRect.cy;
+        const p1 = getBoundaryPoint(sType, sRect.cx, sRect.cy, dx, dy, sRect.hw, sRect.hh);
+        const p2 = getBoundaryPoint(tType, tRect.cx, tRect.cy, -dx, -dy, tRect.hw, tRect.hh);
+        finalFromX = p1.x;
+        finalFromY = p1.y;
+        finalToX = p2.x;
+        finalToY = p2.y;
+      }
+    } else if (hoverId) {
+      const n = rf.getNode(hoverId);
+      const tRect = getNodeRect(n);
+      if (tRect) {
+        finalToX = tRect.cx;
+        finalToY = tRect.cy;
+      }
+    }
+
+    return (
+      <g>
+        <path d={`M${finalFromX},${finalFromY}L${finalToX},${finalToY}`} fill="none" stroke={DEFAULT_LINK_COLOR} strokeWidth={2} />
+      </g>
+    );
+  };
+
   const mergeLoadedNodes = useCallback((prev: RFNode<FlowNodeData>[], loaded: RFNode<FlowNodeData>[]) => {
     const editing = editingStateRef.current;
     const draft = prev.filter((n) => String(n.id).startsWith('draft-'));
     const draftIds = new Set(draft.map((n) => String(n.id)));
+    const prevById = new Map<string, RFNode<FlowNodeData>>(prev.map((n) => [String(n.id), n]));
     const preserveActive =
       editing.isEditing && editing.activeNodeId && !String(editing.activeNodeId).startsWith('draft-')
         ? prev.find((n) => String(n.id) === String(editing.activeNodeId)) ?? null
@@ -274,16 +546,32 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     const preserveIds = new Set<string>(draftIds);
     if (preserveActive) preserveIds.add(String(preserveActive.id));
 
+    const mergedLoaded = loaded.map((n) => {
+      const prevNode = prevById.get(String(n.id));
+      if (!prevNode) return n;
+
+      const sameImage = prevNode.data.imageSrc === n.data.imageSrc;
+      const imageLoaded = sameImage ? Boolean(prevNode.data.imageLoaded) : Boolean(n.data.imageLoaded);
+
+      return {
+        ...n,
+        selected: typeof prevNode.selected === 'boolean' ? prevNode.selected : n.selected,
+        data: { ...n.data, imageLoaded },
+      };
+    });
+
     return [
       ...draft,
       ...(preserveActive && !draftIds.has(String(preserveActive.id)) ? [preserveActive] : []),
-      ...loaded.filter((n) => !preserveIds.has(String(n.id))),
+      ...mergedLoaded.filter((n) => !preserveIds.has(String(n.id))),
     ];
   }, []);
 
   useEffect(() => {
     editingStateRef.current = { isEditing, activeNodeId };
   }, [activeNodeId, isEditing]);
+
+  // показываем/скрываем узлы связей чисто через CSS (selected + "connecting" класс на контейнере)
 
   useEffect(() => {
     if (isEditing && flowCardSettingsDraft) {
@@ -344,7 +632,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
     if (!isAuth) return;
 
-    const unsubscribe = connectSocket({
+        const unsubscribe = connectSocket({
       onBoardsUpdate: (data) => {
         const cmd = data as {
           reason?: unknown;
@@ -356,12 +644,26 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           type?: unknown;
           is_locked?: unknown;
           image_path?: unknown;
+          link_id?: unknown;
+          from_card_id?: unknown;
+          to_card_id?: unknown;
+          style?: unknown;
+          color?: unknown;
         };
         const boardIdRaw = cmd?.board_id;
         const boardIdParsed = typeof boardIdRaw === 'number' ? boardIdRaw : Number(boardIdRaw);
         if (!Number.isFinite(boardIdParsed) || boardIdParsed !== numericBoardId) return;
 
         const reason = typeof cmd?.reason === 'string' ? cmd.reason : '';
+
+        if (reason === 'card_deleted') {
+          const cardIdRaw = cmd?.card_id;
+          const cardId = typeof cardIdRaw === 'number' ? String(cardIdRaw) : String(cardIdRaw || '');
+          if (!cardId) return;
+          setNodes((prev) => prev.filter((n) => String(n.id) !== cardId));
+          setEdges((prev) => prev.filter((e) => String(e.source) !== cardId && String(e.target) !== cardId));
+          return;
+        }
 
         if (reason === 'card_moved') {
           const cardIdRaw = cmd?.card_id;
@@ -444,8 +746,49 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           if (cardId && until) suppressSocketReloadByCardIdRef.current.delete(cardId);
         }
 
-        if (reason === 'card_created' || reason === 'card_updated' || reason === 'card_deleted' || reason === 'cards_changed') {
+        if (reason === 'card_created') {
+          const cardIdRaw = cmd?.card_id;
+          const cardId = typeof cardIdRaw === 'number' ? String(cardIdRaw) : String(cardIdRaw || '');
+          const until = cardId ? suppressSocketReloadByCardIdRef.current.get(cardId) : undefined;
+          if (cardId && until && until > Date.now()) return;
+          if (cardId && until) suppressSocketReloadByCardIdRef.current.delete(cardId);
+        }
+
+        if (reason === 'card_created' || reason === 'card_updated' || reason === 'cards_changed') {
           setReloadSeq((v) => v + 1);
+        }
+
+        if (reason === 'link_created') {
+          const linkIdRaw = (cmd as unknown as { link_id?: unknown })?.link_id;
+          const fromRaw = (cmd as unknown as { from_card_id?: unknown })?.from_card_id;
+          const toRaw = (cmd as unknown as { to_card_id?: unknown })?.to_card_id;
+          const styleRaw = (cmd as unknown as { style?: unknown })?.style;
+          const colorRaw = (cmd as unknown as { color?: unknown })?.color;
+          const link_id = typeof linkIdRaw === 'number' ? linkIdRaw : Number(linkIdRaw);
+          const from_card_id = typeof fromRaw === 'number' ? fromRaw : Number(fromRaw);
+          const to_card_id = typeof toRaw === 'number' ? toRaw : Number(toRaw);
+          const style = styleRaw === 'arrow' || styleRaw === 'line' ? (styleRaw as ApiLinkStyle) : DEFAULT_LINK_STYLE;
+          const color = typeof colorRaw === 'string' ? colorRaw : DEFAULT_LINK_COLOR;
+
+          if (!Number.isFinite(link_id) || !Number.isFinite(from_card_id) || !Number.isFinite(to_card_id)) return;
+          setEdges((prev) => {
+            const id = `link-${link_id}`;
+            if (prev.some((e) => String(e.id) === id)) return prev;
+            return [
+              ...prev,
+              buildEdgeFromLink({ id: link_id, board_id: numericBoardId, from_card_id, to_card_id, style, color, created_at: '' }),
+            ];
+          });
+          return;
+        }
+
+        if (reason === 'link_deleted') {
+          const linkIdRaw = (cmd as unknown as { link_id?: unknown })?.link_id;
+          const link_id = typeof linkIdRaw === 'number' ? linkIdRaw : Number(linkIdRaw);
+          if (!Number.isFinite(link_id)) return;
+          const id = `link-${link_id}`;
+          setEdges((prev) => prev.filter((e) => String(e.id) !== id));
+          return;
         }
       },
     });
@@ -459,6 +802,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
 
     const id = window.setInterval(() => {
       setReloadSeq((v) => v + 1);
+      setReloadLinksSeq((v) => v + 1);
     }, 10_000);
 
     return () => window.clearInterval(id);
@@ -526,6 +870,31 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     [canEditCards, hasToken, numericBoardId]
   );
 
+  const persistLinkCreate = useCallback(
+    async (fromId: string, toId: string, style: ApiLinkStyle = DEFAULT_LINK_STYLE, color: string = DEFAULT_LINK_COLOR) => {
+      if (!canEditCards) return null;
+      if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return null;
+      if (!hasToken) return null;
+      if (!fromId || !toId) return null;
+      if (fromId === toId) return null;
+      if (String(fromId).startsWith('draft-') || String(toId).startsWith('draft-')) return null;
+
+      try {
+        const res = await axiosInstance.post<ApiCardLink>(`/api/boards/${numericBoardId}/links`, {
+          from_card_id: Number(fromId),
+          to_card_id: Number(toId),
+          style,
+          color,
+        });
+        return res.data ?? null;
+      } catch {
+        reportError('Не удалось создать связь.');
+        return null;
+      }
+    },
+    [canEditCards, hasToken, numericBoardId, reportError]
+  );
+
   useEffect(() => {
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
 
@@ -561,6 +930,31 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       cancelled = true;
     };
   }, [canEditCards, cardToNode, hasToken, isAuth, mergeLoadedNodes, numericBoardId, reloadSeq]);
+
+  useEffect(() => {
+    if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+
+    let cancelled = false;
+    const loadLinks = async () => {
+      try {
+        const url = hasToken
+          ? `/api/boards/${numericBoardId}/links`
+          : `/api/boards/public/${numericBoardId}/links`;
+        const res = await axiosInstance.get<ApiCardLink[]>(url);
+        const links = Array.isArray(res.data) ? res.data : [];
+        const nextEdges = links.map(buildEdgeFromLink);
+        if (cancelled) return;
+        setEdges(nextEdges);
+      } catch {
+        // ignore
+      }
+    };
+
+    loadLinks();
+    return () => {
+      cancelled = true;
+    };
+  }, [hasToken, numericBoardId, reloadLinksSeq]);
 
   useEffect(() => {
     if (!contextMenu.isOpen) return;
@@ -706,6 +1100,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     if (e.ctrlKey || e.metaKey) return;
 
     const targetEl = e.target as Element | null;
+    if (targetEl?.closest?.('.react-flow__handle')) return;
     const panelEl = createPanelRef.current;
     const menuEl = contextMenuRef.current;
     if (panelEl && targetEl && panelEl.contains(targetEl)) return;
@@ -1084,8 +1479,16 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         if (!rect) return;
         createDraftNodeAt(rect.width / 2, rect.height / 2);
       },
+      startLinkMode: () => {
+        if (!canEditCards) return;
+        if (flowCardSettingsOpen) cancelCardSettings();
+        closeContextMenu();
+        linkModeFirstNodeIdRef.current = null;
+        setSelectedNodeOnly(null);
+        setLinkModeStep('first');
+      },
     }),
-    [canEditCards, createDraftNodeAt]
+    [canEditCards, cancelCardSettings, closeContextMenu, createDraftNodeAt, flowCardSettingsOpen, setSelectedNodeOnly]
   );
 
   const setDraftTitleLive = (title: string) => {
@@ -1187,6 +1590,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         const createdId = String(data?.id ?? '');
         if (!createdId) throw new Error('Invalid create response');
         serverNodeId = createdId;
+        suppressSocketReloadByCardIdRef.current.set(String(serverNodeId), Date.now() + 1500);
 
         setNodes((prev) =>
           prev.map((n) => (String(n.id) === String(nodeId) ? { ...n, id: createdId } : n))
@@ -1303,7 +1707,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   return (
     <div
       ref={containerRef}
-      className={`${classes.space_container} ${!canEditCards ? classes.space_container_readonly : ''}`.trim()}
+      className={`${classes.space_container} ${__PLATFORM__ === 'desktop' ? classes.space_container_desktop : ''} ${canEditCards ? classes.space_container_can_edit : ''} ${!canEditCards ? classes.space_container_readonly : ''} ${isConnecting ? classes.space_container_connecting : ''}`.trim()}
       onContextMenu={handleContextMenu}
       onMouseDown={handleMouseDown}
       onClickCapture={handleClickCapture}
@@ -1322,20 +1726,78 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             zoomOnDoubleClick={false}
             selectionKeyCode={['Control', 'Meta']}
             selectionMode={SelectionMode.Partial}
+            connectionLineType={ConnectionLineType.Straight}
+            connectionLineComponent={HoverConnectionLine}
+            connectionRadius={1}
+            nodesConnectable={canEditCards}
             proOptions={{ hideAttribution: true }}
             onMoveStart={() => closeContextMenu()}
             onInit={setReactFlow}
             nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
             onNodesChange={onNodesChange}
-          onNodeDragStart={(_, node) => {
-            const typed = node as RFNode<FlowNodeData>;
-            const id = String(typed.id);
-            draggingNodeIdRef.current = id;
-            draggingNodeStartPosRef.current = {
+            onConnectStart={(_, params) => {
+              if (!canEditCards) return;
+              connectingFromNodeIdRef.current = params?.nodeId ? String(params.nodeId) : null;
+              connectingHoverTargetNodeIdRef.current = null;
+              setConnectingHoverTargetNodeId(null);
+              createdViaOnConnectRef.current = false;
+              setIsConnecting(true);
+            }}
+            onConnectEnd={async () => {
+              const source = connectingFromNodeIdRef.current;
+              const target = connectingHoverTargetNodeIdRef.current;
+              connectingFromNodeIdRef.current = null;
+              connectingHoverTargetNodeIdRef.current = null;
+              setConnectingHoverTargetNodeId(null);
+              setIsConnecting(false);
+              if (createdViaOnConnectRef.current) {
+                createdViaOnConnectRef.current = false;
+                return;
+              }
+              if (!source || !target) return;
+              const link = await persistLinkCreate(source, target, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR);
+              if (!link) return;
+              setEdges((prev) => {
+                const edge = buildEdgeFromLink(link);
+                if (prev.some((e) => String(e.id) === String(edge.id))) return prev;
+                return [...prev, edge];
+              });
+            }}
+            onConnect={async (params) => {
+              const source = params?.source ? String(params.source) : '';
+              const target = params?.target ? String(params.target) : '';
+              if (!source || !target) return;
+              createdViaOnConnectRef.current = true;
+              const link = await persistLinkCreate(source, target, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR);
+              if (!link) return;
+              setEdges((prev) => {
+                const edge = buildEdgeFromLink(link);
+                if (prev.some((e) => String(e.id) === String(edge.id))) return prev;
+                return [...prev, edge];
+              });
+            }}
+            onSelectionChange={(sel) => {
+              const selectedNodes = sel?.nodes ?? [];
+              if (selectedNodes.length === 1) setLinkSourceNodeId(String(selectedNodes[0].id));
+              else setLinkSourceNodeId(null);
+            }}
+            onNodeDragStart={(_, node) => {
+              const typed = node as RFNode<FlowNodeData>;
+              const id = String(typed.id);
+              draggingNodeIdRef.current = id;
+              draggingNodeStartPosRef.current = {
               id,
               x: Number(typed.position?.x) || 0,
               y: Number(typed.position?.y) || 0,
             };
+
+            const currentNodes = reactFlow?.getNodes?.() ?? nodes;
+            const selected = currentNodes.filter((n) => Boolean((n as RFNode<FlowNodeData>).selected));
+            const toTrack = selected.length ? selected : [typed];
+            dragStartSelectedPositionsRef.current = new Map(
+              toTrack.map((n) => [String(n.id), { x: Number(n.position?.x) || 0, y: Number(n.position?.y) || 0 }])
+            );
           }}
           onNodeDragStop={(_, node) => {
             const typed = node as RFNode<FlowNodeData>;
@@ -1344,10 +1806,36 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             draggingNodeIdRef.current = null;
             const start = draggingNodeStartPosRef.current;
             draggingNodeStartPosRef.current = null;
+            const startSelected = dragStartSelectedPositionsRef.current;
+            dragStartSelectedPositionsRef.current = null;
 
             const x = Number(typed.position?.x);
             const y = Number(typed.position?.y);
             if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
+            const currentNodes = reactFlow?.getNodes?.() ?? nodes;
+
+            if (startSelected && startSelected.size) {
+              const byId = new Map(currentNodes.map((n) => [String(n.id), n]));
+              const updates = Array.from(startSelected.entries())
+                .map(([nodeId, pos]) => {
+                  const cur = byId.get(nodeId) as RFNode<FlowNodeData> | undefined;
+                  if (!cur) return null;
+                  if (String(nodeId).startsWith('draft-')) return null;
+                  const nx = Number(cur.position?.x);
+                  const ny = Number(cur.position?.y);
+                  if (!Number.isFinite(nx) || !Number.isFinite(ny)) return null;
+                  const moved = Math.hypot(nx - pos.x, ny - pos.y) >= 1;
+                  if (!moved) return null;
+                  return { nodeId, x: nx, y: ny };
+                })
+                .filter(Boolean) as Array<{ nodeId: string; x: number; y: number }>;
+
+              if (!updates.length) return;
+              void Promise.allSettled(updates.map((u) => persistCardPosition(u.nodeId, u.x, u.y)));
+              return;
+            }
+
             if (start && start.id === id) {
               const moved = Math.hypot(x - start.x, y - start.y) >= 1;
               if (!moved) return;
@@ -1355,13 +1843,54 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             void persistCardPosition(String(typed.id), x, y);
           }}
           onNodeClick={(event, node) => {
+            if (linkModeStep !== 'off') {
+              event.preventDefault();
+              event.stopPropagation();
+
+              const typed = node as RFNode<FlowNodeData>;
+              const clickedId = String(typed.id);
+              if (!clickedId || clickedId.startsWith('draft-')) return;
+
+              if (linkModeStep === 'first') {
+                linkModeFirstNodeIdRef.current = clickedId;
+                setLinkSourceNodeId(clickedId);
+                setSelectedNodeOnly(clickedId);
+                setLinkModeStep('second');
+                return;
+              }
+
+              const firstId = linkModeFirstNodeIdRef.current;
+              if (!firstId) {
+                setLinkModeStep('first');
+                return;
+              }
+
+              if (String(firstId) === clickedId) return;
+
+              void (async () => {
+                const link = await persistLinkCreate(firstId, clickedId, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR);
+                if (!link) return;
+                setEdges((prev) => {
+                  const edge = buildEdgeFromLink(link);
+                  if (prev.some((e) => String(e.id) === String(edge.id))) return prev;
+                  return [...prev, edge];
+                });
+                setSelectedNodeOnly(clickedId);
+                cancelLinkMode();
+              })();
+
+              return;
+            }
+
             if ((event as unknown as { ctrlKey?: boolean; metaKey?: boolean }).ctrlKey || (event as unknown as { metaKey?: boolean }).metaKey) return;
-            const target = event.target as Element | null;
+            const targetEl = event.target as Element | null;
+            if (targetEl?.closest?.('.react-flow__handle')) return;
             const typed = node as RFNode<FlowNodeData>;
             const clickedShape =
-              Boolean(target?.closest(`.${classes.flow_drag_handle}`)) ||
-              (String(typed.type) === 'rectangle' && Boolean(target?.closest(`.${classes.node_rectangle}`)));
+              Boolean(targetEl?.closest(`.${classes.flow_drag_handle}`)) ||
+              (String(typed.type) === 'rectangle' && Boolean(targetEl?.closest(`.${classes.node_rectangle}`)));
             if (!clickedShape) return;
+            setLinkSourceNodeId(String(typed.id));
             if (flowCardSettingsOpen && activeNodeId && String(typed.id) === String(activeNodeId)) {
               closeContextMenu();
               return;
@@ -1396,6 +1925,18 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         </ReactFlow>
       </ReactFlowProvider>
+      {linkModeStep !== 'off' ? (
+        <div className={classes.link_mode_alarm} aria-live="polite">
+          <div className={classes.link_mode_alarm_inner}>
+            <div className={classes.link_mode_alarm_text}>
+              {linkModeStep === 'first' ? 'Выберите первую запись для связки' : 'Выберите вторую запись для связки'}
+            </div>
+            <button type="button" className={classes.link_mode_alarm_cancel} onClick={cancelLinkMode}>
+              Отмена
+            </button>
+          </div>
+        </div>
+      ) : null}
       {contextMenu.isOpen && (
         <div
           ref={contextMenuRef}

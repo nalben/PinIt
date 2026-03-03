@@ -22,6 +22,7 @@ import Members from '@/assets/icons/monochrome/members.svg';
 import { BoardParticipant, BoardParticipantsResponse, useBoardDetailsStore } from '@/store/boardDetailsStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 import Plus from '@/assets/icons/monochrome/plus.svg'
+import LinkIcon from '@/assets/icons/monochrome/link.svg'
 
 type BoardParticipantRole = 'owner' | 'guest' | 'editer';
 
@@ -872,6 +873,19 @@ const Board = () => {
                             onClick={() => flowBoardRef.current?.createDraftNodeAtCenter()}
                         >
                             <Plus />
+                        </button>
+                    ) : null}
+                    {canEditCards ? (
+                        <button
+                            className={`${classes.left_menu_btn} ${classes.left_menu_btn_create_node}`.trim()}
+                            type="button"
+                            onClick={(e) => {
+                                flowBoardRef.current?.startLinkMode();
+                                e.currentTarget.blur();
+                            }}
+                            aria-label="Связать записи"
+                        >
+                            <LinkIcon />
                         </button>
                     ) : null}
                 </div>

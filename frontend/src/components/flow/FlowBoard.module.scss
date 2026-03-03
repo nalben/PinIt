@@ -6,20 +6,23 @@
 
 :global(.react-flow__nodesselection-rect),
 :global(.react-flow__selection){
-    border: 1px dotted rgba(231, 205, 115, 0.9) !important;
+    border: 1px solid rgba(231, 205, 115, 0.9) !important;
     background: rgba(231, 205, 115, 0.12) !important;
 }
 
 :global(.react-flow__node.flow_node_wrapper.selected) .node_rectangle{
-    box-shadow: 0 0 0 2px rgba(231, 205, 115, 0.98), 0 0 28px rgba(231, 205, 115, 0.38);
+    box-shadow: 0 0 0 0px var(--cyan), 0 0 28px var(--cyan);
+    border-color: var(--cyan);
 }
 
 :global(.react-flow__node.flow_node_wrapper.selected) .rhombus_content{
-    box-shadow: 0 0 0 2px rgba(231, 205, 115, 0.98), 0 0 28px rgba(231, 205, 115, 0.38);
+    box-shadow: 0 0 0 0px var(--cyan), 0 0 28px var(--cyan);
+    border-color: var(--cyan);
 }
 
 :global(.react-flow__node.flow_node_wrapper.selected) .circle_content{
-    box-shadow: 0 0 0 2px rgba(231, 205, 115, 0.98), 0 0 28px rgba(231, 205, 115, 0.38);
+    box-shadow: 0 0 0 0px var(--cyan), 0 0 28px var(--cyan);
+    border-color: var(--cyan);
 }
 
 .flow_hit_svg{
@@ -27,7 +30,7 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    z-index: 10;
+    z-index: 5;
 }
 
 .flow_drag_handle{
@@ -36,6 +39,101 @@
     stroke: transparent;
     cursor: pointer;
     touch-action: none;
+}
+
+.flow_link_handle{
+    width: 14px !important;
+    height: 14px !important;
+    border-radius: 999px !important;
+    border: 2px solid var(--pink) !important;
+    background: rgba(0, 0, 0, 0.55) !important;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25);
+    z-index: 9999 !important;
+    opacity: 0;
+    transition: opacity 120ms ease;
+    pointer-events: none !important;
+    cursor: crosshair;
+}
+
+.flow_link_handle:hover{
+    box-shadow: 0 0 0 2px rgba(231, 205, 115, 0.35), 0 0 18px rgba(231, 205, 115, 0.28);
+}
+
+.flow_link_handle_center{
+    transform: translate(-50%, -50%) !important;
+    left: 50% !important;
+    top: 50% !important;
+}
+
+:global(.react-flow__node.flow_node_link_source) .flow_link_handle_source{
+    opacity: 1;
+    pointer-events: all !important;
+}
+
+.flow_link_handle_source{}
+.flow_link_handle_target{}
+
+@media (hover: hover) and (pointer: fine) {
+    .space_container_desktop.space_container_can_edit :global(.react-flow__node.flow_node_wrapper:hover) .flow_link_handle_source{
+        opacity: 1;
+        pointer-events: all !important;
+    }
+}
+
+:global(.react-flow__node.flow_node_link_hover) .node_rectangle{
+    box-shadow: 0 0 0 0px var(--pink), 0 0 20px rgba(231, 205, 115, 0.55);
+    border-color: var(--pink);
+}
+
+:global(.react-flow__node.flow_node_link_hover) .rhombus_content{
+    box-shadow: 0 0 0 0px var(--pink), 0 0 20px rgba(231, 205, 115, 0.55);
+    border-color: var(--pink);
+}
+
+:global(.react-flow__node.flow_node_link_hover) .circle_content{
+    box-shadow: 0 0 0 0px var(--pink), 0 0 20px rgba(231, 205, 115, 0.55);
+    border-color: var(--pink);
+}
+
+.link_mode_alarm{
+    position: fixed;
+    z-index: 1200;
+    left: 50%;
+    bottom: 0%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.link_mode_alarm_inner{
+    pointer-events: all;
+    background: var(--grey20);
+    border: var(--border);
+    border-color: var(--pink);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    padding: 12px 14px;
+    color: var(--cyan);
+    font-size: 16px;
+    backdrop-filter: blur(12px);
+    text-wrap: balance;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: min(520px, calc(100vw - 24px));
+}
+
+.link_mode_alarm_cancel{
+    align-self: center;
+    padding: 8px 14px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.25);
+    color: var(--cyan);
+    cursor: pointer;
+    font-weight: 500;
+
+    &:hover{
+        background: rgba(255, 255, 255, 0.06);
+    }
 }
 
 @keyframes flow-shimmer {
@@ -328,7 +426,7 @@
 .preview_rectangle{
     width: 100%;
     max-width: 260px;
-    height: 80px;
+    height: 72px;
     border-radius: 10px;
     display: flex;
     justify-content: center;
@@ -504,6 +602,9 @@
     align-items: center;
     position: relative;
     cursor: grab;
+    overflow: visible;
+    width: 120px;
+    height: 120px;
 
     & span{
         pointer-events: none;
@@ -537,6 +638,9 @@
     align-items: center;
     position: relative;
     cursor: grab;
+    overflow: visible;
+    width: 120px;
+    height: 120px;
     & span{
         pointer-events: none;
         position: absolute;

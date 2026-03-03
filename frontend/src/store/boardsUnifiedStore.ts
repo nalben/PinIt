@@ -440,7 +440,9 @@ export const useBoardsUnifiedStore = create<BoardsUnifiedState>((set, get) => {
         reason === 'card_updated' ||
         reason === 'card_deleted' ||
         reason === 'cards_changed' ||
-        reason === 'card_moved'
+        reason === 'card_moved' ||
+        reason === 'link_created' ||
+        reason === 'link_deleted'
       ) {
         return;
       }

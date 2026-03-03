@@ -47,6 +47,7 @@ const maybeUploadSingleImage = (req, res, next) => {
 router.get('/public/popular', optionalAuth, boardsController.getPopularPublicBoards);
 router.get('/public/:board_id', optionalAuth, boardsController.getPublicBoardById);
 router.get('/public/:board_id/cards', optionalAuth, boardsController.getPublicBoardCards);
+router.get('/public/:board_id/links', optionalAuth, boardsController.getPublicBoardLinks);
 router.get('/invite-link/resolve', boardsController.resolveBoardInviteLink);
 router.get('/invite-link/preview', boardsController.previewBoardInviteLink);
 
@@ -87,6 +88,9 @@ router.patch('/:board_id/cards/:card_id/type', boardsController.updateCardType);
 router.patch('/:board_id/cards/:card_id/title', boardsController.updateCardTitle);
 router.patch('/:board_id/cards/:card_id/position', boardsController.updateCardPosition);
 router.delete('/:board_id/cards/:card_id', boardsController.deleteCard);
+router.get('/:board_id/links', boardsController.getBoardLinks);
+router.post('/:board_id/links', boardsController.createCardLink);
+router.delete('/:board_id/links/:link_id', boardsController.deleteCardLink);
 router.get('/:board_id/participants', boardsController.getBoardParticipants);
 router.get('/:board_id/full', boardsController.getBoardFull);
 router.get('/:board_id', boardsController.getBoardById);

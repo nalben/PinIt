@@ -2088,6 +2088,241 @@ exports.getPublicBoardCards = async (req, res) => {
   }
 };
 
+exports.getBoardLinks = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [accessRows] = await db.execute(
+      `SELECT 1
+       FROM boards b
+       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role IN ('guest','editer')
+       WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
+       LIMIT 1`,
+      [user_id, boardId, user_id]
+    );
+
+    if (!accessRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, created_at
+       FROM cardlinks
+       WHERE board_id = ?
+       ORDER BY created_at ASC, id ASC`,
+      [boardId]
+    );
+
+    return res.status(200).json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка получения связей' });
+  }
+};
+
+exports.getPublicBoardLinks = async (req, res) => {
+  try {
+    const boardId = Number(req.params?.board_id);
+    if (!Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const userId = req.user?.id ? Number(req.user.id) : null;
+
+    if (Number.isFinite(userId) && userId && userId > 0) {
+      const [boardRows] = await db.execute(
+        `SELECT 1
+         FROM boards b
+         LEFT JOIN boardguests bg_block ON bg_block.board_id = b.id AND bg_block.user_id = ? AND bg_block.role = 'blocked'
+         WHERE b.id = ? AND b.is_public = 1 AND bg_block.user_id IS NULL
+         LIMIT 1`,
+        [userId, boardId]
+      );
+      if (!boardRows.length) {
+        return res.status(404).json({ message: 'Доска не найдена' });
+      }
+    } else {
+      const [boardRows] = await db.execute(
+        `SELECT 1
+         FROM boards
+         WHERE id = ? AND is_public = 1
+         LIMIT 1`,
+        [boardId]
+      );
+      if (!boardRows.length) {
+        return res.status(404).json({ message: 'Доска не найдена' });
+      }
+    }
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, created_at
+       FROM cardlinks
+       WHERE board_id = ?
+       ORDER BY created_at ASC, id ASC`,
+      [boardId]
+    );
+
+    return res.status(200).json(rows);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка получения связей' });
+  }
+};
+
+exports.createCardLink = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+
+    const fromCardId = Number(req.body?.from_card_id);
+    const toCardId = Number(req.body?.to_card_id);
+    const styleRaw = String(req.body?.style || 'line');
+    const style = styleRaw === 'arrow' ? 'arrow' : 'line';
+    const color = typeof req.body?.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(req.body.color) ? req.body.color : '#000000';
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(fromCardId) ||
+      fromCardId <= 0 ||
+      !Number.isFinite(toCardId) ||
+      toCardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    if (fromCardId === toCardId) {
+      return res.status(400).json({ message: 'Нельзя связать карточку с самой собой' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [cardRows] = await db.execute(
+      `SELECT id FROM cards WHERE board_id = ? AND id IN (?, ?)`,
+      [boardId, fromCardId, toCardId]
+    );
+    if (!Array.isArray(cardRows) || cardRows.length !== 2) {
+      return res.status(404).json({ message: 'Карточки не найдены' });
+    }
+
+    // Enforce "single attachment point": one link per (from,to,style)
+    await db.execute(`DELETE FROM cardlinks WHERE board_id = ? AND from_card_id = ? AND to_card_id = ? AND style = ?`, [
+      boardId,
+      fromCardId,
+      toCardId,
+      style,
+    ]);
+    await db.execute(
+      `INSERT INTO cardlinks (board_id, from_card_id, to_card_id, style, color)
+       VALUES (?, ?, ?, ?, ?)`,
+      [boardId, fromCardId, toCardId, style, color]
+    );
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, created_at
+       FROM cardlinks
+       WHERE board_id = ? AND from_card_id = ? AND to_card_id = ? AND style = ?
+       LIMIT 1`,
+      [boardId, fromCardId, toCardId, style]
+    );
+
+    if (!rows.length) {
+      return res.status(500).json({ message: 'Ошибка создания связи' });
+    }
+
+    const link = rows[0];
+    emitBoardsUpdatedToBoardUsers(req, boardId, {
+      reason: 'link_created',
+      link_id: Number(link.id),
+      from_card_id: Number(link.from_card_id),
+      to_card_id: Number(link.to_card_id),
+      style: link.style,
+      color: link.color,
+    }, [user_id]);
+
+    return res.status(200).json(link);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка создания связи' });
+  }
+};
+
+exports.deleteCardLink = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const linkId = Number(req.params?.link_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(linkId) ||
+      linkId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [rows] = await db.execute(`SELECT id FROM cardlinks WHERE id = ? AND board_id = ? LIMIT 1`, [linkId, boardId]);
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Связь не найдена' });
+    }
+
+    await db.execute(`DELETE FROM cardlinks WHERE id = ? AND board_id = ?`, [linkId, boardId]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'link_deleted', link_id: linkId }, [user_id]);
+    return res.status(200).json({ id: linkId, board_id: boardId });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка удаления связи' });
+  }
+};
+
 
 exports.updateCardLock = async (req, res) => {
   try {
