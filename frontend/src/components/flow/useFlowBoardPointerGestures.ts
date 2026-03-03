@@ -54,7 +54,7 @@ export const useFlowBoardPointerGestures = (params: {
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (!reactFlow) return;
       if (!e.isPrimary) return;
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.pointerType === 'mouse') return;
       if (e.ctrlKey || e.metaKey) return;
 
       const targetEl = e.target as Element | null;
@@ -205,4 +205,3 @@ export const useFlowBoardPointerGestures = (params: {
     handleClickCapture,
   };
 };
-

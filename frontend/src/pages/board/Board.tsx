@@ -9,6 +9,7 @@ import FlowBoard, { type FlowBoardHandle } from '@/components/flow/FlowBoard';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import BoardSettingsModal from '@/components/boards/boardsettingsmodal/BoardSettingsModal';
+import toggleClasses from '@/components/boards/boardsettingsmodal/BoardSettingsModal.module.scss';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import AuthModal from '@/components/auth/authmodal/AuthModal';
 import LoginForm from '@/components/auth/login/Login';
@@ -19,6 +20,7 @@ import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
 import Deny from '@/assets/icons/monochrome/deny.svg'
 import Members from '@/assets/icons/monochrome/members.svg';
+import SwitchIcon from '@/assets/icons/monochrome/switch.svg';
 import { BoardParticipant, BoardParticipantsResponse, useBoardDetailsStore } from '@/store/boardDetailsStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 import Plus from '@/assets/icons/monochrome/plus.svg'
@@ -52,12 +54,16 @@ const Board = () => {
     const closeBoardMenu = useUIStore((s) => s.closeBoardMenu);
     const boardMenuView = useUIStore((s) => s.boardMenuView);
     const selectedLink = useUIStore((s) => s.selectedLink);
+    const selectedLinkDraft = useUIStore((s) => s.selectedLinkDraft);
     const openLinkInspector = useUIStore((s) => s.openLinkInspector);
     const closeLinkInspector = useUIStore((s) => s.closeLinkInspector);
+    const patchSelectedLinkDraft = useUIStore((s) => s.patchSelectedLinkDraft);
     const showTopAlarm = useUIStore((s) => s.showTopAlarm);
     const openBoardSettingsModal = useUIStore((s) => s.openBoardSettingsModal);
     const closeBoardSettingsModal = useUIStore((s) => s.closeBoardSettingsModal);
     const setBoardSettingsModalParticipantsInnerViewNext = useUIStore((s) => s.setBoardSettingsModalParticipantsInnerViewNext);
+    const [linkDeleteConfirmOpen, setLinkDeleteConfirmOpen] = useState(false);
+    const [linkDeleteLoading, setLinkDeleteLoading] = useState(false);
     const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
     const [forcedAuthView, setForcedAuthView] = useState<AuthView>('login');
     const [hasMounted, setHasMounted] = useState(false);
@@ -97,29 +103,17 @@ const Board = () => {
     const accessLost = useBoardDetailsStore((s) => (hasValidBoardId ? Boolean(s.accessLostBoards[numericBoardId]) : false));
     const participantsInitialLoading = Boolean(participantsLoadingFlags?.initial) && !participantsData;
 
-    const [linkDraft, setLinkDraft] = useState<null | { style: 'line' | 'arrow'; label: string; isLabelVisible: boolean }>(null);
-
-    useEffect(() => {
-        if (boardMenuView !== 'link' || !selectedLink) {
-            setLinkDraft(null);
-            return;
-        }
-
-        setLinkDraft({
-            style: selectedLink.style,
-            label: selectedLink.label ?? '',
-            isLabelVisible: Boolean(selectedLink.isLabelVisible),
-        });
-    }, [boardMenuView, selectedLink?.linkId]);
-
     const saveSelectedLink = async () => {
         if (!hasValidBoardId) return;
         if (!selectedLink) return;
-        if (!linkDraft) return;
+        if (!selectedLinkDraft) return;
         if (!isLoggedIn) return;
         if (!canEditCards) return;
 
-        const label = linkDraft.label.trim().slice(0, 70);
+        const label = selectedLinkDraft.label.trim().slice(0, 70);
+        const shouldFlipDirection =
+            Number(selectedLinkDraft.fromCardId) === Number(selectedLink.toCardId) &&
+            Number(selectedLinkDraft.toCardId) === Number(selectedLink.fromCardId);
 
         try {
             const { data } = await axiosInstance.patch<{
@@ -133,22 +127,77 @@ const Board = () => {
                 is_label_visible: number | boolean | null;
                 created_at: string;
             }>(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}`, {
-                style: linkDraft.style,
+                style: selectedLinkDraft.style,
                 label: label ? label : null,
-                is_label_visible: linkDraft.isLabelVisible,
+                is_label_visible: selectedLinkDraft.isLabelVisible,
             });
+
+            let finalFromCardId = Number(selectedLink.fromCardId);
+            let finalToCardId = Number(selectedLink.toCardId);
+
+            if (shouldFlipDirection) {
+                const flipRes = await axiosInstance.patch<{
+                    id: number;
+                    board_id: number;
+                    from_card_id: number;
+                    to_card_id: number;
+                    style: 'line' | 'arrow';
+                    color: string;
+                    label: string | null;
+                    is_label_visible: number | boolean | null;
+                    created_at: string;
+                }>(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}/flip`, {});
+
+                finalFromCardId = Number(flipRes.data?.from_card_id);
+                finalToCardId = Number(flipRes.data?.to_card_id);
+            }
 
             openLinkInspector({
                 ...selectedLink,
+                fromCardId: finalFromCardId,
+                toCardId: finalToCardId,
+                fromTitle: shouldFlipDirection ? (selectedLink.toTitle ?? null) : (selectedLink.fromTitle ?? null),
+                toTitle: shouldFlipDirection ? (selectedLink.fromTitle ?? null) : (selectedLink.toTitle ?? null),
                 style: data.style,
                 color: data.color,
                 label: data.label ?? null,
                 isLabelVisible: typeof data.is_label_visible === 'number' ? Boolean(data.is_label_visible) : Boolean(data.is_label_visible),
             });
+
+            closeLinkInspector();
         } catch (e) {
             showTopAlarm('Не удалось сохранить связь.');
             if (process.env.NODE_ENV !== 'production') console.error(e);
         }
+    };
+
+    const deleteSelectedLink = async () => {
+        if (!hasValidBoardId) return;
+        if (!selectedLink) return;
+        if (!isLoggedIn) return;
+        if (!canEditCards) return;
+
+        setLinkDeleteLoading(true);
+        try {
+            await axiosInstance.delete(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}`);
+            setLinkDeleteConfirmOpen(false);
+            closeLinkInspector();
+        } catch (e) {
+            showTopAlarm('Не удалось удалить связь.');
+            if (process.env.NODE_ENV !== 'production') console.error(e);
+        } finally {
+            setLinkDeleteLoading(false);
+        }
+    };
+
+    const flipSelectedLinkDirection = async () => {
+        if (!selectedLinkDraft) return;
+        patchSelectedLinkDraft({
+            fromCardId: selectedLinkDraft.toCardId,
+            toCardId: selectedLinkDraft.fromCardId,
+            fromTitle: selectedLinkDraft.toTitle ?? null,
+            toTitle: selectedLinkDraft.fromTitle ?? null,
+        });
     };
 
     const getPendingInviteUrlForThisBoard = () => {
@@ -293,11 +342,27 @@ const Board = () => {
         setLeaveLoading(false);
         setRoleDropdownParticipantId(null);
         setRoleLoadingParticipantId(null);
+        setLinkDeleteConfirmOpen(false);
+        setLinkDeleteLoading(false);
     }, [boardId]);
 
     useEffect(() => {
         setHasMounted(true);
     }, []);
+
+    useEffect(() => {
+        if (boardMenuView !== 'link' || !selectedLink) {
+            setLinkDeleteConfirmOpen(false);
+            setLinkDeleteLoading(false);
+        }
+    }, [boardMenuView, selectedLink]);
+
+    useEscapeHandler({
+        id: 'board:link-delete-confirm',
+        priority: 1200,
+        isOpen: linkDeleteConfirmOpen,
+        onEscape: () => setLinkDeleteConfirmOpen(false),
+    });
 
     useEscapeHandler({
         id: 'board:participants-role-dropdown',
@@ -714,6 +779,44 @@ const Board = () => {
     const canEditCards = resolvedMyRole === 'owner' || resolvedMyRole === 'editer';
 
     useEffect(() => {
+        if (!effectiveBoardMenuOpen) return;
+        if (boardMenuView !== 'link') return;
+        if (!selectedLink) return;
+
+        const onKeyDownCapture = (e: KeyboardEvent) => {
+            const targetEl = e.target as unknown as HTMLElement | null;
+            const isFormField =
+                Boolean(targetEl) &&
+                (targetEl instanceof HTMLInputElement ||
+                    targetEl instanceof HTMLTextAreaElement ||
+                    (targetEl as unknown as { isContentEditable?: boolean }).isContentEditable);
+
+            if (e.key === 'Delete' && !isFormField) {
+                if (!isLoggedIn || !canEditCards) return;
+                if (!linkDeleteConfirmOpen && !linkDeleteLoading) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setLinkDeleteConfirmOpen(true);
+                }
+                return;
+            }
+
+            if (e.key === 'Enter') {
+                if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+                if ((e as unknown as { isComposing?: boolean }).isComposing) return;
+                if (!linkDeleteConfirmOpen) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+                if (!linkDeleteLoading) void deleteSelectedLink();
+            }
+        };
+
+        window.addEventListener('keydown', onKeyDownCapture, true);
+        return () => window.removeEventListener('keydown', onKeyDownCapture, true);
+    }, [boardMenuView, canEditCards, deleteSelectedLink, effectiveBoardMenuOpen, isLoggedIn, linkDeleteConfirmOpen, linkDeleteLoading, selectedLink]);
+
+    useEffect(() => {
         if (isOwnerBoard) return;
         closeBoardSettingsModal();
     }, [closeBoardSettingsModal, isOwnerBoard]);
@@ -952,66 +1055,107 @@ const Board = () => {
                     {boardMenuView === 'link' && selectedLink ? (
                         <div className={`${classes.board_info} ${classes.link_inspector}`.trim()}>
                             <div className={classes.link_inspector_header}>
-                                <button
-                                    type="button"
-                                    className={classes.link_inspector_back}
-                                    onClick={() => closeLinkInspector()}
-                                    aria-label="Назад к информации о доске"
-                                >
-                                    ←
-                                </button>
                                 <div className={classes.link_inspector_title}>Связь</div>
                             </div>
 
                             <div className={classes.link_inspector_meta}>
                                 <div>
-                                    <span>От:</span> {selectedLink.fromTitle || `#${selectedLink.fromCardId}`}
+                                    <span>От:</span> {selectedLinkDraft?.fromTitle || selectedLink.fromTitle || `#${selectedLinkDraft?.fromCardId ?? selectedLink.fromCardId}`}
                                 </div>
                                 <div>
-                                    <span>К:</span> {selectedLink.toTitle || `#${selectedLink.toCardId}`}
+                                    <span>К:</span> {selectedLinkDraft?.toTitle || selectedLink.toTitle || `#${selectedLinkDraft?.toCardId ?? selectedLink.toCardId}`}
                                 </div>
                             </div>
 
                             <div className={classes.link_inspector_form}>
                                 <div className={classes.link_inspector_field}>
                                     <div className={classes.link_inspector_label}>Вид</div>
-                                    <select
-                                        value={linkDraft?.style ?? selectedLink.style}
-                                        onChange={(e) =>
-                                            setLinkDraft((prev) =>
-                                                prev ? { ...prev, style: e.currentTarget.value === 'arrow' ? 'arrow' : 'line' } : prev
-                                            )
-                                        }
-                                        disabled={!canEditCards || !isLoggedIn}
-                                    >
-                                        <option value="line">Линия</option>
-                                        <option value="arrow">Стрелка</option>
-                                    </select>
+                                    <div className={classes.link_inspector_select_row}>
+                                        <select
+                                            value={selectedLinkDraft?.style ?? selectedLink.style}
+                                            onChange={(e) =>
+                                                patchSelectedLinkDraft({ style: e.currentTarget.value === 'arrow' ? 'arrow' : 'line' })
+                                            }
+                                            disabled={!canEditCards || !isLoggedIn}
+                                        >
+                                            <option value="line">Линия</option>
+                                            <option value="arrow">Стрелка</option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            className={classes.link_inspector_flip_btn}
+                                            onClick={(e) => {
+                                                void flipSelectedLinkDirection();
+                                                e.currentTarget.blur();
+                                            }}
+                                            disabled={!canEditCards || !isLoggedIn}
+                                            aria-label="Развернуть связь"
+                                        >
+                                            <SwitchIcon />
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className={classes.link_inspector_field}>
                                     <div className={classes.link_inspector_label}>Подпись</div>
                                     <input
-                                        value={linkDraft?.label ?? (selectedLink.label ?? '')}
+                                        value={selectedLinkDraft?.label ?? (selectedLink.label ?? '')}
                                         maxLength={70}
                                         onChange={(e) =>
-                                            setLinkDraft((prev) => (prev ? { ...prev, label: e.currentTarget.value } : prev))
+                                            patchSelectedLinkDraft({ label: e.currentTarget.value })
                                         }
                                         disabled={!canEditCards || !isLoggedIn}
                                     />
                                 </div>
 
-                                <label className={classes.link_inspector_checkbox}>
+                                <label className={toggleClasses.publicToggle}>
+                                    <span className={toggleClasses.publicToggleText}>Показывать подпись</span>
                                     <input
+                                        className={toggleClasses.publicToggleInput}
                                         type="checkbox"
-                                        checked={Boolean(linkDraft?.isLabelVisible ?? selectedLink.isLabelVisible)}
+                                        checked={Boolean(selectedLinkDraft?.isLabelVisible ?? selectedLink.isLabelVisible)}
                                         onChange={(e) =>
-                                            setLinkDraft((prev) => (prev ? { ...prev, isLabelVisible: e.currentTarget.checked } : prev))
+                                            patchSelectedLinkDraft({ isLabelVisible: e.currentTarget.checked })
                                         }
                                         disabled={!canEditCards || !isLoggedIn}
                                     />
-                                    Показывать подпись
+                                    <span className={toggleClasses.publicToggleSwitch} aria-hidden="true" />
                                 </label>
+
+                                <div className={classes.leave_board_row}>
+                                    <DropdownWrapper upDel closeOnClick={false} isOpen={linkDeleteConfirmOpen} onClose={() => setLinkDeleteConfirmOpen(false)}>
+                                        {[
+                                            <button
+                                                key="trigger"
+                                                type="button"
+                                                className={classes.leave_board_trigger}
+                                                onClick={() => setLinkDeleteConfirmOpen((prev) => !prev)}
+                                                disabled={!canEditCards || !isLoggedIn || linkDeleteLoading}
+                                                aria-label="Удалить связь"
+                                            >
+                                                Удалить связь
+                                            </button>,
+                                            <div key="menu">
+                                                <button
+                                                    type="button"
+                                                    data-dropdown-class={classes.participant_confirm_danger}
+                                                    onClick={() => void deleteSelectedLink()}
+                                                    disabled={!canEditCards || !isLoggedIn || linkDeleteLoading}
+                                                >
+                                                    {linkDeleteLoading ? 'Удаление...' : 'Да, удалить'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    data-dropdown-class={classes.participant_confirm_cancel}
+                                                    onClick={() => setLinkDeleteConfirmOpen(false)}
+                                                    disabled={linkDeleteLoading}
+                                                >
+                                                    Отмена
+                                                </button>
+                                            </div>,
+                                        ]}
+                                    </DropdownWrapper>
+                                </div>
 
                                 <div className={classes.link_inspector_actions}>
                                     <Mainbtn
@@ -1020,7 +1164,7 @@ const Board = () => {
                                         type="button"
                                         text="Сохранить"
                                         onClick={() => void saveSelectedLink()}
-                                        disabled={!canEditCards || !isLoggedIn || !linkDraft}
+                                        disabled={!canEditCards || !isLoggedIn || !selectedLinkDraft}
                                     />
                                     <Mainbtn
                                         variant="mini"
@@ -1061,7 +1205,7 @@ const Board = () => {
                             )}
                         </div>
                     )}
-                    {isLoggedIn && !isOwnerBoard && ownerParticipant ? (
+                    {boardMenuView !== 'link' && isLoggedIn && !isOwnerBoard && ownerParticipant ? (
                         <div>
                             <div className={classes.owner_block}>
                                 <span className={classes.owner_title}>Владелец:</span>
@@ -1084,7 +1228,7 @@ const Board = () => {
                             </div>
                         </div>
                     ) : null}
-                    {isLoggedIn && !isOwnerBoard && isGuestBoard ? (
+                    {boardMenuView !== 'link' && isLoggedIn && !isOwnerBoard && isGuestBoard ? (
                         <div className={classes.leave_board_row}>
                             <DropdownWrapper upDel closeOnClick={false} isOpen={leaveConfirmOpen} onClose={() => setLeaveConfirmOpen(false)}>
                                 {[
@@ -1120,7 +1264,7 @@ const Board = () => {
                             </DropdownWrapper>
                         </div>
                     ) : null}
-                    {isLoggedIn ? (
+                    {boardMenuView !== 'link' && isLoggedIn ? (
                         isBoardMetaLoading ? (
                             <div className={classes.board_info_actions}>
                                 <div className={`${classes.skeleton} ${classes.board_info_actions_skeleton}`} />
@@ -1131,7 +1275,7 @@ const Board = () => {
                             </div>
                         ) : null
                     ) : null}
-                    {!isLoggedIn && isInitialized ? (
+                    {boardMenuView !== 'link' && !isLoggedIn && isInitialized ? (
                         <div className={classes.participants}>
                             <div className={classes.participant_add}>
                                 <AuthTrigger type="login">
@@ -1140,7 +1284,7 @@ const Board = () => {
                             </div>
                         </div>
                     ) : null}
-                    {isLoggedIn && shouldShowParticipants ? (
+                    {boardMenuView !== 'link' && isLoggedIn && shouldShowParticipants ? (
                         <div className={classes.participants}>
                             {participantsInitialLoading ? (
                                 <div className={`${classes.skeleton} ${classes.participants_title_skeleton}`} />

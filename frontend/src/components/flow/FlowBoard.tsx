@@ -8,12 +8,14 @@ import ReactFlow, {
   BaseEdge,
   Edge,
   EdgeProps,
+  EdgeLabelRenderer,
   Handle,
   MiniMap,
   MiniMapNodeProps,
   Node as RFNode,
   NodeProps,
   Position,
+  MarkerType,
   SelectionMode,
   applyNodeChanges,
   ReactFlowInstance,
@@ -37,8 +39,8 @@ import {
   getBoundaryPoint,
   getLinkHandleStyle,
   getNodeRect,
-  mapApiTypeToNodeType,
   NODE_SIZES,
+  mapApiTypeToNodeType,
   resolveImageSrc
 } from './flowBoardUtils';
 import { useFlowBoardBoardsUpdatedSocket } from './useFlowBoardBoardsUpdatedSocket';
@@ -108,7 +110,6 @@ const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
     <div
       className={classes.node_rectangle}
     >
-      <div className={classes.node_glass} aria-hidden="true" />
       {hasImage ? (
         <div
           className={classes.node_image_layer}
@@ -141,7 +142,6 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
       <div
         className={classes.rhombus_content}
       >
-        <div className={classes.node_glass} aria-hidden="true" />
         {hasImage ? (
           <div
             className={classes.node_image_layer}
@@ -174,7 +174,6 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
       <div
         className={classes.circle_content}
       >
-        <div className={classes.node_glass} aria-hidden="true" />
         {hasImage ? (
           <div
             className={classes.node_image_layer}
@@ -202,6 +201,8 @@ const NODE_TYPES = { rectangle: RectangleNode, rhombus: RhombusNode, circle: Cir
 const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   const { id, source, target, style, markerEnd, sourceX, sourceY, targetX, targetY, data } = props;
   const rf = useReactFlow();
+  const isSelected = Boolean((props as unknown as { selected?: boolean })?.selected);
+  const [isHovered, setIsHovered] = useState(false);
 
   const sNode = rf.getNode(source);
   const tNode = rf.getNode(target);
@@ -214,7 +215,7 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   let ty = targetY;
 
   const MIN_EDGE_RENDER_LEN_PX = 12;
-  const OVERLAP_AABB_TOLERANCE_PX = 4;
+  const OVERLAP_HIDE_AABB_PAD_PX = 8;
 
   if (sRect && tRect) {
     const sType = (sNode?.type as FlowNodeType | undefined) ?? 'rectangle';
@@ -222,11 +223,11 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
     const dx = tRect.cx - sRect.cx;
     const dy = tRect.cy - sRect.cy;
 
-    const overlapsAabb =
-      Math.abs(dx) < sRect.hw + tRect.hw - OVERLAP_AABB_TOLERANCE_PX &&
-      Math.abs(dy) < sRect.hh + tRect.hh - OVERLAP_AABB_TOLERANCE_PX;
+    const overlapsOrTouchesAabb =
+      Math.abs(dx) <= sRect.hw + tRect.hw + OVERLAP_HIDE_AABB_PAD_PX &&
+      Math.abs(dy) <= sRect.hh + tRect.hh + OVERLAP_HIDE_AABB_PAD_PX;
 
-    if (overlapsAabb) return null;
+    if (overlapsOrTouchesAabb) return null;
 
     const p1 = getBoundaryPoint(sType, sRect.cx, sRect.cy, dx, dy, sRect.hw, sRect.hh);
     const p2 = getBoundaryPoint(tType, tRect.cx, tRect.cy, -dx, -dy, tRect.hw, tRect.hh);
@@ -238,23 +239,75 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
 
   if (Math.hypot(tx - sx, ty - sy) < MIN_EDGE_RENDER_LEN_PX) return null;
 
-  const path = `M${sx},${sy}L${tx},${ty}`;
-
   const labelRaw = (data as unknown as { label?: unknown })?.label;
   const isLabelVisibleRaw = (data as unknown as { isLabelVisible?: unknown })?.isLabelVisible;
   const isLabelVisible = isLabelVisibleRaw === undefined ? true : Boolean(isLabelVisibleRaw);
   const label = typeof labelRaw === 'string' ? labelRaw.trim() : '';
-  const labelClass = `${classes.flow_edge_label} ${!isLabelVisible ? classes.flow_edge_label_hidden : ''}`.trim();
+  const shouldRenderLabel = Boolean(label);
+  const labelOpacity = isLabelVisible || isHovered || isSelected ? 1 : 0;
+  const labelClass = classes.flow_edge_label_html;
   const mx = (sx + tx) / 2;
   const my = (sy + ty) / 2;
 
+  const dataStyleRaw = (data as unknown as { style?: unknown })?.style;
+  const isArrow =
+    dataStyleRaw === 'arrow' ? true : dataStyleRaw === 'line' ? false : Boolean(markerEnd);
+
+  const dx = tx - sx;
+  const dy = ty - sy;
+  const len = Math.hypot(dx, dy);
+  const ux = Number.isFinite(len) && len > 0.0001 ? dx / len : 0;
+  const uy = Number.isFinite(len) && len > 0.0001 ? dy / len : 0;
+
+  const ARROW_LEN = 16;
+  const ARROW_W = 14;
+
+  const tipX = tx;
+  const tipY = ty;
+  const baseX = tipX - ux * ARROW_LEN;
+  const baseY = tipY - uy * ARROW_LEN;
+
+  const px = -uy;
+  const py = ux;
+
+  const lx = baseX + px * (ARROW_W / 2);
+  const ly = baseY + py * (ARROW_W / 2);
+  const rx = baseX - px * (ARROW_W / 2);
+  const ry = baseY - py * (ARROW_W / 2);
+
+  const lineEndX = isArrow ? baseX : tx;
+  const lineEndY = isArrow ? baseY : ty;
+  const path = `M${sx},${sy}L${lineEndX},${lineEndY}`;
+
+  const renderedStyle = isSelected ? { ...(style ?? {}), stroke: '#ffffff' } : style;
+  const strokeColor = typeof (renderedStyle as { stroke?: unknown } | undefined)?.stroke === 'string'
+    ? String((renderedStyle as { stroke?: unknown }).stroke)
+    : typeof (style as { stroke?: unknown } | undefined)?.stroke === 'string'
+      ? String((style as { stroke?: unknown }).stroke)
+      : '#ffffff';
+
+  const renderedStyleWithCap = isArrow ? { ...(renderedStyle ?? {}), strokeLinecap: 'butt' as const } : renderedStyle;
+
+  const arrowHead = isArrow ? (
+    <path className={classes.flow_edge_arrowhead} d={`M ${tipX} ${tipY} L ${lx} ${ly} L ${rx} ${ry} Z`} fill={strokeColor} />
+  ) : null;
+
   return (
-    <g>
-      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} />
-      {label ? (
-        <text className={labelClass} x={mx} y={my} textAnchor="middle" dominantBaseline="central">
-          {label}
-        </text>
+    <g onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+      <BaseEdge id={id} path={path} style={renderedStyleWithCap} />
+      {arrowHead}
+      {shouldRenderLabel ? (
+        <EdgeLabelRenderer>
+          <div
+            className={labelClass}
+            style={{
+              opacity: labelOpacity,
+              transform: `translate(-50%, -50%) translate(${mx}px,${my}px)`,
+            }}
+          >
+            {label}
+          </div>
+        </EdgeLabelRenderer>
       ) : null}
     </g>
   );
@@ -267,6 +320,29 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const numericBoardId = Number(boardId);
   const isAuth = useAuthStore((s) => s.isAuth);
   const hasToken = Boolean(localStorage.getItem('token'));
+  const [selectionModifierPressed, setSelectionModifierPressed] = useState(false);
+
+  useEffect(() => {
+    if (__PLATFORM__ !== 'desktop') return;
+
+    const updateFromEvent = (e: KeyboardEvent, pressed: boolean) => {
+      if (e.key !== 'Control' && e.key !== 'Meta') return;
+      setSelectionModifierPressed(pressed);
+    };
+
+    const onKeyDownCapture = (e: KeyboardEvent) => updateFromEvent(e, true);
+    const onKeyUpCapture = (e: KeyboardEvent) => updateFromEvent(e, false);
+    const onBlur = () => setSelectionModifierPressed(false);
+
+    window.addEventListener('keydown', onKeyDownCapture, true);
+    window.addEventListener('keyup', onKeyUpCapture, true);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDownCapture, true);
+      window.removeEventListener('keyup', onKeyUpCapture, true);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
@@ -297,6 +373,145 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const setFlowCardSettingsDraft = useUIStore((s) => s.setFlowCardSettingsDraft);
   const openLinkInspector = useUIStore((s) => s.openLinkInspector);
   const closeLinkInspector = useUIStore((s) => s.closeLinkInspector);
+  const boardMenuView = useUIStore((s) => s.boardMenuView);
+  const selectedLink = useUIStore((s) => s.selectedLink);
+  const selectedLinkDraft = useUIStore((s) => s.selectedLinkDraft);
+  const lastSelectedEdgeIdRef = useRef<string | null>(null);
+  const lastSelectedLinkNodeIdsRef = useRef<{ from: string; to: string } | null>(null);
+
+  useEffect(() => {
+    if (!selectedLink) return;
+    lastSelectedEdgeIdRef.current = `link-${selectedLink.linkId}`;
+    lastSelectedLinkNodeIdsRef.current = { from: String(selectedLink.fromCardId), to: String(selectedLink.toCardId) };
+  }, [selectedLink?.fromCardId, selectedLink?.linkId, selectedLink?.toCardId]);
+
+  useEffect(() => {
+    if (boardMenuView === 'link') return;
+    const edgeId = lastSelectedEdgeIdRef.current;
+    const ids = lastSelectedLinkNodeIdsRef.current;
+    if (!edgeId || !ids) return;
+    setEdges((prev) =>
+      prev.map((e) => {
+        if (String(e.id) !== edgeId) return e;
+        const prevData = (e as unknown as { data?: Record<string, unknown> }).data ?? {};
+        const nextData = {
+          ...prevData,
+          fromCardId: Number(ids.from),
+          toCardId: Number(ids.to),
+        };
+
+        const shouldDeselect = Boolean((e as unknown as { selected?: boolean }).selected);
+        const shouldRestoreDir = String(e.source) !== ids.from || String(e.target) !== ids.to;
+        if (!shouldDeselect && !shouldRestoreDir && prevData === nextData) return e;
+        return {
+          ...e,
+          selected: shouldDeselect ? false : (e as unknown as { selected?: boolean }).selected,
+          source: ids.from,
+          target: ids.to,
+          data: nextData,
+        };
+      })
+    );
+  }, [boardMenuView, setEdges]);
+
+  useEffect(() => {
+    if (boardMenuView === 'link') return;
+    const ids = lastSelectedLinkNodeIdsRef.current;
+    if (!ids) return;
+    setNodes((prev) =>
+      prev.map((n) => {
+        if (!Boolean((n as unknown as { selected?: boolean }).selected)) return n;
+        const id = String(n.id);
+        if (id !== ids.from && id !== ids.to) return n;
+        return { ...n, selected: false };
+      })
+    );
+  }, [boardMenuView, setNodes]);
+
+  useEffect(() => {
+    if (boardMenuView !== 'link') return;
+    if (!selectedLink) return;
+    const edgeId = `link-${selectedLink.linkId}`;
+    const from = String(selectedLinkDraft?.fromCardId ?? selectedLink.fromCardId);
+    const to = String(selectedLinkDraft?.toCardId ?? selectedLink.toCardId);
+
+    setEdges((prev) =>
+      prev.map((e) => {
+        if (String(e.id) !== edgeId) return e;
+        const prevData = (e as unknown as { data?: Record<string, unknown> }).data ?? {};
+        const nextData = {
+          ...prevData,
+          fromCardId: Number(from),
+          toCardId: Number(to),
+        };
+
+        const same = String(e.source) === from && String(e.target) === to;
+        if (same) return (prevData === nextData ? e : { ...e, data: nextData });
+        return { ...e, source: from, target: to, data: nextData };
+      })
+    );
+  }, [boardMenuView, selectedLink?.linkId, selectedLinkDraft?.fromCardId, selectedLinkDraft?.toCardId, selectedLink?.fromCardId, selectedLink?.toCardId]);
+
+  const edgesForRender = React.useMemo(() => {
+    const selectedEdgeId = boardMenuView === 'link' && selectedLink ? `link-${selectedLink.linkId}` : null;
+    const hasDraft = Boolean(boardMenuView === 'link' && selectedLink && selectedLinkDraft);
+
+    return edges.map((e) => {
+      const className = typeof e.className === 'string' ? e.className : '';
+      const isHighlight = className.split(/\s+/).includes('flow_edge_highlight');
+      const isSelectedEdge = Boolean((e as unknown as { selected?: boolean }).selected) || (selectedEdgeId && String(e.id) === selectedEdgeId);
+      const shouldForceWhite = Boolean(isHighlight || isSelectedEdge);
+
+      let next = e as Edge;
+
+      if (shouldForceWhite) {
+        next = {
+          ...next,
+          style: { ...(next.style ?? {}), stroke: '#ffffff' },
+        };
+      }
+
+      if (hasDraft && selectedEdgeId && String(e.id) === selectedEdgeId && selectedLink && selectedLinkDraft) {
+        const prevData = (next as unknown as { data?: Record<string, unknown> }).data ?? {};
+        const nextData = {
+          ...prevData,
+          fromCardId: selectedLink.fromCardId,
+          toCardId: selectedLink.toCardId,
+          style: selectedLinkDraft.style,
+          label: selectedLinkDraft.label,
+          isLabelVisible: selectedLinkDraft.isLabelVisible,
+        };
+
+        next = {
+          ...next,
+          selected: true,
+          style: { ...(next.style ?? {}), stroke: '#ffffff' },
+          data: nextData,
+        };
+      }
+
+      return next;
+    });
+  }, [boardMenuView, edges, selectedLink, selectedLinkDraft]);
+
+  const setEdgeHighlightBySelectedNodes = useCallback((selectedNodeIds: Set<string>) => {
+    setEdges((prev) =>
+      prev.map((e) => {
+        const isConnected = selectedNodeIds.has(String(e.source)) || selectedNodeIds.has(String(e.target));
+        const prevClass = typeof e.className === 'string' ? e.className : '';
+        const hasFlag = prevClass.split(/\s+/).includes('flow_edge_highlight');
+        if (isConnected === hasFlag) return e;
+        const cleaned = prevClass
+          .split(/\s+/)
+          .filter(Boolean)
+          .filter((c) => c !== 'flow_edge_highlight')
+          .join(' ')
+          .trim();
+        const nextClass = `${cleaned} ${isConnected ? 'flow_edge_highlight' : ''}`.trim();
+        return { ...e, className: nextClass };
+      })
+    );
+  }, []);
 
   const activeNodeId = flowCardSettingsOpen ? flowCardSettings?.nodeId ?? null : null;
   const isEditing = Boolean(flowCardSettingsOpen && flowCardSettings && flowCardSettingsDraft && activeNodeId);
@@ -1207,7 +1422,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   return (
     <div
       ref={containerRef}
-      className={`${classes.space_container} ${__PLATFORM__ === 'desktop' ? classes.space_container_desktop : ''} ${canEditCards ? classes.space_container_can_edit : ''} ${!canEditCards ? classes.space_container_readonly : ''} ${isConnecting ? classes.space_container_connecting : ''}`.trim()}
+      className={`${classes.space_container} ${__PLATFORM__ === 'desktop' ? classes.space_container_desktop : ''} ${__PLATFORM__ === 'desktop' && selectionModifierPressed ? classes.space_container_selecting : ''} ${canEditCards ? classes.space_container_can_edit : ''} ${!canEditCards ? classes.space_container_readonly : ''} ${isConnecting ? classes.space_container_connecting : ''}`.trim()}
       onContextMenu={handleContextMenu}
       onMouseDown={handleMouseDown}
       onClickCapture={pointerGestures.handleClickCapture}
@@ -1221,10 +1436,12 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       <ReactFlowProvider>
           <ReactFlow
             nodes={nodes}
-            edges={edges}
+            edges={edgesForRender}
             fitView
             zoomOnDoubleClick={false}
-            selectionKeyCode={['Control', 'Meta']}
+            selectionKeyCode={null}
+            selectionOnDrag={__PLATFORM__ === 'desktop' ? selectionModifierPressed : false}
+            panOnDrag={__PLATFORM__ === 'desktop' ? !selectionModifierPressed : true}
             selectionMode={SelectionMode.Partial}
             connectionLineType={ConnectionLineType.Straight}
             connectionLineComponent={HoverConnectionLine}
@@ -1236,6 +1453,12 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
             onNodesChange={onNodesChange}
+            onSelectionStart={() => {
+              if (boardMenuView === 'link' && selectedLink) {
+                closeLinkInspector();
+                setEdges((prev) => prev.map((e) => ((e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e)));
+              }
+            }}
             onConnectStart={(_, params) => {
               if (!canEditCards) return;
               const sourceId = params?.nodeId ? String(params.nodeId) : null;
@@ -1276,10 +1499,20 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               const selectedNodes = sel?.nodes ?? [];
               if (selectedNodes.length === 1) setLinkSourceNodeId(String(selectedNodes[0].id));
               else setLinkSourceNodeId(null);
+
+              const edgeIsActive = boardMenuView === 'link' && Boolean(selectedLink);
+              if (edgeIsActive) {
+                setEdgeHighlightBySelectedNodes(new Set());
+                return;
+              }
+
+              setEdgeHighlightBySelectedNodes(new Set(selectedNodes.map((n) => String(n.id))));
             }}
             onPaneClick={() => {
               closeLinkInspector();
               closeContextMenu();
+              setNodes((prev) => (prev.some((n) => Boolean((n as unknown as { selected?: boolean }).selected)) ? prev.map((n) => (Boolean((n as unknown as { selected?: boolean }).selected) ? { ...n, selected: false } : n)) : prev));
+              setEdges((prev) => (prev.some((e) => Boolean((e as unknown as { selected?: boolean }).selected)) ? prev.map((e) => (Boolean((e as unknown as { selected?: boolean }).selected) ? { ...e, selected: false } : e)) : prev));
             }}
             onEdgeClick={(event, edge) => {
               event.preventDefault();
@@ -1308,6 +1541,17 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               const toTitle = nodes.find((n) => String(n.id) === String(edge.target))?.data?.title ?? null;
 
               if (flowCardSettingsOpen) closeFlowCardSettings();
+
+              setEdgeHighlightBySelectedNodes(new Set());
+
+              const edgeId = `link-${linkId}`;
+              setEdges((prev) =>
+                prev.map((e) => (String(e.id) === edgeId ? { ...e, selected: true } : (e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e))
+              );
+
+              const fromIdStr = String(fromCardId);
+              const toIdStr = String(toCardId);
+              setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === fromIdStr || String(n.id) === toIdStr })));
 
               openLinkInspector({
                 linkId,
@@ -1401,10 +1645,33 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               return;
             }
 
+            const typed = node as RFNode<FlowNodeData>;
+            const clickedId = String(typed.id);
+
+            if (
+              boardMenuView === 'link' &&
+              selectedLink &&
+              clickedId &&
+              !clickedId.startsWith('draft-') &&
+              !((event as unknown as { ctrlKey?: boolean; metaKey?: boolean }).ctrlKey || (event as unknown as { metaKey?: boolean }).metaKey) &&
+              (clickedId === String(selectedLink.fromCardId) || clickedId === String(selectedLink.toCardId))
+            ) {
+              event.preventDefault();
+              event.stopPropagation();
+
+              closeLinkInspector();
+              closeContextMenu();
+
+              setEdges((prev) => prev.map((e) => ((e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e)));
+              setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === clickedId })));
+              setEdgeHighlightBySelectedNodes(new Set([clickedId]));
+
+              return;
+            }
+
             if ((event as unknown as { ctrlKey?: boolean; metaKey?: boolean }).ctrlKey || (event as unknown as { metaKey?: boolean }).metaKey) return;
             const targetEl = event.target as Element | null;
             if (targetEl?.closest?.('.react-flow__handle')) return;
-            const typed = node as RFNode<FlowNodeData>;
             const clickedShape =
               Boolean(targetEl?.closest(`.${classes.flow_drag_handle}`)) ||
               (String(typed.type) === 'rectangle' && Boolean(targetEl?.closest(`.${classes.node_rectangle}`)));

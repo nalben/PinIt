@@ -20,6 +20,16 @@ export type SelectedLinkSnapshot = {
   toTitle?: string | null;
 };
 
+export type SelectedLinkDraft = {
+  fromCardId: number;
+  toCardId: number;
+  style: FlowLinkStyle;
+  label: string;
+  isLabelVisible: boolean;
+  fromTitle?: string | null;
+  toTitle?: string | null;
+};
+
 type EscapeHandler = {
   priority: number;
   isOpen: () => boolean;
@@ -47,6 +57,8 @@ interface UIState {
   isBoardMenuOpen: boolean;
   boardMenuView: BoardMenuView;
   selectedLink: SelectedLinkSnapshot | null;
+  selectedLinkDraft: SelectedLinkDraft | null;
+  linkInspectorPrevMenuOpen: boolean | null;
   restoreBoardMenuAfterFlowCardSettings: boolean;
   boardSettingsModalOpen: boolean;
   boardSettingsModalView: BoardSettingsModalView;
@@ -72,6 +84,7 @@ interface UIState {
   toggleBoardMenu: () => void;
   openLinkInspector: (snapshot: SelectedLinkSnapshot) => void;
   closeLinkInspector: () => void;
+  patchSelectedLinkDraft: (patch: Partial<SelectedLinkDraft>) => void;
   openBoardSettingsModal: (view?: BoardSettingsModalView) => void;
   closeBoardSettingsModal: () => void;
   setBoardSettingsModalView: (view: BoardSettingsModalView) => void;
@@ -108,6 +121,8 @@ export const useUIStore = create<UIState>((set) => {
   isBoardMenuOpen: true,
   boardMenuView: 'board',
   selectedLink: null,
+  selectedLinkDraft: null,
+  linkInspectorPrevMenuOpen: null,
   restoreBoardMenuAfterFlowCardSettings: false,
   boardSettingsModalOpen: false,
   boardSettingsModalView: 'settings',
@@ -138,21 +153,44 @@ export const useUIStore = create<UIState>((set) => {
       isBoardMenuOpen: false,
       boardMenuView: s.boardMenuView === 'link' ? 'board' : s.boardMenuView,
       selectedLink: s.boardMenuView === 'link' ? null : s.selectedLink,
+      selectedLinkDraft: s.boardMenuView === 'link' ? null : s.selectedLinkDraft,
+      linkInspectorPrevMenuOpen: s.boardMenuView === 'link' ? null : s.linkInspectorPrevMenuOpen,
     })),
   toggleBoardMenu: () =>
     set((s) => ({
       isBoardMenuOpen: !s.isBoardMenuOpen,
       boardMenuView: s.isBoardMenuOpen && s.boardMenuView === 'link' ? 'board' : s.boardMenuView,
       selectedLink: s.isBoardMenuOpen && s.boardMenuView === 'link' ? null : s.selectedLink,
+      selectedLinkDraft: s.isBoardMenuOpen && s.boardMenuView === 'link' ? null : s.selectedLinkDraft,
+      linkInspectorPrevMenuOpen: s.isBoardMenuOpen && s.boardMenuView === 'link' ? null : s.linkInspectorPrevMenuOpen,
     })),
 
   openLinkInspector: (snapshot) =>
-    set({
+    set((s) => ({
       isBoardMenuOpen: true,
       boardMenuView: 'link',
       selectedLink: snapshot,
-    }),
-  closeLinkInspector: () => set({ boardMenuView: 'board', selectedLink: null }),
+      selectedLinkDraft: {
+        fromCardId: snapshot.fromCardId,
+        toCardId: snapshot.toCardId,
+        style: snapshot.style,
+        label: snapshot.label ?? '',
+        isLabelVisible: Boolean(snapshot.isLabelVisible),
+        fromTitle: snapshot.fromTitle ?? null,
+        toTitle: snapshot.toTitle ?? null,
+      },
+      linkInspectorPrevMenuOpen: s.boardMenuView === 'link' ? s.linkInspectorPrevMenuOpen : s.isBoardMenuOpen,
+    })),
+  closeLinkInspector: () =>
+    set((s) => ({
+      boardMenuView: 'board',
+      selectedLink: null,
+      selectedLinkDraft: null,
+      isBoardMenuOpen: s.linkInspectorPrevMenuOpen === false ? false : s.isBoardMenuOpen,
+      linkInspectorPrevMenuOpen: null,
+    })),
+  patchSelectedLinkDraft: (patch) =>
+    set((s) => (s.selectedLinkDraft ? { selectedLinkDraft: { ...s.selectedLinkDraft, ...patch } } : {})),
 
   openBoardSettingsModal: (view = 'settings') => set({ boardSettingsModalOpen: true, boardSettingsModalView: view }),
   closeBoardSettingsModal: () => set({ boardSettingsModalOpen: false, boardSettingsModalView: 'settings' }),

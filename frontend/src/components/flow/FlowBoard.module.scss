@@ -6,6 +6,20 @@
 
 .space_container_connecting{}
 
+.space_container_selecting{
+    :global(.react-flow__pane){
+        cursor: crosshair;
+    }
+
+    :global(.react-flow__node){
+        cursor: crosshair;
+    }
+
+    .flow_drag_handle{
+        cursor: crosshair;
+    }
+}
+
 :global(.react-flow__nodesselection-rect),
 :global(.react-flow__selection){
     border: 1px solid rgba(231, 205, 115, 0.9) !important;
@@ -13,19 +27,24 @@
 }
 
 :global(.react-flow__node.flow_node_wrapper.selected) .node_rectangle{
-    box-shadow: 0 0 0 0px var(--cyan), 0 0 28px var(--cyan);
-    border-color: var(--cyan);
+    box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
+    border-color: rgba(255, 255, 255, 0.9);
 }
 
 :global(.react-flow__node.flow_node_wrapper.selected) .rhombus_content{
     box-shadow: none;
-    filter: drop-shadow(0 0 28px var(--cyan));
-    border-color: var(--cyan);
+    filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.45));
+    border-color: rgba(255, 255, 255, 0.9);
 }
 
 :global(.react-flow__node.flow_node_wrapper.selected) .circle_content{
-    box-shadow: 0 0 0 0px var(--cyan), 0 0 28px var(--cyan);
-    border-color: var(--cyan);
+    box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
+    border-color: rgba(255, 255, 255, 0.9);
+}
+
+:global(.react-flow__node.flow_node_wrapper.selected) .flow_link_handle{
+    border-color: rgba(255, 255, 255, 0.9) !important;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
 }
 
 .flow_hit_svg{
@@ -44,33 +63,60 @@
     touch-action: none;
 }
 
-.flow_edge_label{
+.flow_edge_label_html{
+    position: absolute;
+    z-index: 9999;
     pointer-events: none;
     user-select: none;
-    fill: var(--cyan);
+    color: var(--cyan);
     font-size: 14px;
     font-weight: 700;
-    paint-order: stroke;
-    stroke: rgba(0, 0, 0, 0.85);
-    stroke-width: 4px;
-    opacity: 1;
+    transition: opacity 0.5s ease;
+    text-shadow:
+        0 0 2px rgba(0, 0, 0, 0.9),
+        0 2px 10px rgba(0, 0, 0, 0.9),
+        0 0 0 rgba(0, 0, 0, 0.9);
 }
 
-.flow_edge_label_hidden{
-    opacity: 0;
-    transition: opacity 120ms ease;
-}
-
-:global(.react-flow__edge.flow_edge:hover) .flow_edge_label_hidden,
-:global(.react-flow__edge.flow_edge.selected) .flow_edge_label_hidden{
-    opacity: 1;
+:global(.react-flow__edge.flow_edge.flow_edge_highlight) :global(.react-flow__edge-path){
+    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
+    stroke: rgba(255, 255, 255, 0.95) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
     :global(.react-flow__edge.flow_edge:hover) :global(.react-flow__edge-path){
-        stroke-width: 3px !important;
-        filter: drop-shadow(0 0 14px rgba(231, 205, 115, 0.35));
+        filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
     }
+
+    .space_container_desktop :global(.react-flow__node.flow_node_wrapper:hover) .node_rectangle{
+        box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
+    }
+
+    .space_container_desktop :global(.react-flow__node.flow_node_wrapper:hover) .rhombus_content{
+        filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.45));
+    }
+
+    .space_container_desktop :global(.react-flow__node.flow_node_wrapper:hover) .circle_content{
+        box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
+    }
+}
+
+:global(.react-flow__edge.flow_edge.selected) :global(.react-flow__edge-path){
+    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
+}
+
+.space_container :global(.react-flow__edge-path){
+    transition: filter 0.5s ease, stroke 0.5s ease;
+}
+
+.flow_edge_arrowhead{
+    transition: fill 0.5s ease, filter 0.5s ease;
+}
+
+:global(.react-flow__edge.flow_edge:hover) .flow_edge_arrowhead,
+:global(.react-flow__edge.flow_edge.selected) .flow_edge_arrowhead,
+:global(.react-flow__edge.flow_edge.flow_edge_highlight) .flow_edge_arrowhead{
+    filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
 }
 
 .flow_link_handle{
@@ -610,17 +656,9 @@
     border-radius: 10px;
     cursor: grab;
     position: relative;
-}
-
-.node_glass{
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    background: transparent;
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
-    border-radius: inherit;
+    transition: box-shadow 0.5s ease, border-color 0.5s ease, filter 0.5s ease;
 }
 
 .node_image_layer{
@@ -682,9 +720,11 @@
     corner-shape: bevel;
     background: rgba(0, 0, 0, 0.12);
     position: relative;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    transition: box-shadow 0.5s ease, border-color 0.5s ease, filter 0.5s ease;
 
     // `corner-shape` is not inherited; ensure image/glass/skeleton clip matches the rhombus shape.
-    & .node_glass,
     & .node_image_layer,
     & .node_image_skeleton{
         border-radius: 100%;
@@ -782,4 +822,7 @@
     width: 120px;
     background: rgba(0, 0, 0, 0.12);
     position: relative;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    transition: box-shadow 0.5s ease, border-color 0.5s ease, filter 0.5s ease;
 }

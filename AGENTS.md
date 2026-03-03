@@ -1088,6 +1088,8 @@ Update (2026-03-03)
   - SQL migration: `api/sql/2026-03-03-cardlinks-label.sql`
 - New authenticated link update endpoint:
   - `PATCH /api/boards/:board_id/links/:link_id` — updates `cardlinks.style`, `cardlinks.label`, `cardlinks.is_label_visible` (owner/`editer` only) and emits `boards:updated` with `reason: 'link_updated'`.
+- New authenticated link direction flip endpoint:
+  - `PATCH /api/boards/:board_id/links/:link_id/flip` — swaps `cardlinks.from_card_id` and `cardlinks.to_card_id` (owner/`editer` only) and emits `boards:updated` with `reason: 'link_updated'`.
 - `frontend/src/components/flow/FlowBoard.tsx` renders `cardlinks.label` as an SVG text label over the edge; when `is_label_visible=0` the label is hidden by default and appears on hover/selected.
 - `frontend/src/pages/board/Board.tsx` right menu can switch to a link inspector view when an edge is clicked (shows from/to, style, label, label visibility and allows saving via the PATCH endpoint).
 - `frontend/src/components/flow/FlowBoard.tsx` was split into focused local modules/hooks (no runtime contract changes intended; behavior preserved):

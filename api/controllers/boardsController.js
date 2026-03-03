@@ -2402,6 +2402,107 @@ exports.updateCardLink = async (req, res) => {
   }
 };
 
+exports.flipCardLinkDirection = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const linkId = Number(req.params?.link_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(linkId) ||
+      linkId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const [existingRows] = await db.execute(
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, label, is_label_visible, created_at
+       FROM cardlinks
+       WHERE id = ? AND board_id = ?
+       LIMIT 1`,
+      [linkId, boardId]
+    );
+
+    if (!existingRows.length) {
+      return res.status(404).json({ message: 'Связь не найдена' });
+    }
+
+    const existing = existingRows[0];
+    const nextFrom = Number(existing.to_card_id);
+    const nextTo = Number(existing.from_card_id);
+
+    if (!Number.isFinite(nextFrom) || !Number.isFinite(nextTo) || nextFrom <= 0 || nextTo <= 0) {
+      return res.status(500).json({ message: 'Ошибка обновления связи' });
+    }
+
+    await db.execute(
+      `DELETE FROM cardlinks
+       WHERE board_id = ? AND from_card_id = ? AND to_card_id = ? AND style = ? AND id <> ?`,
+      [boardId, nextFrom, nextTo, String(existing.style), linkId]
+    );
+
+    await db.execute(
+      `UPDATE cardlinks
+       SET from_card_id = ?, to_card_id = ?
+       WHERE id = ? AND board_id = ?`,
+      [nextFrom, nextTo, linkId, boardId]
+    );
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, from_card_id, to_card_id, style, color, label, is_label_visible, created_at
+       FROM cardlinks
+       WHERE id = ? AND board_id = ?
+       LIMIT 1`,
+      [linkId, boardId]
+    );
+
+    if (!rows.length) {
+      return res.status(500).json({ message: 'Ошибка обновления связи' });
+    }
+
+    const link = rows[0];
+    emitBoardsUpdatedToBoardUsers(req, boardId, {
+      reason: 'link_updated',
+      link_id: Number(link.id),
+      from_card_id: Number(link.from_card_id),
+      to_card_id: Number(link.to_card_id),
+      style: link.style,
+      color: link.color,
+      label: link.label ?? null,
+      is_label_visible: Number(link.is_label_visible) ? 1 : 0,
+    }, [user_id]);
+
+    return res.status(200).json(link);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления связи' });
+  }
+};
+
 exports.deleteCardLink = async (req, res) => {
   try {
     const user_id = Number(req.user?.id);

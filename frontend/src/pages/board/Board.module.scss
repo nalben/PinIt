@@ -118,14 +118,15 @@
 .link_inspector{
     margin-top: 80px;
 
-    & img, svg{
+    & > img,
+    & > svg{
         display: none;
     }
 }
 .link_inspector_header{
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 12px;
 }
 .link_inspector_back{
@@ -133,8 +134,8 @@
     border-color: var(--pink);
     background: transparent;
     color: var(--pink);
-    width: 44px;
     height: 36px;
+    padding: 0 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -149,6 +150,7 @@
     color: var(--pink);
     font-size: fluid-prop(22,16,1920,320);
     font-weight: 700;
+    margin-right: auto;
 }
 .link_inspector_meta{
     border: var(--border);
@@ -170,17 +172,70 @@
 
     & input, select{
         border: var(--border);
-        background: transparent;
+        background: var(--grey20);
         color: var(--white);
         padding: 10px;
         font-family: "Nata Sans", sans-serif;
         font-size: fluid-prop(18,13,1920,320);
+    }
+
+    & select{
+        appearance: none;
+        -webkit-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        background-size: 14px 14px;
+        padding-right: 44px;
+    }
+
+    & option{
+        background: var(--grey20);
+        color: var(--white);
     }
 }
 .link_inspector_field{
     display: flex;
     flex-direction: column;
     gap: 6px;
+}
+.link_inspector_select_row{
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+
+    & select{
+        flex: 1;
+        min-width: 0;
+    }
+}
+.link_inspector_flip_btn{
+    width: 44px;
+    flex-shrink: 0;
+    border: var(--border);
+    border-color: var(--pink);
+    background: transparent;
+    color: var(--pink);
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover{
+        opacity: 0.8;
+    }
+
+    &:disabled{
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    & svg{
+        height: 28px;
+        fill: var(--pink);
+        color: var(--pink);
+        background-color: transparent;
+    }
 }
 .link_inspector_label{
     color: var(--pink);
