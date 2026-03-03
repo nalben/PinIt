@@ -332,14 +332,20 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
 
     const onKeyDownCapture = (e: KeyboardEvent) => updateFromEvent(e, true);
     const onKeyUpCapture = (e: KeyboardEvent) => updateFromEvent(e, false);
+    const onPointerDownCapture = (e: PointerEvent) => {
+      if (e.button !== 0) return;
+      setSelectionModifierPressed(Boolean(e.ctrlKey || e.metaKey));
+    };
     const onBlur = () => setSelectionModifierPressed(false);
 
     window.addEventListener('keydown', onKeyDownCapture, true);
     window.addEventListener('keyup', onKeyUpCapture, true);
+    window.addEventListener('pointerdown', onPointerDownCapture, true);
     window.addEventListener('blur', onBlur);
     return () => {
       window.removeEventListener('keydown', onKeyDownCapture, true);
       window.removeEventListener('keyup', onKeyUpCapture, true);
+      window.removeEventListener('pointerdown', onPointerDownCapture, true);
       window.removeEventListener('blur', onBlur);
     };
   }, []);
@@ -1453,7 +1459,16 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
             onNodesChange={onNodesChange}
-            onSelectionStart={() => {
+            onSelectionStart={(event) => {
+              if (__PLATFORM__ === 'desktop' && !(event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                event.stopPropagation();
+                setSelectionModifierPressed(false);
+                setNodes((prev) => prev.map((n) => ((n as unknown as { selected?: boolean }).selected ? { ...n, selected: false } : n)));
+                setEdges((prev) => prev.map((e) => ((e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e)));
+                return;
+              }
+
               if (boardMenuView === 'link' && selectedLink) {
                 closeLinkInspector();
                 setEdges((prev) => prev.map((e) => ((e as unknown as { selected?: boolean }).selected ? { ...e, selected: false } : e)));
