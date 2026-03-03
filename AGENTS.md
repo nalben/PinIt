@@ -439,7 +439,7 @@ Legacy note:
 
 CACHING (FRONTEND, IN-MEMORY)
 
-Profile page (`frontend/src/pages/profile/Profile.tsx`):
+Profile page data layer (`frontend/src/components/profilepage/hooks/useProfilePageData.ts`):
 
 - In-memory cache + in-flight dedup for `/api/profile/:username` and `/friends-count`
 - MUST be invalidated on realtime friend status changes (socket `friends:status`) if counts/status must be live
@@ -1187,6 +1187,76 @@ Rules: extraction threshold for future refactors
 - For any new socket reason handling in flow:
   - parse payload in `utils/`,
   - keep imperative edge/node updates in hook/component.
+
+Update (2026-03-03, `components/profilepage` usage and function-sorting rules)
+
+- New folder exists: `frontend/src/components/profilepage/` with strict subfolders:
+  - `components/` for extracted profile-page JSX/UI blocks (reserved; currently no files).
+  - `hooks/` for profile page orchestration logic.
+  - `utils/` for pure profile helper/parsing functions.
+- Current files and source-of-truth responsibilities:
+  - `model.ts`: profile-page local TypeScript contracts (`ProfileData`, `FriendStatus`, modal types, cache entry types).
+  - `hooks/useProfilePageData.ts`: profile data loading + in-memory cache/in-flight dedup + friends realtime sync + friend/share actions.
+  - `utils/avatar.ts`: profile avatar URL resolution (`/uploads/...` and owner-avatar fallback handling).
+  - `utils/clipboard.ts`: clipboard copy helper with fallback (`navigator.clipboard` -> `execCommand` path).
+  - `utils/friendUi.ts`: friend button text/class mapping by `FriendStatus`.
+- Verified consumers:
+  - `frontend/src/pages/profile/Profile.tsx` uses `useProfilePageData`, `resolveProfileAvatarSrc/resolveProfileAvatarPath`, and friend UI mapping helpers.
+  - `frontend/src/pages/profile/Profile.tsx` now acts as UI composition layer; orchestration moved into `components/profilepage`.
+
+Rules: where to put NEW profile code
+
+- Put new code in `components/profilepage/components/` if:
+  - it is JSX/TSX UI for profile page,
+  - reused across profile page states/modals OR removes substantial repeated markup,
+  - and it can be driven via props/callbacks.
+- Put new code in `components/profilepage/hooks/` if:
+  - it coordinates profile async flows (profile fetch, counters, socket updates, friend actions),
+  - combines multiple effects/state transitions,
+  - or owns dedup/cache/in-flight guards.
+- Put new code in `components/profilepage/utils/` if:
+  - it is pure deterministic transform/mapper/parser,
+  - has no React lifecycle/state dependency,
+  - and can be unit-tested without DOM/store/network setup.
+
+Rules: profile function sorting decision tree (mandatory)
+
+1. JSX output logic -> `components/`.
+2. Hook/lifecycle logic (`useState`/`useEffect`/refs/listeners) -> `hooks/`.
+3. Pure data transform/format/resolve logic -> `utils/`.
+4. Mixed logic -> keep orchestration in `hooks/`, extract pure parts to `utils/`.
+5. Do not duplicate profile action branches (`friend`/`sent`/`received`) across files; centralize mapping/branch helpers.
+6. If profile-page file grows beyond ~500-700 lines with mixed concerns, extraction is required.
+
+Rules: inside-file ordering for `components/profilepage/*` (mandatory)
+
+- For `model.ts`:
+  - 1) base entity types
+  - 2) UI state types
+  - 3) cache/in-flight helper types
+- For `hooks/*.ts`:
+  - 1) imports
+  - 2) module-level cache/in-flight singletons
+  - 3) small private helpers
+  - 4) exported hook body
+  - 5) returned API grouped by read values -> actions
+- For `utils/*.ts`:
+  - 1) imports/types
+  - 2) low-level private helpers
+  - 3) exported resolvers/parsers/mappers
+- For future `components/*.tsx`:
+  - 1) imports
+  - 2) props types
+  - 3) constants
+  - 4) component
+  - 5) exports
+
+Rules: dependency boundaries for profilepage
+
+- `components/profilepage/utils/*` must not import Zustand stores, axios, or socket manager.
+- `components/profilepage/hooks/*` may import axios/socket/store and can call `utils/*`.
+- `frontend/src/pages/profile/Profile.tsx` should avoid embedding heavy async orchestration; keep it in hooks.
+- Socket event normalization/state transitions should remain in `hooks/useProfilePageData.ts` unless reused broadly.
 
 1. Frontend routing and app entry
 
