@@ -9,7 +9,6 @@ import FlowBoard, { type FlowBoardHandle } from '@/components/flow/FlowBoard';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import BoardSettingsModal from '@/components/boards/boardsettingsmodal/BoardSettingsModal';
-import toggleClasses from '@/components/boards/boardsettingsmodal/BoardSettingsModal.module.scss';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import AuthModal from '@/components/auth/authmodal/AuthModal';
 import LoginForm from '@/components/auth/login/Login';
@@ -1053,7 +1052,7 @@ const Board = () => {
                 </div>
                 <div className={classes.board_menu_}>
                     {boardMenuView === 'link' && selectedLink ? (
-                        <div className={`${classes.board_info} ${classes.link_inspector}`.trim()}>
+                        <div className={classes.link_inspector_root}>
                             <div className={classes.link_inspector_header}>
                                 <div className={classes.link_inspector_title}>Связь</div>
                             </div>
@@ -1108,10 +1107,10 @@ const Board = () => {
                                     />
                                 </div>
 
-                                <label className={toggleClasses.publicToggle}>
-                                    <span className={toggleClasses.publicToggleText}>Показывать подпись</span>
+                                <label className={classes.link_inspector_toggle}>
+                                    <span className={classes.link_inspector_toggle_text}>Показывать подпись</span>
                                     <input
-                                        className={toggleClasses.publicToggleInput}
+                                        className={classes.link_inspector_toggle_input}
                                         type="checkbox"
                                         checked={Boolean(selectedLinkDraft?.isLabelVisible ?? selectedLink.isLabelVisible)}
                                         onChange={(e) =>
@@ -1119,16 +1118,16 @@ const Board = () => {
                                         }
                                         disabled={!canEditCards || !isLoggedIn}
                                     />
-                                    <span className={toggleClasses.publicToggleSwitch} aria-hidden="true" />
+                                    <span className={classes.link_inspector_toggle_switch} aria-hidden="true" />
                                 </label>
 
-                                <div className={classes.leave_board_row}>
+                                <div className={classes.link_inspector_delete_row}>
                                     <DropdownWrapper upDel closeOnClick={false} isOpen={linkDeleteConfirmOpen} onClose={() => setLinkDeleteConfirmOpen(false)}>
                                         {[
                                             <button
                                                 key="trigger"
                                                 type="button"
-                                                className={classes.leave_board_trigger}
+                                                className={classes.link_inspector_delete_trigger}
                                                 onClick={() => setLinkDeleteConfirmOpen((prev) => !prev)}
                                                 disabled={!canEditCards || !isLoggedIn || linkDeleteLoading}
                                                 aria-label="Удалить связь"
