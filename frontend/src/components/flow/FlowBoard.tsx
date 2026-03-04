@@ -1365,6 +1365,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         (targetEl instanceof HTMLInputElement ||
           targetEl instanceof HTMLTextAreaElement ||
           (targetEl as unknown as { isContentEditable?: boolean }).isContentEditable);
+      const isTitleInputTarget = Boolean(targetEl) && targetEl === titleInputRef.current;
 
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -1384,6 +1385,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       if (e.key !== 'Enter') return;
       if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
       if ((e as unknown as { isComposing?: boolean }).isComposing) return;
+
+      if (__PLATFORM__ !== 'desktop' && isTitleInputTarget) {
+        e.preventDefault();
+        e.stopPropagation();
+        titleInputRef.current?.blur();
+        return;
+      }
 
       e.preventDefault();
       e.stopPropagation();
@@ -1807,6 +1815,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                 ref={titleInputRef}
                 value={displayTitle}
                 onChange={e => setDraftTitleLive(e.target.value)}
+                enterKeyHint="done"
                 placeholder={visualEditing ? 'Название' : 'Выберите запись'}
                 maxLength={50}
                 disabled={!isEditing}
