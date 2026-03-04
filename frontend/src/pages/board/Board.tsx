@@ -56,6 +56,7 @@ const Board = () => {
     const setBoardSettingsModalParticipantsInnerViewNext = useUIStore((s) => s.setBoardSettingsModalParticipantsInnerViewNext);
     const [linkDeleteConfirmOpen, setLinkDeleteConfirmOpen] = useState(false);
     const [linkDeleteLoading, setLinkDeleteLoading] = useState(false);
+    const [linkStyleDropdownOpen, setLinkStyleDropdownOpen] = useState(false);
     const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
     const [forcedAuthView, setForcedAuthView] = useState<InviteAuthView>('login');
     const [hasMounted, setHasMounted] = useState(false);
@@ -101,46 +102,64 @@ const Board = () => {
         if (!isLoggedIn) return;
         if (!canEditCards) return;
 
+        type LinkResponse = {
+            id: number;
+            board_id: number;
+            from_card_id: number;
+            to_card_id: number;
+            style: 'line' | 'arrow';
+            color: string;
+            label: string | null;
+            is_label_visible: number | boolean | null;
+            created_at: string;
+        };
+
         const label = selectedLinkDraft.label.trim().slice(0, 70);
+        const currentLabel = (selectedLink.label ?? '').trim().slice(0, 70);
         const shouldFlipDirection =
             Number(selectedLinkDraft.fromCardId) === Number(selectedLink.toCardId) &&
             Number(selectedLinkDraft.toCardId) === Number(selectedLink.fromCardId);
+        const shouldPatchLink =
+            selectedLinkDraft.style !== selectedLink.style ||
+            label !== currentLabel ||
+            Boolean(selectedLinkDraft.isLabelVisible) !== Boolean(selectedLink.isLabelVisible);
 
         try {
-            const { data } = await axiosInstance.patch<{
-                id: number;
-                board_id: number;
-                from_card_id: number;
-                to_card_id: number;
-                style: 'line' | 'arrow';
-                color: string;
-                label: string | null;
-                is_label_visible: number | boolean | null;
-                created_at: string;
-            }>(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}`, {
-                style: selectedLinkDraft.style,
-                label: label ? label : null,
-                is_label_visible: selectedLinkDraft.isLabelVisible,
-            });
-
             let finalFromCardId = Number(selectedLink.fromCardId);
             let finalToCardId = Number(selectedLink.toCardId);
+            let finalStyle = selectedLink.style;
+            let finalColor = selectedLink.color;
+            let finalLabel = selectedLink.label ?? null;
+            let finalIsLabelVisible = Boolean(selectedLink.isLabelVisible);
 
             if (shouldFlipDirection) {
-                const flipRes = await axiosInstance.patch<{
-                    id: number;
-                    board_id: number;
-                    from_card_id: number;
-                    to_card_id: number;
-                    style: 'line' | 'arrow';
-                    color: string;
-                    label: string | null;
-                    is_label_visible: number | boolean | null;
-                    created_at: string;
-                }>(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}/flip`, {});
+                const flipRes = await axiosInstance.patch<LinkResponse>(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}/flip`, {});
 
                 finalFromCardId = Number(flipRes.data?.from_card_id);
                 finalToCardId = Number(flipRes.data?.to_card_id);
+                finalStyle = flipRes.data?.style ?? finalStyle;
+                finalColor = flipRes.data?.color ?? finalColor;
+                finalLabel = flipRes.data?.label ?? finalLabel;
+                finalIsLabelVisible = typeof flipRes.data?.is_label_visible === 'number'
+                    ? Boolean(flipRes.data?.is_label_visible)
+                    : flipRes.data?.is_label_visible === null || flipRes.data?.is_label_visible === undefined
+                        ? finalIsLabelVisible
+                        : Boolean(flipRes.data?.is_label_visible);
+            }
+
+            if (shouldPatchLink) {
+                const patchRes = await axiosInstance.patch<LinkResponse>(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}`, {
+                    style: selectedLinkDraft.style,
+                    label: label ? label : null,
+                    is_label_visible: selectedLinkDraft.isLabelVisible,
+                });
+
+                finalStyle = patchRes.data.style;
+                finalColor = patchRes.data.color;
+                finalLabel = patchRes.data.label ?? null;
+                finalIsLabelVisible = typeof patchRes.data.is_label_visible === 'number'
+                    ? Boolean(patchRes.data.is_label_visible)
+                    : Boolean(patchRes.data.is_label_visible);
             }
 
             openLinkInspector({
@@ -149,10 +168,10 @@ const Board = () => {
                 toCardId: finalToCardId,
                 fromTitle: shouldFlipDirection ? (selectedLink.toTitle ?? null) : (selectedLink.fromTitle ?? null),
                 toTitle: shouldFlipDirection ? (selectedLink.fromTitle ?? null) : (selectedLink.toTitle ?? null),
-                style: data.style,
-                color: data.color,
-                label: data.label ?? null,
-                isLabelVisible: typeof data.is_label_visible === 'number' ? Boolean(data.is_label_visible) : Boolean(data.is_label_visible),
+                style: finalStyle,
+                color: finalColor,
+                label: finalLabel,
+                isLabelVisible: finalIsLabelVisible,
             });
 
             closeLinkInspector();
@@ -345,6 +364,12 @@ const Board = () => {
         if (boardMenuView !== 'link' || !selectedLink) {
             setLinkDeleteConfirmOpen(false);
             setLinkDeleteLoading(false);
+        }
+    }, [boardMenuView, selectedLink]);
+
+    useEffect(() => {
+        if (boardMenuView !== 'link' || !selectedLink) {
+            setLinkStyleDropdownOpen(false);
         }
     }, [boardMenuView, selectedLink]);
 
@@ -791,16 +816,57 @@ const Board = () => {
                                 <div className={classes.link_inspector_field}>
                                     <div className={classes.link_inspector_label}>Вид</div>
                                     <div className={classes.link_inspector_select_row}>
-                                        <select
-                                            value={selectedLinkDraft?.style ?? selectedLink.style}
-                                            onChange={(e) =>
-                                                patchSelectedLinkDraft({ style: e.currentTarget.value === 'arrow' ? 'arrow' : 'line' })
-                                            }
-                                            disabled={!canEditCards || !isLoggedIn}
-                                        >
-                                            <option value="line">Линия</option>
-                                            <option value="arrow">Стрелка</option>
-                                        </select>
+                                        <div className={classes.link_inspector_select_wrap}>
+                                            {__PLATFORM__ === 'desktop' ? (
+                                                <DropdownWrapper
+                                                    left
+                                                    menuClassName={classes.link_inspector_style_dropdown}
+                                                    isOpen={linkStyleDropdownOpen}
+                                                    onClose={() => setLinkStyleDropdownOpen(false)}
+                                                >
+                                                    {[
+                                                        <button
+                                                            key="trigger"
+                                                            type="button"
+                                                            className={classes.link_inspector_select_trigger}
+                                                            onClick={() => setLinkStyleDropdownOpen((prev) => !prev)}
+                                                            disabled={!canEditCards || !isLoggedIn}
+                                                        >
+                                                            {(selectedLinkDraft?.style ?? selectedLink.style) === 'arrow' ? 'Стрелка' : 'Линия'}
+                                                        </button>,
+                                                        <div key="menu" className={classes.link_inspector_select_menu}>
+                                                            <button
+                                                                type="button"
+                                                                data-dropdown-class={`${classes.link_inspector_select_item} ${(selectedLinkDraft?.style ?? selectedLink.style) === 'line' ? classes.link_inspector_select_item_active : ''}`.trim()}
+                                                                onClick={() => patchSelectedLinkDraft({ style: 'line' })}
+                                                                disabled={!canEditCards || !isLoggedIn}
+                                                            >
+                                                                Линия
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                data-dropdown-class={`${classes.link_inspector_select_item} ${(selectedLinkDraft?.style ?? selectedLink.style) === 'arrow' ? classes.link_inspector_select_item_active : ''}`.trim()}
+                                                                onClick={() => patchSelectedLinkDraft({ style: 'arrow' })}
+                                                                disabled={!canEditCards || !isLoggedIn}
+                                                            >
+                                                                Стрелка
+                                                            </button>
+                                                        </div>,
+                                                    ]}
+                                                </DropdownWrapper>
+                                            ) : (
+                                                <select
+                                                    value={selectedLinkDraft?.style ?? selectedLink.style}
+                                                    onChange={(e) =>
+                                                        patchSelectedLinkDraft({ style: e.currentTarget.value === 'arrow' ? 'arrow' : 'line' })
+                                                    }
+                                                    disabled={!canEditCards || !isLoggedIn}
+                                                >
+                                                    <option value="line">Линия</option>
+                                                    <option value="arrow">Стрелка</option>
+                                                </select>
+                                            )}
+                                        </div>
                                         <button
                                             type="button"
                                             className={classes.link_inspector_flip_btn}
@@ -820,6 +886,7 @@ const Board = () => {
                                     <div className={classes.link_inspector_label}>Подпись</div>
                                     <input
                                         value={selectedLinkDraft?.label ?? (selectedLink.label ?? '')}
+                                        placeholder="Введите подпись"
                                         maxLength={70}
                                         onChange={(e) =>
                                             patchSelectedLinkDraft({ label: e.currentTarget.value })
@@ -1229,3 +1296,4 @@ const Board = () => {
 };
 
 export default Board;
+

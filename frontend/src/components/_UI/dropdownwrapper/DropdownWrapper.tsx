@@ -10,6 +10,7 @@ type DropdownWrapperProps = {
   middleleft?: boolean;
   up?: boolean;
   upDel?: boolean;
+  menuClassName?: string;
   children: [React.ReactNode, React.ReactNode];
   closeOnClick?: boolean;
   isOpen?: boolean; // управляемое состояние
@@ -25,6 +26,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   noti,
   up,
   upDel,
+  menuClassName,
   children,
   closeOnClick = true,
   isOpen: controlledOpen,
@@ -164,7 +166,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       {open && (
         <div
           ref={dropdownRef}
-          className={`${styles.menu} ${positionClass}`}
+          className={`${styles.menu} ${positionClass} ${menuClassName || ""}`.trim()}
           style={menuStyle}
           onClick={handleDropdownClick}
         >

@@ -1627,27 +1627,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
             const typed = node as RFNode<FlowNodeData>;
             const clickedId = String(typed.id);
 
-            if (
-              boardMenuView === 'link' &&
-              selectedLink &&
-              clickedId &&
-              !clickedId.startsWith('draft-') &&
-              !((event as unknown as { ctrlKey?: boolean; metaKey?: boolean }).ctrlKey || (event as unknown as { metaKey?: boolean }).metaKey) &&
-              (clickedId === String(selectedLink.fromCardId) || clickedId === String(selectedLink.toCardId))
-            ) {
-              event.preventDefault();
-              event.stopPropagation();
-
-              closeLinkInspector();
-              closeContextMenu();
-
-              clearSelectedEdges();
-              setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === clickedId })));
-              setEdgeHighlightBySelectedNodes(new Set([clickedId]));
-
-              return;
-            }
-
             if ((event as unknown as { ctrlKey?: boolean; metaKey?: boolean }).ctrlKey || (event as unknown as { metaKey?: boolean }).metaKey) return;
             const targetEl = event.target as Element | null;
             if (targetEl?.closest?.('.react-flow__handle')) return;
@@ -1655,6 +1634,17 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               Boolean(targetEl?.closest(`.${classes.flow_drag_handle}`)) ||
               (String(typed.type) === 'rectangle' && Boolean(targetEl?.closest(`.${classes.node_rectangle}`)));
             if (!clickedShape) return;
+            if (
+              boardMenuView === 'link' &&
+              selectedLink &&
+              clickedId &&
+              !clickedId.startsWith('draft-')
+            ) {
+              closeLinkInspector();
+              clearSelectedEdges();
+              setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === clickedId })));
+              setEdgeHighlightBySelectedNodes(new Set([clickedId]));
+            }
             setLinkSourceNodeId(String(typed.id));
             if (flowCardSettingsOpen && activeNodeId && String(typed.id) === String(activeNodeId)) {
               closeContextMenu();
