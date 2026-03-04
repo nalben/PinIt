@@ -418,7 +418,9 @@ const isProfileActive = () => {
                         </div>
                       </div>
                     </NavLink>
-                    <LogoutButton />
+                    <div data-dropdown-class={classes.profile_logout_item}>
+                      <LogoutButton />
+                    </div>
                   </div>
                 </DropdownWrapper>
             </div>

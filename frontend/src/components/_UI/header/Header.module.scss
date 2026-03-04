@@ -248,6 +248,23 @@
     }
 }
 
+.profile_logout_item{
+    padding: 0 !important;
+    align-items: stretch;
+}
+
+.profile_logout_item > div{
+    width: 100%;
+    display: flex;
+}
+
+.profile_logout_item button{
+    width: 100%;
+    min-height: 100%;
+    padding: 10px;
+    justify-content: center;
+}
+
 
 .noti_con{
     display: flex;

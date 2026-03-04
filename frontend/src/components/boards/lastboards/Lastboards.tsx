@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import classes from './Lastboards.module.scss';
@@ -14,9 +14,11 @@ const Lastboards: React.FC = () => {
   const isLoading = useBoardsUnifiedStore((s) => s.isLoadingRecent);
   const hasLoadedOnce = useBoardsUnifiedStore((s) => s.hasLoadedOnceRecent);
   const ensureRecentLoaded = useBoardsUnifiedStore((s) => s.ensureRecentLoaded);
+  const refreshRecentSilent = useBoardsUnifiedStore((s) => s.refreshRecentSilent);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
+  const prevIsAuthRef = useRef(isAuth);
   const forceSkeleton =
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
@@ -39,7 +41,16 @@ const Lastboards: React.FC = () => {
 
     let cancelled = false;
     const current = readCurrent();
-    if (current.length === 0) return;
+    if (current.length === 0) {
+      useBoardsUnifiedStore.setState((s) => ({
+        ...s,
+        recentIds: [],
+        recentBoards: [],
+        hasLoadedOnceRecent: true,
+        isLoadingRecent: false,
+      }));
+      return;
+    }
 
     const normalizePublicEntry = (existing: UnifiedBoard, patch: Partial<UnifiedBoard>): UnifiedBoard => ({
       ...existing,
@@ -107,6 +118,23 @@ const Lastboards: React.FC = () => {
     if (forceSkeleton) return;
     ensureRecentLoaded();
   }, [ensureRecentLoaded, forceSkeleton, isInitialized]);
+
+  useEffect(() => {
+    if (!isInitialized) {
+      prevIsAuthRef.current = isAuth;
+      return;
+    }
+    if (forceSkeleton) {
+      prevIsAuthRef.current = isAuth;
+      return;
+    }
+
+    if (isAuth && !prevIsAuthRef.current) {
+      refreshRecentSilent();
+    }
+
+    prevIsAuthRef.current = isAuth;
+  }, [forceSkeleton, isAuth, isInitialized, refreshRecentSilent]);
 
   if (forceSkeleton || ((isLoading || !hasLoadedOnce) && recentBoards.length === 0)) {
     return (
