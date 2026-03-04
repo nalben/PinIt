@@ -5,6 +5,7 @@ const authRoutes = require('./authRouter');
 const profileRoutes = require('./profileRouter');
 const friendsRoutes = require('./friendsRouter');
 const boardsRoutes = require('./boardsRouter');
+const adminRoutes = require('./adminRouter');
 
 router.use('/boards', boardsRoutes);
 
@@ -13,5 +14,6 @@ router.use('/auth', authRoutes);
 router.use('/profile', profileRoutes);
 
 router.use('/friends', friendsRoutes);
+router.use('/admin', adminRoutes);
 
 module.exports = router;

@@ -111,6 +111,15 @@ const authController = {
         { expiresIn: "7d" }
       );
 
+      const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+      res.cookie('pinit_token', token, {
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: Boolean(isSecure),
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+        path: '/',
+      });
+
       res.json({
         token,
         id: user.id,
@@ -122,6 +131,14 @@ const authController = {
       console.error(err);
       res.status(500).json({ message: "Ошибка сервера" });
     }
+  },
+
+  // =====================================================
+  // LOGOUT
+  // =====================================================
+  logout: (req, res) => {
+    res.clearCookie('pinit_token', { path: '/' });
+    res.json({ ok: true });
   },
 
   // =====================================================
@@ -220,6 +237,15 @@ const authController = {
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
+
+    const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+    res.cookie('pinit_token', token, {
+      httpOnly: true,
+      sameSite: 'Lax',
+      secure: Boolean(isSecure),
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
 
     res.json({
       message: "Пароль успешно изменён",

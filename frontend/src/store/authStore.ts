@@ -30,6 +30,7 @@ export const useAuthStore = create<AuthState>(set => ({
     set({ isAuth: true, hasToken: true, user, isInitialized: true });
   },
   logout: () => {
+    void axiosInstance.post("/api/auth/logout").catch(() => {});
     localStorage.removeItem("token");
     localStorage.removeItem("userId");
     localStorage.removeItem("username");

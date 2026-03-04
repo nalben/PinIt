@@ -1102,6 +1102,15 @@ Update (2026-03-03)
 - DB migration script added to extend card links with label metadata:
   - `api/sql/2026-03-03-cardlinks-label.sql` adds `cardlinks.label VARCHAR(70) NULL` and `cardlinks.is_label_visible TINYINT(1) NOT NULL DEFAULT 1`.
 
+Update (2026-03-04)
+
+- Added admin-only guard endpoint `GET /api/admin/check` (JWT required; verifies `users.role = 'admin'`).
+- `authMiddleware` now accepts JWT from `pinit_token` cookie in addition to the `Authorization` header.
+- Auth endpoints now manage the `pinit_token` cookie:
+  - `POST /api/auth/login` and `POST /api/auth/set-new-password` set it (httpOnly, 7d).
+  - `POST /api/auth/logout` clears it.
+- Frontend `authStore.logout()` calls `/api/auth/logout` to clear the cookie.
+
 Update (2026-03-03, `components/flowboard` usage and function-sorting rules)
 
 - New folder exists: `frontend/src/components/flowboard/` with strict subfolders:
