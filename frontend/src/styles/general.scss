@@ -27,8 +27,10 @@ a:visited {
     text-decoration: none;
 }
 
-a:hover {
-    text-decoration: none;
+@media (hover: hover) and (pointer: fine) {
+    a:hover {
+        text-decoration: none;
+    }
 }
 a{
     color: inherit;
@@ -79,7 +81,6 @@ a {
     width: fit-content;
 }
 input:-webkit-autofill,
-input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 textarea:-webkit-autofill,
 select:-webkit-autofill {
@@ -98,7 +99,6 @@ input {
     box-sizing: border-box;
 }
 input:-webkit-autofill,
-input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 textarea:-webkit-autofill {
     -webkit-text-fill-color: black;

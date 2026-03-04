@@ -757,7 +757,7 @@ const Board = () => {
     };
 
     return (
-            <div className={classes.board_container}>
+            <div className={`${classes.board_container} ${__PLATFORM__ === 'desktop' ? classes.board_container_desktop : classes.board_container_mobile}`.trim()}>
                 <div className={`${classes.board_flow_wrap} ${effectiveBoardMenuOpen ? classes.board_flow_shrink : ''}`.trim()}>
                     <FlowBoard ref={flowBoardRef} canEditCards={canEditCards} />
                 </div>

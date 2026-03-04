@@ -37,9 +37,11 @@
     cursor: pointer;
     user-select: none;
     transition: 0.5s;
-    &:hover{
-        transition: 0.5s;
-        rotate: 180deg;
+    @media (hover: hover) and (pointer: fine) {
+        &:hover{
+            transition: 0.5s;
+            rotate: 180deg;
+        }
     }
 }
 .back{
@@ -51,9 +53,11 @@
     left: 18px;
     cursor: pointer;
     transition: all 0.3s;
-    &:hover{
-        // translate: -10px;
-        opacity: 0.5;
-        transition: all 0.3s;
+    @media (hover: hover) and (pointer: fine) {
+        &:hover{
+            // translate: -10px;
+            opacity: 0.5;
+            transition: all 0.3s;
+        }
     }
 }

@@ -145,9 +145,11 @@ const Profile = () => {
 
   const displayName = (profile.nickname ?? '').trim() || profile.username;
   const avatarSrc = resolveProfileAvatarSrc({ profile, authAvatar: user?.avatar ?? null });
+  const profilePlatformClass = __PLATFORM__ === 'desktop' ? classes.profile_desktop : classes.profile_mobile;
+  const uploadLabelHoverClass = __PLATFORM__ === 'desktop' ? classes.upload_label_desktop : '';
 
   return (
-    <div className={classes.profile}>
+    <div className={`${classes.profile} ${profilePlatformClass}`.trim()}>
       <div className={`${classes.avatar_con} ${profile.username === 'phenomenon' ? classes.heart : ''}`}>
         {avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />}
       </div>
@@ -180,7 +182,7 @@ const Profile = () => {
               <AuthModal isOpen={openModal === 'edit'} onClose={() => setOpenModal(null)} closeOnOverlayClick={false}>
                 <form className={classes.edit_modal} onSubmit={handleProfileSave}>
                   <div className={classes.avatar_upload}>
-                    <label htmlFor="avatar" className={classes.upload_label}>
+                    <label htmlFor="avatar" className={`${classes.upload_label} ${uploadLabelHoverClass}`.trim()}>
                       {avatarPreview ? (
                         <img src={avatarPreview} alt="avatar preview" />
                       ) : profile.avatar ? (
@@ -190,7 +192,7 @@ const Profile = () => {
                       )}
                       <Edit />
                     </label>
-                    <label htmlFor="avatar" className={classes.upload_label}>
+                    <label htmlFor="avatar" className={`${classes.upload_label} ${uploadLabelHoverClass}`.trim()}>
                       <span>изменить</span>
                     </label>
                     <input

@@ -28,6 +28,8 @@
     padding-block: fluid-prop(60,40,1920,320);
     color: var(--pink);
 }
+.profile_desktop{}
+.profile_mobile{}
 .avatar_con{
     border-radius: 50%;
     overflow: hidden;
@@ -82,7 +84,7 @@
     & button{
         cursor: pointer;
         transition: all 0.3s;
-        &:hover{
+        .profile_desktop &:hover{
             opacity: 0.6;
             transition: all 0.3s;
         }
@@ -341,7 +343,7 @@
     display: flex;
     gap: 1rem;
     transition: all 0.3s;
-    &:hover{
+    .profile_desktop &:hover{
         opacity: 0.6;
         transition: all 0.3s;
     }
@@ -488,16 +490,6 @@
     cursor: pointer;
     height: fit-content;
     position: relative;
-    &:hover{
-        & svg:nth-child(1), img:nth-child(1) {
-            opacity: 0.5;
-            transition: all 0.5s;
-        }
-        & svg:nth-child(2) {
-            opacity: 1;
-            transition: all 0.5s;
-        }
-    }
     & svg:nth-child(1), img:nth-child(1){
         transition: all 0.5s;
         border-radius: 50%;
@@ -523,10 +515,23 @@
         border-color: var(--pink);
         padding: 10px;
         transition: all 0.3s;
-        &:hover{
-            opacity: 0.6;
-            transition: all 0.3s;
+    }
+}
+.upload_label_desktop{
+    &:hover{
+        & svg:nth-child(1), img:nth-child(1) {
+            opacity: 0.5;
+            transition: all 0.5s;
         }
+        & svg:nth-child(2) {
+            opacity: 1;
+            transition: all 0.5s;
+        }
+    }
+
+    & span:hover{
+        opacity: 0.6;
+        transition: all 0.3s;
     }
 }
 .itput_text_label{

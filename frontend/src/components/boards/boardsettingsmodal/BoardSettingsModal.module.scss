@@ -77,8 +77,10 @@
   
   font-size: fluid-prop(16,12,1920,320);
 
-  &:hover{
-    opacity: 0.8;
+  @media (hover: hover) and (pointer: fine) {
+    &:hover{
+      opacity: 0.8;
+    }
   }
 
   &:disabled{
@@ -189,8 +191,10 @@
   text-decoration: none;
   color: inherit;
 
-  &:hover{
-    opacity: 0.85;
+  @media (hover: hover) and (pointer: fine) {
+    &:hover{
+      opacity: 0.85;
+    }
   }
 }
 
@@ -246,8 +250,10 @@
   
   font-size: fluid-prop(16,12,1920,320);
 
-  &:hover{
-    opacity: 0.8;
+  @media (hover: hover) and (pointer: fine) {
+    &:hover{
+      opacity: 0.8;
+    }
   }
 
   &:disabled{
@@ -304,8 +310,10 @@
   
   font-size: fluid-prop(16,12,1920,320);
 
-  &:hover{
-    opacity: 0.8;
+  @media (hover: hover) and (pointer: fine) {
+    &:hover{
+      opacity: 0.8;
+    }
   }
 
   &:disabled{
@@ -440,22 +448,24 @@
   }
 }
 
-.boardImageUpload:has(.uploadLabel:nth-of-type(1):hover),
-.boardImageUpload:has(.uploadLabel:nth-of-type(2):hover){
-  & .uploadLabel:nth-of-type(1){
-    & svg:nth-child(1), img:nth-child(1){
-      opacity: 0.5;
-      transition: all 0.5s;
+@media (hover: hover) and (pointer: fine) {
+  .boardImageUpload:has(.uploadLabel:nth-of-type(1):hover),
+  .boardImageUpload:has(.uploadLabel:nth-of-type(2):hover){
+    & .uploadLabel:nth-of-type(1){
+      & svg:nth-child(1), img:nth-child(1){
+        opacity: 0.5;
+        transition: all 0.5s;
+      }
+      & svg:nth-child(2){
+        opacity: 1;
+        transition: all 0.5s;
+      }
     }
-    & svg:nth-child(2){
-      opacity: 1;
-      transition: all 0.5s;
-    }
-  }
 
-  & .uploadLabel:nth-of-type(2){
-    & span{
-      opacity: 0.6;
+    & .uploadLabel:nth-of-type(2){
+      & span{
+        opacity: 0.6;
+      }
     }
   }
 }
@@ -496,9 +506,11 @@
     border-color: var(--pink);
     padding: 10px;
     transition: all 0.3s;
-    &:hover{
-      opacity: 0.6;
-      transition: all 0.3s;
+    @media (hover: hover) and (pointer: fine) {
+      &:hover{
+        opacity: 0.6;
+        transition: all 0.3s;
+      }
     }
   }
 }
@@ -634,8 +646,10 @@
   
   font-size: fluid-prop(18, 13, 1920, 320);
 
-  &:hover{
-    opacity: 0.75;
+  @media (hover: hover) and (pointer: fine) {
+    &:hover{
+      opacity: 0.75;
+    }
   }
   &:disabled{
     opacity: 0.5;

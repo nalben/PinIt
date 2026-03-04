@@ -100,7 +100,7 @@ Additional constraints (to avoid “55 files viewed” situations):
 - If you believe you must open/review many files to verify a cross-layer contract, you must warn first and ask for confirmation. Use a concrete estimate (for example: “need to open ~10–20 files”) and list the minimal categories you will touch (component → store → API route → controller → socket/store consumers). Stop as soon as the needed invariant/contract is verified.
 - For localized requests, stay within the provided file + direct import chain only; do not expand into unrelated areas “just in case”.
 
-2.4 WHEN RECURSIVE SEARCH IS ALLOWED
+  2.4 WHEN RECURSIVE SEARCH IS ALLOWED
 
 You may perform recursive search ONLY if:
 
@@ -277,7 +277,7 @@ api/routes/index.js aggregates:
 
 authMiddleware:
 
-Requires Bearer token
+Accepts JWT from `Authorization: Bearer <token>` or `pinit_token` cookie
 
 Rejects otherwise
 
@@ -928,9 +928,9 @@ id
 
 board_id
 
-type enum('circle','rectangle')
+type enum('circle','rectangle','diamond')
 
-title (varchar 70)
+title (varchar 50)
 
 image_path
 
@@ -1104,12 +1104,16 @@ Update (2026-03-03)
 
 Update (2026-03-04)
 
-- Added admin-only guard endpoint `GET /api/admin/check` (JWT required; verifies `users.role = 'admin'`).
+- Added admin-only guard endpoint `GET /api/admin/check` (JWT required; verifies `users.role = 'admin'`) via `api/middleware/adminOnly.js` + `api/routes/adminRouter.js`.
 - `authMiddleware` now accepts JWT from `pinit_token` cookie in addition to the `Authorization` header.
 - Auth endpoints now manage the `pinit_token` cookie:
   - `POST /api/auth/login` and `POST /api/auth/set-new-password` set it (httpOnly, 7d).
   - `POST /api/auth/logout` clears it.
 - Frontend `authStore.logout()` calls `/api/auth/logout` to clear the cookie.
+- `frontend/src/components/boards/lastboards/Lastboards.tsx` now refreshes recent boards right after auth transition (`isAuth: false -> true`) by calling `boardsUnifiedStore.refreshRecentSilent()` once (tracked via `prevIsAuthRef`), so list data appears after login without page reload.
+- Header profile dropdown logout row is now fully clickable through CSS stretch rules:
+  - `frontend/src/components/_UI/header/Header.module.scss`: `.profile_logout_item` removes item padding and stretches inner wrapper/button to full width/height.
+  - `frontend/src/components/__general/logoutbutton/LogoutButton.module.scss`: logout button explicitly uses `cursor: pointer`.
 
 Update (2026-03-03, `components/flowboard` usage and function-sorting rules)
 
@@ -1158,22 +1162,22 @@ Rules: function sorting decision tree (mandatory)
 Rules: inside-file function ordering (mandatory)
 
 - For `utils/*.ts`:
-  - 1) imports
-  - 2) public types
-  - 3) private tiny helpers
-  - 4) exported main parser/transform functions
+  - 1. imports
+  - 2. public types
+  - 3. private tiny helpers
+  - 4. exported main parser/transform functions
 - For `hooks/*.ts`:
-  - 1) imports
-  - 2) input/output types of hook
-  - 3) local helper functions
-  - 4) hook body (`useXxx`)
-  - 5) returned API sorted by usage frequency (primary actions first)
+  - 1. imports
+  - 2. input/output types of hook
+  - 3. local helper functions
+  - 4. hook body (`useXxx`)
+  - 5. returned API sorted by usage frequency (primary actions first)
 - For `components/*.tsx`:
-  - 1) imports
-  - 2) prop types
-  - 3) constant literals
-  - 4) component function
-  - 5) minimal export surface (single named export unless default is required by existing consumers)
+  - 1. imports
+  - 2. prop types
+  - 3. constant literals
+  - 4. component function
+  - 5. minimal export surface (single named export unless default is required by existing consumers)
 
 Rules: naming conventions for new functions/files
 
@@ -1240,25 +1244,25 @@ Rules: profile function sorting decision tree (mandatory)
 Rules: inside-file ordering for `components/profilepage/*` (mandatory)
 
 - For `model.ts`:
-  - 1) base entity types
-  - 2) UI state types
-  - 3) cache/in-flight helper types
+  - 1. base entity types
+  - 2. UI state types
+  - 3. cache/in-flight helper types
 - For `hooks/*.ts`:
-  - 1) imports
-  - 2) module-level cache/in-flight singletons
-  - 3) small private helpers
-  - 4) exported hook body
-  - 5) returned API grouped by read values -> actions
+  - 1. imports
+  - 2. module-level cache/in-flight singletons
+  - 3. small private helpers
+  - 4. exported hook body
+  - 5. returned API grouped by read values -> actions
 - For `utils/*.ts`:
-  - 1) imports/types
-  - 2) low-level private helpers
-  - 3) exported resolvers/parsers/mappers
+  - 1. imports/types
+  - 2. low-level private helpers
+  - 3. exported resolvers/parsers/mappers
 - For future `components/*.tsx`:
-  - 1) imports
-  - 2) props types
-  - 3) constants
-  - 4) component
-  - 5) exports
+  - 1. imports
+  - 2. props types
+  - 3. constants
+  - 4. component
+  - 5. exports
 
 Rules: dependency boundaries for profilepage
 
@@ -1294,7 +1298,7 @@ Rules: dependency boundaries for profilepage
 
 3. Auth middleware and profile access model
 
-- `api/middleware/authMiddleware.js`: requires Bearer token and returns 401 if token missing/invalid.
+- `api/middleware/authMiddleware.js`: accepts Bearer token or `pinit_token` cookie and returns 401 if token missing/invalid.
 - `api/middleware/optionalAuth.js`: tries decode when token exists, sets `req.user = null` on absence/invalid token, then continues.
 - `api/routes/profileRouter.js`:
   - `/me` and friend-code generation endpoints are handled by controller token checks.
@@ -1353,7 +1357,7 @@ Rules: dependency boundaries for profilepage
   - For non-auth users: persists recent public board info into localStorage key `pinit_recentBoards`.
 - `frontend/src/components/flow/FlowBoard.tsx` renders board cards as ReactFlow nodes, supports dragging, and persists position changes via `PATCH /api/boards/:board_id/cards/:card_id/position`.
 - Cards can be deleted via `DELETE /api/boards/:board_id/cards/:card_id` (owner/editer).
-- `cards.title` max length is 50 (DB constraint via `VARCHAR(50)`).
+- `cards.title` max length is 70 (DB constraint via `VARCHAR(70)`).
 
 6. Frontend UI components (current code)
 

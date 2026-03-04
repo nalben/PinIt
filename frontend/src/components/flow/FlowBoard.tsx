@@ -205,6 +205,7 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   const rf = useReactFlow();
   const isSelected = Boolean((props as unknown as { selected?: boolean })?.selected);
   const [isHovered, setIsHovered] = useState(false);
+  const isDesktopHover = __PLATFORM__ === 'desktop';
 
   const sNode = rf.getNode(source);
   const tNode = rf.getNode(target);
@@ -295,7 +296,10 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   ) : null;
 
   return (
-    <g onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
+    <g
+      onMouseEnter={isDesktopHover ? () => setIsHovered(true) : undefined}
+      onMouseLeave={isDesktopHover ? () => setIsHovered(false) : undefined}
+    >
       <BaseEdge id={id} path={path} style={renderedStyleWithCap} />
       {arrowHead}
       {shouldRenderLabel ? (
@@ -1407,7 +1411,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   return (
     <div
       ref={containerRef}
-      className={`${classes.space_container} ${__PLATFORM__ === 'desktop' ? classes.space_container_desktop : ''} ${__PLATFORM__ === 'desktop' && selectionModifierPressed ? classes.space_container_selecting : ''} ${canEditCards ? classes.space_container_can_edit : ''} ${!canEditCards ? classes.space_container_readonly : ''} ${isConnecting ? classes.space_container_connecting : ''}`.trim()}
+      className={`${classes.space_container} ${__PLATFORM__ === 'desktop' ? classes.space_container_desktop : classes.space_container_mobile} ${__PLATFORM__ === 'desktop' && selectionModifierPressed ? classes.space_container_selecting : ''} ${canEditCards ? classes.space_container_can_edit : ''} ${!canEditCards ? classes.space_container_readonly : ''} ${isConnecting ? classes.space_container_connecting : ''}`.trim()}
       onContextMenu={handleContextMenu}
       onMouseDown={handleMouseDown}
       onClickCapture={pointerGestures.handleClickCapture}

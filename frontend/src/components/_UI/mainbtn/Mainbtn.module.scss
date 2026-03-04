@@ -1,3 +1,8 @@
+.mainBtn{}
+
+.mainBtn_desktop{}
+.mainBtn_mobile{}
+
 .auth{
     background-color: transparent;
     color: var(--pink);
@@ -8,7 +13,7 @@
     transition: all 0.3s;
     cursor: pointer;
     font-family: "Nata Sans", sans-serif;
-    &:hover{
+    &.mainBtn_desktop:hover{
         transition: all 0.3s;
         opacity: 0.6;
     }
@@ -22,7 +27,7 @@
     transition: all 0.3s;
     cursor: pointer;
     font-family: "Nata Sans", sans-serif;
-    &:hover {
+    &.mainBtn_desktop:hover {
         transition: all 0.3s;
         opacity: 0.6;
     }

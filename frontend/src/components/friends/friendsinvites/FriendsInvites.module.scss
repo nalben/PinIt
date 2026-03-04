@@ -4,6 +4,8 @@
   gap: 1rem;
   height: 100%;
 }
+.root_desktop{}
+.root_mobile{}
 
 .list {
   display: flex;
@@ -114,7 +116,7 @@
   fill: currentColor;
 }
 
-.actions svg:hover {
+.root_desktop .actions svg:hover {
   opacity: 0.5;
 }
 
@@ -122,7 +124,7 @@
   border-bottom: none;
 }
 
-.item:hover {
+.root_desktop .item:hover {
   background-color: var(--grey10);
 }
 

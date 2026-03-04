@@ -159,7 +159,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   }, [left, right, middle, middleleft, profile, noti, up, upDel, open]);
 
   return (
-    <div ref={wrapperRef} className={styles.wrapper}>
+    <div ref={wrapperRef} className={`${styles.wrapper} ${__PLATFORM__ === 'desktop' ? styles.wrapper_desktop : styles.wrapper_mobile}`.trim()}>
       <div onClick={toggleDropdown} className={styles.button}>
         {button}
       </div>

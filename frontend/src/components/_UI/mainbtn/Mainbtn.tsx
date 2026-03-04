@@ -29,7 +29,8 @@ const Mainbtn: React.FC<MainbtnProps> = ({
   disabled = false,
   className: classNameProp,
 }) => {
-  const className = `${classes.mainBtn} ${classes[variant]} ${classNameProp ?? ''}`.trim();
+  const platformClass = __PLATFORM__ === 'desktop' ? classes.mainBtn_desktop : classes.mainBtn_mobile;
+  const className = `${classes.mainBtn} ${classes[variant]} ${platformClass} ${classNameProp ?? ''}`.trim();
 
   if (kind === 'button') {
   return (

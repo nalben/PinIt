@@ -20,6 +20,7 @@ const FriendsInvites: React.FC = () => {
     __ENV__ === 'development' &&
     typeof window !== 'undefined' &&
     localStorage.getItem('debugSkeleton') === '1';
+  const rootClass = `${classes.root} ${__PLATFORM__ === 'desktop' ? classes.root_desktop : classes.root_mobile}`.trim();
 
   useEffect(() => {
     if (forceSkeleton) return;
@@ -38,7 +39,7 @@ const FriendsInvites: React.FC = () => {
   );
 
   const skeleton = (
-    <div className={classes.root} aria-busy="true">
+    <div className={rootClass} aria-busy="true">
       <h2>Приглашения в друзья:</h2>
       <div className={classes.list}>
         {Array.from({ length: 4 }).map((_, idx) => (
@@ -62,7 +63,7 @@ const FriendsInvites: React.FC = () => {
 
   if (!isAuth) {
     return (
-      <div className={classes.root}>
+      <div className={rootClass}>
         <h2>Приглашения в друзья:</h2>
         <div className={classes.empty}>
           <h3>Войдите чтобы увидеть заявки в друзья</h3>
@@ -80,7 +81,7 @@ const FriendsInvites: React.FC = () => {
   if (isLoading && requestsCount === 0) return skeleton;
 
   return (
-    <div className={classes.root}>
+    <div className={rootClass}>
       <h2>Приглашения в друзья:</h2>
 
       {(isLoading || requestsCount > 0) && (

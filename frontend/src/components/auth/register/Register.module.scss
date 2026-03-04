@@ -55,9 +55,11 @@
         cursor: pointer;
         transition: all 0.3s;
 
-        &:hover {
-            opacity: 0.5;
-            transition: all 0.3s;
+        @media (hover: hover) and (pointer: fine) {
+            &:hover {
+                opacity: 0.5;
+                transition: all 0.3s;
+            }
         }
 
         & svg {
@@ -76,9 +78,11 @@
     padding-inline: fluid-prop(18, 12, 1920, 320);
     transition: all 0.3s;
     cursor: pointer;
-    &:hover{
-        background-color: var(--grey20);
-        transition: all 0.3s;
+    @media (hover: hover) and (pointer: fine) {
+        &:hover{
+            background-color: var(--grey20);
+            transition: all 0.3s;
+        }
     }
     &:disabled{
         opacity: 0.2;

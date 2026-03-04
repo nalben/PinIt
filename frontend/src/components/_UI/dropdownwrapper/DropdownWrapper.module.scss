@@ -1,6 +1,8 @@
 .wrapper{
     position: relative;
 }
+.wrapper_desktop{}
+.wrapper_mobile{}
 .menu{
     position: absolute;
     top: calc(100% + 15px);
@@ -69,7 +71,7 @@
         border-bottom: var(--border);
         border-color: var(--pink);
     }
-    &:hover{
+    .wrapper_desktop &:hover{
         background-color: var(--grey10);
         transition: all 0.3s;
     }

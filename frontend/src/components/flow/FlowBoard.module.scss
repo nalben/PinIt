@@ -3,6 +3,12 @@
     flex: 1;
     position: relative;
 }
+.space_container_desktop{
+    --flow-hover-enabled: 1;
+}
+.space_container_mobile{
+    --flow-hover-enabled: 0;
+}
 
 .space_container_connecting{}
 
@@ -84,7 +90,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-    :global(.react-flow__edge.flow_edge:hover) :global(.react-flow__edge-path){
+    .space_container_desktop :global(.react-flow__edge.flow_edge:hover) :global(.react-flow__edge-path){
         filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
     }
 
@@ -113,10 +119,15 @@
     transition: fill 0.5s ease, filter 0.5s ease;
 }
 
-:global(.react-flow__edge.flow_edge:hover) .flow_edge_arrowhead,
 :global(.react-flow__edge.flow_edge.selected) .flow_edge_arrowhead,
 :global(.react-flow__edge.flow_edge.flow_edge_highlight) .flow_edge_arrowhead{
     filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .space_container_desktop :global(.react-flow__edge.flow_edge:hover) .flow_edge_arrowhead{
+        filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
+    }
 }
 
 .flow_link_handle{
@@ -133,7 +144,7 @@
     cursor: crosshair;
 }
 
-.flow_link_handle:hover{
+.space_container_desktop .flow_link_handle:hover{
     box-shadow: 0 0 0 2px rgba(231, 205, 115, 0.35), 0 0 18px rgba(231, 205, 115, 0.28);
 }
 
@@ -210,7 +221,7 @@
     cursor: pointer;
     font-weight: 500;
 
-    &:hover{
+    .space_container_desktop &:hover{
         background: rgba(255, 255, 255, 0.06);
     }
 }
@@ -300,7 +311,7 @@
     -webkit-user-select: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
-    &:hover{
+    .space_container_desktop &:hover{
         background: rgba(255, 255, 255, 0.08);
     }
 }
@@ -617,7 +628,7 @@
     transition: opacity 0.2s ease;
     font-family: "Nata Sans", sans-serif;
     font-size: fluid-prop(18, 13, 1920, 320);
-    &:hover{
+    .space_container_desktop &:hover{
         opacity: 0.75;
     }
     &:disabled{

@@ -179,7 +179,7 @@ const isProfileActive = () => {
 
   return (
     <header
-      className={`${classes.container} ${variant === 'board' ? classes.container_board : ''}`}
+      className={`${classes.container} ${variant === 'board' ? classes.container_board : ''} ${__PLATFORM__ === 'desktop' ? classes.header_desktop : classes.header_mobile}`.trim()}
     >
       <div className={classes.burger_con}>
         <button

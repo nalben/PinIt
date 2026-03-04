@@ -28,11 +28,13 @@
     font-family: "Nata Sans", sans-serif; // 100-900
     display: flex;
     gap: 2rem;
-    &:hover button {
-        opacity: 0.7;
-    }
+    @media (hover: hover) and (pointer: fine) {
+        &:hover button {
+            opacity: 0.7;
+        }
 
-    button:hover {
-        opacity: 1;
+        button:hover {
+            opacity: 1;
+        }
     }
 }

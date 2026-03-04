@@ -11,6 +11,8 @@
     z-index: 12;
     background: linear-gradient(180deg, var(--grey20) 48%, rgba(199, 87, 87, 0) 100%);
 }
+.header_desktop{}
+.header_mobile{}
 .container_board{
     background: transparent;
 }
@@ -78,7 +80,7 @@
         border-top-left-radius: 0px;
         padding-inline: 25px;
         padding-block: 15px;
-        &:hover{
+        .header_desktop &:hover{
             padding-top: 25px;
             padding-bottom: 25px;
         }
@@ -143,7 +145,7 @@
     }
 }
 .noti_icon_con{
-    &:hover{
+    .header_desktop &:hover{
         opacity: 0.6;
         transition: all 0.3s;
         cursor: pointer;
@@ -172,7 +174,7 @@
         object-position: center;
         border-radius: 100%;
     }
-    &:hover{
+    .header_desktop &:hover{
         opacity: 0.6;
         transition: all 0.3s;
     }
@@ -217,7 +219,7 @@
     & span{
         width: max-content;
     }
-    &:hover{
+    .header_desktop &:hover{
         & span{
             opacity: 0.8;
             transition: all 0.3s;
@@ -325,7 +327,7 @@
     & svg{
         cursor: pointer;
         transition: all 0.6s;
-        &:hover{
+        .header_desktop &:hover{
             opacity: 0.5;
             transition: all 0.6s;
         }

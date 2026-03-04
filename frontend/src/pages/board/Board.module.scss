@@ -7,6 +7,12 @@
     height: 100dvh;
     overflow: hidden;
 }
+.board_container_desktop{
+    --board-hover-enabled: 1;
+}
+.board_container_mobile{
+    --board-hover-enabled: 0;
+}
 .board_flow_wrap{
     flex: 1;
     min-width: 0;
@@ -140,7 +146,7 @@
     cursor: pointer;
     transition: opacity 0.2s ease;
 
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.8;
     }
 }
@@ -206,7 +212,7 @@
         box-shadow: 0 0 0 9999px var(--pink) inset !important;
     }
 
-    & option:hover,
+    .board_container_desktop & option:hover,
     & option:focus,
     & option:active{
         background: var(--pink) !important;
@@ -298,7 +304,7 @@
     font-size: fluid-prop(18, 13, 1920, 320);
     min-height: 44px;
 
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.75;
     }
     &:disabled{
@@ -357,7 +363,7 @@
     cursor: pointer;
     transition: opacity 0.2s ease;
 
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.85;
     }
 
@@ -414,7 +420,7 @@
     justify-content: center;
     min-height: 44px;
 
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.8;
     }
 
@@ -567,7 +573,7 @@
     text-decoration: none;
     color: inherit;
     transition: all 0.3s;
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.75;
     }
 }
@@ -607,7 +613,7 @@
         height: 22px;
         fill: var(--pink);
     }
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.8;
     }
 }
@@ -698,7 +704,7 @@
     font-family: "Nata Sans", sans-serif;
     font-size: fluid-prop(16,12,1920,320);
 
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.8;
     }
 
@@ -738,7 +744,7 @@
     transition: all 0.3s;
     display: flex;
     border: none;
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.6;
     }
     &:disabled{
@@ -757,7 +763,7 @@
 .participant_confirm_title{
     cursor: default;
     background-color: transparent;
-    &:hover{
+    .board_container_desktop &:hover{
         background-color: transparent;
     }
     & > div{
@@ -821,7 +827,7 @@
     color: inherit;
     transition: all 0.3s;
     flex: 1;
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.75;
     }
 }
@@ -888,7 +894,7 @@
     font-family: "Nata Sans", sans-serif;
     font-size: fluid-prop(18, 13, 1920, 320);
 
-    &:hover{
+    .board_container_desktop &:hover{
         opacity: 0.75;
     }
     &:disabled{
