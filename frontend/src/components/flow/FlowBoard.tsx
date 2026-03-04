@@ -1366,6 +1366,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           targetEl instanceof HTMLTextAreaElement ||
           (targetEl as unknown as { isContentEditable?: boolean }).isContentEditable);
       const isTitleInputTarget = Boolean(targetEl) && targetEl === titleInputRef.current;
+      const isTouchLikeDevice = window.matchMedia('(hover: none), (pointer: coarse)').matches;
 
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -1386,7 +1387,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
       if ((e as unknown as { isComposing?: boolean }).isComposing) return;
 
-      if (__PLATFORM__ !== 'desktop' && isTitleInputTarget) {
+      if (isTitleInputTarget && isTouchLikeDevice) {
         e.preventDefault();
         e.stopPropagation();
         titleInputRef.current?.blur();
@@ -1815,6 +1816,23 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                 ref={titleInputRef}
                 value={displayTitle}
                 onChange={e => setDraftTitleLive(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+                  if ((e.nativeEvent as KeyboardEvent).isComposing) return;
+                  if (!window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.blur();
+                }}
+                onBeforeInput={(e) => {
+                  const nativeEvent = e.nativeEvent as InputEvent;
+                  if (nativeEvent.inputType !== 'insertLineBreak') return;
+                  if (!window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.blur();
+                }}
                 enterKeyHint="done"
                 placeholder={visualEditing ? 'Название' : 'Выберите запись'}
                 maxLength={50}
