@@ -1199,6 +1199,22 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     applyPreviewToNode(activeNodeId, { title: next });
   };
 
+  const isTouchLikeDevice = () => window.matchMedia('(hover: none), (pointer: coarse)').matches;
+
+  const dismissTitleKeyboard = (input: HTMLInputElement | null) => {
+    if (!input) return;
+    if (!isTouchLikeDevice()) return;
+
+    input.blur();
+    window.setTimeout(() => {
+      input.blur();
+      const activeEl = document.activeElement;
+      if (activeEl instanceof HTMLElement && activeEl !== document.body) {
+        activeEl.blur();
+      }
+    }, 0);
+  };
+
   const setDraftTypeLive = (type: FlowNodeType) => {
     if (!activeNodeId) return;
     setFlowCardSettingsDraft({ type });
@@ -1366,7 +1382,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           targetEl instanceof HTMLTextAreaElement ||
           (targetEl as unknown as { isContentEditable?: boolean }).isContentEditable);
       const isTitleInputTarget = Boolean(targetEl) && targetEl === titleInputRef.current;
-      const isTouchLikeDevice = window.matchMedia('(hover: none), (pointer: coarse)').matches;
 
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -1387,10 +1402,10 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
       if ((e as unknown as { isComposing?: boolean }).isComposing) return;
 
-      if (isTitleInputTarget && isTouchLikeDevice) {
+      if (isTitleInputTarget && isTouchLikeDevice()) {
         e.preventDefault();
         e.stopPropagation();
-        titleInputRef.current?.blur();
+        dismissTitleKeyboard(titleInputRef.current);
         return;
       }
 
@@ -1809,7 +1824,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
           </div>
 
           <div className={classes.create_panel_form}>
-            <div className={classes.form_field}>
+            <form
+              className={classes.form_field}
+              onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dismissTitleKeyboard(titleInputRef.current);
+              }}
+            >
               <div className={classes.form_label}>Название</div>
               <input
                 className={classes.create_panel_input}
@@ -1820,25 +1842,40 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
                   if (e.key !== 'Enter') return;
                   if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
                   if ((e.nativeEvent as KeyboardEvent).isComposing) return;
-                  if (!window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
+                  if (!isTouchLikeDevice()) return;
                   e.preventDefault();
                   e.stopPropagation();
-                  e.currentTarget.blur();
+                  dismissTitleKeyboard(e.currentTarget);
+                }}
+                onKeyUp={(e) => {
+                  if (e.key !== 'Enter') return;
+                  if (e.shiftKey || e.altKey || e.ctrlKey || e.metaKey) return;
+                  if ((e.nativeEvent as KeyboardEvent).isComposing) return;
+                  if (!isTouchLikeDevice()) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  dismissTitleKeyboard(e.currentTarget);
                 }}
                 onBeforeInput={(e) => {
                   const nativeEvent = e.nativeEvent as InputEvent;
                   if (nativeEvent.inputType !== 'insertLineBreak') return;
-                  if (!window.matchMedia('(hover: none), (pointer: coarse)').matches) return;
+                  if (!isTouchLikeDevice()) return;
                   e.preventDefault();
                   e.stopPropagation();
-                  e.currentTarget.blur();
+                  dismissTitleKeyboard(e.currentTarget);
                 }}
                 enterKeyHint="done"
                 placeholder={visualEditing ? 'Название' : 'Выберите запись'}
                 maxLength={50}
                 disabled={!isEditing}
               />
-            </div>
+              <button
+                type="submit"
+                aria-hidden="true"
+                tabIndex={-1}
+                style={{ position: 'absolute', opacity: 0, width: 1, height: 1, padding: 0, border: 0 }}
+              />
+            </form>
 
             <div className={classes.form_field}>
               <div className={classes.form_label}>Изображение</div>
