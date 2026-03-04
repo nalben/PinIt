@@ -2,7 +2,6 @@ import path from 'path';
 import webpack from 'webpack';
 import { buildWebpack } from './config/build/buildWebpack';
 import { BuildMode, BuildPaths, BuildPlatform } from './config/build/types/types';
-import { platform } from 'os';
 
 
 
@@ -13,9 +12,16 @@ interface EnvVariables {
     platform?: BuildPlatform;
 }
 
-export default (env: any) => {
+export default (env: EnvVariables = {}) => {
+    const mode: BuildMode = env.mode ?? 'development';
+    const buildPlatform: BuildPlatform = env.platform ?? 'desktop';
+    const outputPath =
+        mode === 'production'
+            ? path.resolve(__dirname, 'build', buildPlatform)
+            : path.resolve(__dirname, 'build');
+
     const paths: BuildPaths = {
-        output: path.resolve(__dirname, 'build'),
+        output: outputPath,
         entry: path.resolve(__dirname, 'src', 'index.tsx'),
         html: path.resolve(__dirname, 'public', 'index.html'),
         public: path.resolve(__dirname, 'public'),
@@ -25,10 +31,10 @@ export default (env: any) => {
     
     const config: webpack.Configuration = buildWebpack({
         port: env.port ?? 3000,
-        mode: env.mode ?? 'development',
+        mode,
         paths,
         analyzer: env.analyzer,
-        platform: env.platform ?? 'desktop',
+        platform: buildPlatform,
     })
 
     return config;
