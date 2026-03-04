@@ -673,6 +673,10 @@ Touch webpack config for UI copy changes.
 
 Modify VPS-specific logic without explicit instruction.
 
+Add or keep mobile hover-only UI behavior. Hover effects must be desktop-only:
+- gate by `__PLATFORM__ === 'desktop'` in TS/TSX when logic depends on hover events/state;
+- or gate in styles via desktop-scoped selectors / `@media (hover: hover) and (pointer: fine)`.
+
 SECTION 10 — DECISION TREE BEFORE ACTION
 
 Before any action, internally evaluate:
