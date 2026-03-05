@@ -595,6 +595,11 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     [canEditCards, getNodeDragHandleSelector]
   );
 
+  const cardToNodeRef = useRef(cardToNode);
+  useEffect(() => {
+    cardToNodeRef.current = cardToNode;
+  }, [cardToNode]);
+
   useEffect(() => {
     setNodes((prev) =>
       prev.map((n) => {
@@ -916,7 +921,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
 
         const res = await axiosInstance.get<ApiCard[]>(url);
         const cards = Array.isArray(res.data) ? res.data : [];
-        const nextNodes = cards.map(cardToNode);
+        const nextNodes = cards.map(cardToNodeRef.current);
 
         if (cancelled) return;
         setNodes((prev) => mergeLoadedNodes(prev, nextNodes));
@@ -925,7 +930,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
         try {
           const res = await axiosInstance.get<ApiCard[]>(`/api/boards/public/${numericBoardId}/cards`);
           const cards = Array.isArray(res.data) ? res.data : [];
-          const nextNodes = cards.map(cardToNode);
+          const nextNodes = cards.map(cardToNodeRef.current);
           if (cancelled) return;
           setNodes((prev) => mergeLoadedNodes(prev, nextNodes));
         } catch {
@@ -938,7 +943,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     return () => {
       cancelled = true;
     };
-  }, [canEditCards, cardToNode, hasToken, isAuth, mergeLoadedNodes, numericBoardId, reloadSeq]);
+  }, [hasToken, mergeLoadedNodes, numericBoardId, reloadSeq]);
 
   useEffect(() => {
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
@@ -1257,12 +1262,15 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     if (!activeCardId) return;
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
     const title = String(flowCardSettingsDraft?.title ?? flowCardSettings?.title ?? '').trim();
+    const wideBoardMenu = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
     openCardDetails({
       cardId: activeCardId,
       boardId: numericBoardId,
       title
     });
-    closeFlowCardSettings();
+    if (!wideBoardMenu) {
+      closeFlowCardSettings();
+    }
   };
 
   const handleImageSelected = (file: File | null) => {
@@ -1543,8 +1551,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
             }}
             onSelectionChange={(sel) => {
               const selectedNodes = sel?.nodes ?? [];
+              const selectedEdges = sel?.edges ?? [];
               if (selectedNodes.length === 1) setLinkSourceNodeId(String(selectedNodes[0].id));
               else setLinkSourceNodeId(null);
+              if (selectedEdges.length > 0) {
+                setEdgeHighlightBySelectedNodes(new Set());
+                return;
+              }
               setEdgeHighlightBySelectedNodes(new Set(selectedNodes.map((n) => String(n.id))));
             }}
             onPaneClick={() => {
@@ -1678,6 +1691,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
               Boolean(targetEl?.closest(`.${classes.flow_drag_handle}`)) ||
               (String(typed.type) === 'rectangle' && Boolean(targetEl?.closest(`.${classes.node_rectangle}`)));
             if (!clickedShape) return;
+            setSelectedNodeOnly(clickedId);
+            const wideBoardMenu = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
             if (
               boardMenuView === 'link' &&
               selectedLink &&
@@ -1688,6 +1703,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
               clearSelectedEdges();
               setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === clickedId })));
               setEdgeHighlightBySelectedNodes(new Set([clickedId]));
+            }
+            if (!wideBoardMenu && boardMenuView === 'card') {
+              closeCardDetails();
             }
             setLinkSourceNodeId(String(typed.id));
             const cardDetailsSnapshot = (() => {
@@ -1711,6 +1729,11 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
             }
             openSettingsForNode(typed);
             if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot);
+            if (wideBoardMenu && typeof window !== 'undefined') {
+              window.requestAnimationFrame(() => {
+                setSelectedNodeOnly(clickedId);
+              });
+            }
             closeContextMenu();
           }}
         >

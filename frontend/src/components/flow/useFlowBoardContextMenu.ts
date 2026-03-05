@@ -45,7 +45,6 @@ export const useFlowBoardContextMenu = (params: {
   contextMenuRef: React.RefObject<HTMLDivElement | null>;
 }) => {
   const { canEditCards, containerRef, contextMenuRef } = params;
-
   const [contextMenu, setContextMenu] = useState<FlowBoardContextMenuState>({
     isOpen: false,
     x: 0,
@@ -124,28 +123,6 @@ export const useFlowBoardContextMenu = (params: {
     });
   }, [contextMenu.isOpen, contextMenuRef]);
 
-  useEffect(() => {
-    if (!contextMenu.isOpen) return;
-    const el = contextMenuRef.current;
-    if (!el) return;
-    if (typeof ResizeObserver === 'undefined') return;
-
-    const ro = new ResizeObserver(() => {
-      const menuWidth = el.offsetWidth;
-      const menuHeight = el.offsetHeight;
-      if (!menuWidth || !menuHeight) return;
-
-      setContextMenu((prev) => {
-        if (!prev.isOpen) return prev;
-        const { x, y } = clampToViewport(prev.x, prev.y, menuWidth, menuHeight);
-        if (x === prev.x && y === prev.y) return prev;
-        return { ...prev, x, y };
-      });
-    });
-
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [contextMenu.isOpen, contextMenuRef]);
 
   const openContextMenuAt = useCallback(
     (clientX: number, clientY: number) => {
@@ -184,4 +161,3 @@ export const useFlowBoardContextMenu = (params: {
 
   return { contextMenu, closeContextMenu, openContextMenuAt, handleContextMenu, handleMouseDown };
 };
-

@@ -1,13 +1,12 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import classes from './Board.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
-import { useUIStore } from '@/store/uiStore';
+import { BOARD_MENU_AUTO_OPEN_MIN_WIDTH, useUIStore } from '@/store/uiStore';
 import FlowBoard, { type FlowBoardHandle } from '@/components/flow/FlowBoard';
 import { useBoardAccess } from '@/components/flowboard/hooks/useBoardAccess';
-import { useParticipantsListScroll } from '@/components/flowboard/hooks/useParticipantsListScroll';
 import { resolveAvatarSrc } from '@/components/flowboard/utils/avatar';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
@@ -63,6 +62,7 @@ const Board = () => {
     const [forcedAuthView, setForcedAuthView] = useState<InviteAuthView>('login');
     const [hasMounted, setHasMounted] = useState(false);
     const effectiveBoardMenuOpen = hasMounted ? isBoardMenuOpen : false;
+    const hasAutoOpenedBoardMenuRef = useRef(false);
 
     const [debugParticipantsData, setDebugParticipantsData] = useState<BoardParticipantsResponse | null>(null);
     const [removeConfirmParticipantId, setRemoveConfirmParticipantId] = useState<number | null>(null);
@@ -71,7 +71,6 @@ const Board = () => {
     const [roleDropdownParticipantId, setRoleDropdownParticipantId] = useState<number | null>(null);
     const [roleLoadingParticipantId, setRoleLoadingParticipantId] = useState<number | null>(null);
     const [removeLoadingParticipantId, setRemoveLoadingParticipantId] = useState<number | null>(null);
-    const participantsListRef = useRef<HTMLDivElement | null>(null);
     const flowBoardRef = useRef<FlowBoardHandle | null>(null);
     const boardMenuRef = useRef<HTMLDivElement | null>(null);
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
@@ -363,6 +362,10 @@ const Board = () => {
     }, []);
 
     useEffect(() => {
+        hasAutoOpenedBoardMenuRef.current = false;
+    }, [boardId]);
+
+    useEffect(() => {
         if (boardMenuView !== 'link' || !selectedLink) {
             setLinkDeleteConfirmOpen(false);
             setLinkDeleteLoading(false);
@@ -425,16 +428,17 @@ const Board = () => {
         onEscape: closeBoardMenu,
     });
 
-    useLayoutEffect(() => {
-        if (typeof window === 'undefined') return;
-        closeBoardMenu();
-    }, [closeBoardMenu]);
-
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        const shouldOpen = window.innerWidth >= 1440;
-        if (shouldOpen) openBoardMenu();
-    }, [openBoardMenu]);
+        const shouldOpen = window.innerWidth >= BOARD_MENU_AUTO_OPEN_MIN_WIDTH;
+        if (!shouldOpen) return;
+        if (hasAutoOpenedBoardMenuRef.current) return;
+        const id = window.requestAnimationFrame(() => {
+            hasAutoOpenedBoardMenuRef.current = true;
+            openBoardMenu();
+        });
+        return () => window.cancelAnimationFrame(id);
+    }, [boardId, openBoardMenu]);
 
     const boardInfo = useMemo(() => {
         const id = Number(boardId);
@@ -628,11 +632,6 @@ const Board = () => {
     const shouldShowOwnerActions = canManageParticipants && !participantsInitialLoading;
     const ownerParticipant = participants.find((p) => p.role === 'owner') ?? null;
     const ownerAvatarSrc = ownerParticipant ? resolveAvatarSrc(ownerParticipant.avatar) : null;
-    const hasParticipantsListScroll = useParticipantsListScroll({
-        listRef: participantsListRef,
-        watchKey: `${participantsInitialLoading}:${participants.length}:${effectiveBoardMenuOpen}`,
-    });
-
     useEffect(() => {
         if (__ENV__ !== 'development') return;
         if (typeof window === 'undefined') return;
@@ -1103,10 +1102,7 @@ const Board = () => {
                             ) : (
                                 <span className={classes.participants_title}>Участники:</span>
                             )}
-                            <div
-                                ref={participantsListRef}
-                                className={`${classes.participants_list} ${hasParticipantsListScroll ? classes.participants_list_scroll : ''}`}
-                            >
+                            <div className={classes.participants_list}>
                                 {canManageParticipants ? (
                                     participantsInitialLoading ? (
                                         <div className={`${classes.skeleton} ${classes.participant_add_skeleton}`} />

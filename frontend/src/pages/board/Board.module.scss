@@ -91,6 +91,8 @@
 
     &::-webkit-scrollbar-track {
         background: transparent;
+        border-top: 22px solid transparent;
+        background-clip: padding-box;
     }
 
     &::-webkit-scrollbar-thumb {
@@ -527,11 +529,14 @@
 .participants_list{
     display: flex;
     flex-direction: column;
-    padding-top: 1rem;
+    padding-top: 6px;
     gap: 0.5rem;
     max-height: 250px;
     overflow: auto;
     padding-right: 0;
+    &:has(.participant_item + .participant_item + .participant_item){
+        padding-right: 5px;
+    }
     &::-webkit-scrollbar {
         width: 10px;
     }
@@ -548,9 +553,6 @@
     & p{
         font-size: fluid-prop(18,13,1920,320);
     }
-}
-.participants_list_scroll{
-    padding-right: 5px;
 }
 .participant_add_skeleton{
     width: 100%;

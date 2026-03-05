@@ -1116,10 +1116,14 @@ Update (2026-03-05)
 - Right menu can switch to a card details view showing the selected node title; node click opens this view (`boardMenuView: 'card'` with `selectedCardDetails`).
 - `openCardDetails` now supports `openMenu` (avoid auto-open); FlowBoard opens the right menu for card details only when `window.innerWidth >= 1700` (on smaller screens it only stores selection without switching menu view).
 - `openFlowCardSettings` now supports `restoreBoardMenu` and `keepBoardMenuOpen` to control right menu closing/restoring (right menu stays open on `window.innerWidth >= 1700`).
+- `openFlowCardSettingsFromNode()` now preserves previous right-menu memory on narrow screens too; below `1700px` it closes the right menu visually but still restores it after closing node settings if it had been open before.
 - Card details now track previous right-menu state so closing card details restores the menu to closed if it was closed before opening.
-- `openLinkInspector` preserves the original `linkInspectorPrevMenuOpen` when re-opened while already in `boardMenuView: 'link'` (used by save flow) so close behavior remains consistent with pre-open state.
+- When card details or link inspector are opened from flow-card settings, previous right-menu state is taken from `restoreBoardMenuAfterFlowCardSettings`, so closing them restores either closed state or default `board` view correctly.
+- `closeCardDetails()` and `closeLinkInspector()` also fall back to `restoreBoardMenuAfterFlowCardSettings` if their explicit `*PrevMenuOpen` memory is missing, which preserves right-menu restore behavior for wide-screen node -> details/link flows.
+- `closeLinkInspector()` and `closeCardDetails()` now use the same previous-state restore rule on all screen widths: restore default `board` view when the right menu had been open before, otherwise close it.
 - `openCardDetailsFromNode` on narrow screens now clears link-inspector state and forces `boardMenuView: 'board'` while keeping details selection cached (prevents stale hidden `link` view after delayed close transitions).
-- Board page initial auto-open of right menu now uses `BOARD_MENU_WIDE_MIN_WIDTH` from `uiStore` (same 1700px threshold as wide-menu behavior).
+- Board page right menu default state in `uiStore` is closed on mount; `frontend/src/pages/board/Board.tsx` auto-opens it only on `window.innerWidth >= 1440` (`BOARD_MENU_AUTO_OPEN_MIN_WIDTH`).
+- Wide-menu behavior for combined board/details flows still uses `BOARD_MENU_WIDE_MIN_WIDTH` from `uiStore` (`1700px` threshold).
 
 Update (2026-03-04)
 

@@ -47,6 +47,7 @@ const escapeHandlers = new Map<string, RegisteredEscapeHandler>();
 let escapeOrder = 0;
 const BOARD_MENU_CLOSE_DELAY = 520;
 let boardMenuCloseTimeout: number | null = null;
+export const BOARD_MENU_AUTO_OPEN_MIN_WIDTH = 1440;
 export const BOARD_MENU_WIDE_MIN_WIDTH = 1700;
 const isWideBoardMenu = () => typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
 
@@ -134,6 +135,54 @@ export const useUIStore = create<UIState>((set, get) => {
     boardMenuCloseTimeout = null;
   };
 
+  const resolveBoardMenuPrevOpenState = (s: UIState) => {
+    if (s.flowCardSettingsOpen) return s.restoreBoardMenuAfterFlowCardSettings;
+    if (s.boardMenuView === 'link') return s.linkInspectorPrevMenuOpen ?? s.isBoardMenuOpen;
+    if (s.boardMenuView === 'card') return s.cardDetailsPrevMenuOpen ?? s.isBoardMenuOpen;
+    return s.isBoardMenuOpen;
+  };
+
+  const buildBoardMenuCloseResult = (
+    s: UIState,
+    options: {
+      shouldKeepOpen: boolean;
+      resetState: () => Partial<UIState>;
+    }
+  ): Partial<UIState> => {
+    if (options.shouldKeepOpen) {
+      clearBoardMenuCloseTimer();
+      return {
+        ...options.resetState(),
+        isBoardMenuOpen: true,
+      };
+    }
+
+    if (!s.isBoardMenuOpen) {
+      clearBoardMenuCloseTimer();
+      return {
+        ...options.resetState(),
+        isBoardMenuOpen: false,
+      };
+    }
+
+    scheduleBoardMenuViewReset(() => {
+      set({
+        ...options.resetState(),
+      });
+    });
+
+    return {
+      isBoardMenuOpen: false,
+    };
+  };
+
+  const shouldKeepBoardMenuOpenOnInspectorClose = (s: UIState, prevOpen: boolean | null) => {
+    if (prevOpen === true) return true;
+    if (prevOpen === false) return false;
+    if (s.flowCardSettingsOpen) return s.restoreBoardMenuAfterFlowCardSettings;
+    return false;
+  };
+
   const scheduleBoardMenuViewReset = (next: () => void) => {
     clearBoardMenuCloseTimer();
     boardMenuCloseTimeout = window.setTimeout(() => {
@@ -147,7 +196,7 @@ export const useUIStore = create<UIState>((set, get) => {
   authModalOpen: false,
   friendsModalOpen: false,
   friendsModalView: 'list',
-  isBoardMenuOpen: true,
+  isBoardMenuOpen: false,
   boardMenuView: 'board',
   selectedLink: null,
   selectedLinkDraft: null,
@@ -260,47 +309,21 @@ export const useUIStore = create<UIState>((set, get) => {
       linkInspectorPrevMenuOpen:
         s.boardMenuView === 'link'
           ? (s.linkInspectorPrevMenuOpen ?? s.isBoardMenuOpen)
-          : s.isBoardMenuOpen,
+          : resolveBoardMenuPrevOpenState(s),
       cardDetailsPrevMenuOpen: null,
       });
     }),
   closeLinkInspector: () =>
     set((s) => {
-      const wasOpen = s.isBoardMenuOpen;
-      const shouldKeepOpen = s.linkInspectorPrevMenuOpen === true;
-      if (shouldKeepOpen) {
-        clearBoardMenuCloseTimer();
-        return {
-          boardMenuView: 'board',
-          selectedLink: null,
-          selectedLinkDraft: null,
-          isBoardMenuOpen: true,
-          linkInspectorPrevMenuOpen: null,
-        };
-      }
-      if (!wasOpen) {
-        clearBoardMenuCloseTimer();
-        return {
-          boardMenuView: 'board',
-          selectedLink: null,
-          selectedLinkDraft: null,
-          isBoardMenuOpen: s.linkInspectorPrevMenuOpen === false ? false : s.isBoardMenuOpen,
-          linkInspectorPrevMenuOpen: null,
-        };
-      }
-
-      scheduleBoardMenuViewReset(() => {
-        set({
+      return buildBoardMenuCloseResult(s, {
+        shouldKeepOpen: shouldKeepBoardMenuOpenOnInspectorClose(s, s.linkInspectorPrevMenuOpen),
+        resetState: () => ({
           boardMenuView: 'board',
           selectedLink: null,
           selectedLinkDraft: null,
           linkInspectorPrevMenuOpen: null,
-        });
+        }),
       });
-
-      return {
-        isBoardMenuOpen: false,
-      };
     }),
   patchSelectedLinkDraft: (patch) =>
     set((s) => (s.selectedLinkDraft ? { selectedLinkDraft: { ...s.selectedLinkDraft, ...patch } } : {})),
@@ -318,43 +341,19 @@ export const useUIStore = create<UIState>((set, get) => {
       cardDetailsPrevMenuOpen:
         s.boardMenuView === 'card'
           ? (s.cardDetailsPrevMenuOpen ?? s.isBoardMenuOpen)
-          : s.isBoardMenuOpen,
+          : resolveBoardMenuPrevOpenState(s),
       });
     }),
   closeCardDetails: () =>
     set((s) => {
-      const wasOpen = s.isBoardMenuOpen;
-      const shouldKeepOpen = s.cardDetailsPrevMenuOpen === true;
-      if (shouldKeepOpen) {
-        clearBoardMenuCloseTimer();
-        return {
-          boardMenuView: 'board',
-          selectedCardDetails: null,
-          isBoardMenuOpen: true,
-          cardDetailsPrevMenuOpen: null,
-        };
-      }
-      if (!wasOpen) {
-        clearBoardMenuCloseTimer();
-        return {
-          boardMenuView: 'board',
-          selectedCardDetails: null,
-          isBoardMenuOpen: s.cardDetailsPrevMenuOpen === false ? false : s.isBoardMenuOpen,
-          cardDetailsPrevMenuOpen: null,
-        };
-      }
-
-      scheduleBoardMenuViewReset(() => {
-        set({
+      return buildBoardMenuCloseResult(s, {
+        shouldKeepOpen: shouldKeepBoardMenuOpenOnInspectorClose(s, s.cardDetailsPrevMenuOpen),
+        resetState: () => ({
           boardMenuView: 'board',
           selectedCardDetails: null,
           cardDetailsPrevMenuOpen: null,
-        });
+        }),
       });
-
-      return {
-        isBoardMenuOpen: false,
-      };
     }),
   openCardDetailsFromNode: (snapshot) => {
     if (!isWideBoardMenu()) {
@@ -373,7 +372,7 @@ export const useUIStore = create<UIState>((set, get) => {
   },
   openFlowCardSettingsFromNode: (snapshot) => {
     const wide = isWideBoardMenu();
-    get().openFlowCardSettings(snapshot, { restoreBoardMenu: wide, keepBoardMenuOpen: wide });
+    get().openFlowCardSettings(snapshot, { keepBoardMenuOpen: wide });
   },
   handleBoardMenuBlur: () => {
     const view = get().boardMenuView;
@@ -403,7 +402,7 @@ export const useUIStore = create<UIState>((set, get) => {
             ? s.restoreBoardMenuAfterFlowCardSettings
             : options?.restoreBoardMenu === false
               ? false
-              : s.isBoardMenuOpen,
+              : resolveBoardMenuPrevOpenState(s),
         isBoardMenuOpen: options?.keepBoardMenuOpen ? s.isBoardMenuOpen : false,
         boardMenuView: 'board',
         selectedLink: null,

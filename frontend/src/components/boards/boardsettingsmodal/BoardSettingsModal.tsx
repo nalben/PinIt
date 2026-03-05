@@ -254,6 +254,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       description: typeof initialDescription === 'string' ? initialDescription : '',
       is_public: typeof initialIsPublic === 'boolean' ? initialIsPublic : Boolean(initialIsPublic),
     });
+    if (!isOpen) return;
     useBoardDetailsStore.getState().ensureBoardMetaLoaded(numericBoardId);
   }, [initialDescription, initialIsPublic, initialTitle, isOpen, numericBoardId, shouldWarmAllTabs]);
 

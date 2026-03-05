@@ -76,6 +76,7 @@ const FriendsList: React.FC = () => {
     if (forceSkeleton) return;
     if (!friendsListRef.current) return;
 
+    let frameId: number | null = null;
     const recalcMaxHeight = () => {
       if (!friendsListRef.current) return;
       const items = friendsListRef.current.querySelectorAll<HTMLElement>(
@@ -91,18 +92,28 @@ const FriendsList: React.FC = () => {
       for (let i = 0; i < count; i++) height += items[i].offsetHeight;
       height += gap * (count - 1) + 1;
 
-      friendsListRef.current.style.maxHeight = `${height}px`;
+      const nextMaxHeight = `${height}px`;
+      if (friendsListRef.current.style.maxHeight === nextMaxHeight) return;
+      friendsListRef.current.style.maxHeight = nextMaxHeight;
+    };
+    const scheduleRecalc = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        recalcMaxHeight();
+      });
     };
 
 
     recalcMaxHeight();
-    const observer = new ResizeObserver(() => requestAnimationFrame(recalcMaxHeight));
+    const observer = new ResizeObserver(scheduleRecalc);
     observer.observe(friendsListRef.current);
-    window.addEventListener('resize', recalcMaxHeight);
+    window.addEventListener('resize', scheduleRecalc);
 
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', recalcMaxHeight);
+      window.removeEventListener('resize', scheduleRecalc);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
     };
   }, [friends, forceSkeleton]);
 
