@@ -1,4 +1,11 @@
 import { create } from 'zustand';
+import {
+  buildBoardMenuResetState,
+  buildCardDetailsResetState,
+  buildLinkInspectorResetState,
+  resolveBoardMenuPrevOpenState,
+  shouldKeepBoardMenuOpenOnInspectorClose,
+} from './uiStoreBoardMenu';
 
 type HeaderDropdown = 'profile' | 'notifications' | null;
 export type FriendsModalView = 'list' | 'search';
@@ -135,13 +142,6 @@ export const useUIStore = create<UIState>((set, get) => {
     boardMenuCloseTimeout = null;
   };
 
-  const resolveBoardMenuPrevOpenState = (s: UIState) => {
-    if (s.flowCardSettingsOpen) return s.restoreBoardMenuAfterFlowCardSettings;
-    if (s.boardMenuView === 'link') return s.linkInspectorPrevMenuOpen ?? s.isBoardMenuOpen;
-    if (s.boardMenuView === 'card') return s.cardDetailsPrevMenuOpen ?? s.isBoardMenuOpen;
-    return s.isBoardMenuOpen;
-  };
-
   const buildBoardMenuCloseResult = (
     s: UIState,
     options: {
@@ -174,13 +174,6 @@ export const useUIStore = create<UIState>((set, get) => {
     return {
       isBoardMenuOpen: false,
     };
-  };
-
-  const shouldKeepBoardMenuOpenOnInspectorClose = (s: UIState, prevOpen: boolean | null) => {
-    if (prevOpen === true) return true;
-    if (prevOpen === false) return false;
-    if (s.flowCardSettingsOpen) return s.restoreBoardMenuAfterFlowCardSettings;
-    return false;
   };
 
   const scheduleBoardMenuViewReset = (next: () => void) => {
@@ -249,12 +242,7 @@ export const useUIStore = create<UIState>((set, get) => {
       if (s.boardMenuView === 'link' || s.boardMenuView === 'card') {
         scheduleBoardMenuViewReset(() => {
           set({
-            boardMenuView: 'board',
-            selectedLink: null,
-            selectedLinkDraft: null,
-            selectedCardDetails: null,
-            linkInspectorPrevMenuOpen: null,
-            cardDetailsPrevMenuOpen: null,
+            ...buildBoardMenuResetState(),
           });
         });
       } else {
@@ -270,12 +258,7 @@ export const useUIStore = create<UIState>((set, get) => {
         if (s.boardMenuView === 'link' || s.boardMenuView === 'card') {
           scheduleBoardMenuViewReset(() => {
             set({
-              boardMenuView: 'board',
-              selectedLink: null,
-              selectedLinkDraft: null,
-              selectedCardDetails: null,
-              linkInspectorPrevMenuOpen: null,
-              cardDetailsPrevMenuOpen: null,
+              ...buildBoardMenuResetState(),
             });
           });
         } else {
@@ -317,12 +300,7 @@ export const useUIStore = create<UIState>((set, get) => {
     set((s) => {
       return buildBoardMenuCloseResult(s, {
         shouldKeepOpen: shouldKeepBoardMenuOpenOnInspectorClose(s, s.linkInspectorPrevMenuOpen),
-        resetState: () => ({
-          boardMenuView: 'board',
-          selectedLink: null,
-          selectedLinkDraft: null,
-          linkInspectorPrevMenuOpen: null,
-        }),
+        resetState: () => buildLinkInspectorResetState(),
       });
     }),
   patchSelectedLinkDraft: (patch) =>
@@ -348,11 +326,7 @@ export const useUIStore = create<UIState>((set, get) => {
     set((s) => {
       return buildBoardMenuCloseResult(s, {
         shouldKeepOpen: shouldKeepBoardMenuOpenOnInspectorClose(s, s.cardDetailsPrevMenuOpen),
-        resetState: () => ({
-          boardMenuView: 'board',
-          selectedCardDetails: null,
-          cardDetailsPrevMenuOpen: null,
-        }),
+        resetState: () => buildCardDetailsResetState(),
       });
     }),
   openCardDetailsFromNode: (snapshot) => {

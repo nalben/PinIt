@@ -405,6 +405,7 @@ uiStore:
 
 - `isBoardMenuOpen` controls right board menu visibility on `Board` page
 - `openBoardMenu()` / `closeBoardMenu()` / `toggleBoardMenu()` manage that visibility state
+- Right-menu memory/restore/reset helpers for board/link/card transitions are extracted into `frontend/src/store/uiStoreBoardMenu.ts`; `uiStore.ts` keeps timers and Zustand side-effects, while the helper module stays pure.
 - `boardSettingsModalOpen` / `boardSettingsModalView` control board settings modal (tabs: settings / participants+invites)
 - `boardSettingsModalParticipantsInnerViewNext` is a one-shot "next inner view" hint for the BoardSettingsModal participants tab (friends vs participants list), consumed on open.
 - `openBoardSettingsModal(view?)` can open the modal directly on a specific tab (defaults to `settings`).
@@ -1148,6 +1149,7 @@ Update (2026-03-03, `components/flowboard` usage and function-sorting rules)
   - `components/InviteAuthModals.tsx`: shared auth-modals block for invite flow UI (`login/register/reset` switching).
   - `components/FlowLinkModeAlarm.tsx`: shared centered overlay for 2-click link mode prompts.
   - `hooks/useBoardAccess.ts`: board access/loading flow orchestration for `/spaces/:boardId` (auth/non-auth/public/invite paths).
+  - `hooks/useFlowBoardMenuTransitions.ts`: FlowBoard node/edge click orchestration for menu transitions (right board menu, link inspector, card details, bottom card settings).
   - `hooks/useParticipantsListScroll.ts`: participants list overflow detection (layout + resize observer handling).
   - `hooks/useFlowSelection.ts`: shared node/edge selection actions (`clear/select/highlight`) for FlowBoard.
   - `utils/linkSocketPayload.ts`: parser/normalizer for `boards:updated` link payload (`link_created/link_updated`).
@@ -1155,7 +1157,7 @@ Update (2026-03-03, `components/flowboard` usage and function-sorting rules)
   - `utils/avatar.ts`: avatar URL resolver (uploads path handling).
 - Verified consumers:
   - `Board.tsx` uses `useBoardAccess`, `useParticipantsListScroll`, `resolveAvatarSrc`, `InviteAuthModals`.
-  - `FlowBoard.tsx` uses `useFlowSelection`, `parseFlowEdgeData`, `FlowLinkModeAlarm`.
+  - `FlowBoard.tsx` uses `useFlowSelection`, `useFlowBoardMenuTransitions`, `parseFlowEdgeData`, `FlowLinkModeAlarm`.
   - `useFlowBoardBoardsUpdatedSocket.ts` uses `parseLinkFromBoardsUpdated`.
 
 Rules: where to put NEW code

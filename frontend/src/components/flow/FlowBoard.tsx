@@ -48,7 +48,7 @@ import { useFlowBoardContextMenu } from './useFlowBoardContextMenu';
 import { useFlowBoardPointerGestures } from './useFlowBoardPointerGestures';
 import { useFlowBoardLinkMode } from './useFlowBoardLinkMode';
 import { useFlowSelection } from '@/components/flowboard/hooks/useFlowSelection';
-import { parseFlowEdgeData } from '@/components/flowboard/utils/flowEdgeData';
+import { useFlowBoardMenuTransitions } from '@/components/flowboard/hooks/useFlowBoardMenuTransitions';
 import { FlowLinkModeAlarm } from '@/components/flowboard/components/FlowLinkModeAlarm';
 
 export type FlowBoardHandle = {
@@ -1085,6 +1085,34 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     closeFlowCardSettings();
   }, [applyPreviewToNode, clearPendingImage, closeFlowCardSettings, flowCardSettings]);
 
+  const { handleEdgeClick, handleNodeClick } = useFlowBoardMenuTransitions({
+    activeNodeId,
+    boardMenuView,
+    canEditCards,
+    closeCardDetails,
+    closeContextMenu,
+    closeFlowCardSettings,
+    closeLinkInspector,
+    flowDragHandleClassName: classes.flow_drag_handle,
+    flowCardSettingsOpen,
+    hasToken,
+    nodeRectangleClassName: classes.node_rectangle,
+    nodes,
+    numericBoardId,
+    openCardDetailsFromNode,
+    openLinkInspector,
+    openSettingsForNode,
+    selectedLink,
+    selectEdgeAndNodes,
+    setEdgeHighlightBySelectedNodes,
+    setLinkSourceNodeId,
+    setNodes,
+    setSelectedNodeOnly,
+    clearSelectedEdges,
+    defaultLinkColor: DEFAULT_LINK_COLOR,
+    cancelCardSettings,
+  });
+
   useEffect(() => {
     if (canEditCards) return;
     if (!flowCardSettingsOpen) return;
@@ -1565,43 +1593,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
               closeContextMenu();
               clearSelectedElements();
             }}
-            onEdgeClick={(event, edge) => {
-              if (!canEditCards || !hasToken) return;
-
-              event.preventDefault();
-              event.stopPropagation();
-
-              const parsed = parseFlowEdgeData({ edge, defaultColor: DEFAULT_LINK_COLOR });
-              if (!parsed) return;
-
-              const { linkId, fromCardId, toCardId, style, color, label, isLabelVisible } = parsed;
-
-              const fromTitle = nodes.find((n) => String(n.id) === String(edge.source))?.data?.title ?? null;
-              const toTitle = nodes.find((n) => String(n.id) === String(edge.target))?.data?.title ?? null;
-
-              if (flowCardSettingsOpen) closeFlowCardSettings();
-              if (boardMenuView === 'card') closeCardDetails();
-
-              const edgeId = `link-${linkId}`;
-              selectEdgeAndNodes({
-                edgeId,
-                fromNodeId: String(fromCardId),
-                toNodeId: String(toCardId),
-              });
-
-              openLinkInspector({
-                linkId,
-                boardId: numericBoardId,
-                fromCardId,
-                toCardId,
-                style,
-                color,
-                label,
-                isLabelVisible,
-                fromTitle,
-                toTitle,
-              });
-            }}
+            onEdgeClick={handleEdgeClick}
             onNodeDragStart={(_, node) => {
               const typed = node as RFNode<FlowNodeData>;
               const id = String(typed.id);
@@ -1680,61 +1672,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
 
               return;
             }
-
-            const typed = node as RFNode<FlowNodeData>;
-            const clickedId = String(typed.id);
-
-            if ((event as unknown as { ctrlKey?: boolean; metaKey?: boolean }).ctrlKey || (event as unknown as { metaKey?: boolean }).metaKey) return;
-            const targetEl = event.target as Element | null;
-            if (targetEl?.closest?.('.react-flow__handle')) return;
-            const clickedShape =
-              Boolean(targetEl?.closest(`.${classes.flow_drag_handle}`)) ||
-              (String(typed.type) === 'rectangle' && Boolean(targetEl?.closest(`.${classes.node_rectangle}`)));
-            if (!clickedShape) return;
-            setSelectedNodeOnly(clickedId);
-            const wideBoardMenu = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
-            if (
-              boardMenuView === 'link' &&
-              selectedLink &&
-              clickedId &&
-              !clickedId.startsWith('draft-')
-            ) {
-              closeLinkInspector();
-              clearSelectedEdges();
-              setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === clickedId })));
-              setEdgeHighlightBySelectedNodes(new Set([clickedId]));
-            }
-            if (!wideBoardMenu && boardMenuView === 'card') {
-              closeCardDetails();
-            }
-            setLinkSourceNodeId(String(typed.id));
-            const cardDetailsSnapshot = (() => {
-              if (clickedId.startsWith('draft-')) return null;
-              const cardId = Number(clickedId);
-              if (!Number.isFinite(cardId) || cardId <= 0) return null;
-              if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return null;
-              return {
-                cardId,
-                boardId: numericBoardId,
-                title: typed.data.title,
-              };
-            })();
-            if (flowCardSettingsOpen && activeNodeId && String(typed.id) === String(activeNodeId)) {
-              if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot);
-              closeContextMenu();
-              return;
-            }
-            if (flowCardSettingsOpen && activeNodeId && String(typed.id) !== String(activeNodeId)) {
-              cancelCardSettings();
-            }
-            openSettingsForNode(typed);
-            if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot);
-            if (wideBoardMenu && typeof window !== 'undefined') {
-              window.requestAnimationFrame(() => {
-                setSelectedNodeOnly(clickedId);
-              });
-            }
-            closeContextMenu();
+            handleNodeClick(event, node as RFNode<FlowNodeData>);
           }}
         >
           <MiniMap
