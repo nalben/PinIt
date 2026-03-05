@@ -228,6 +228,7 @@ const isProfileActive = () => {
       <div className={classes.profile_container}>
         {!isInitialized ? (
           <div className={classes.user} aria-busy="true">
+            <div className={`${classes.skeleton} ${classes.skeleton_noti}`} aria-hidden="true" />
             <div className={classes.profile}>
               <div className={`${classes.skeleton} ${classes.skeleton_avatar_sm}`} />
               <span className={`${classes.skeleton} ${classes.skeleton_line_sm}`} />

@@ -31,6 +31,8 @@ Verify imports and dependencies.
 
 Verify side-effects (API contracts, sockets, DB, state).
 
+After writing or editing any text (UI copy, error messages), re-read and verify spelling and encoding (no mojibake).
+
 Never:
 
 Guess file names.
@@ -1105,6 +1107,19 @@ Update (2026-03-03)
   - `frontend/src/components/flow/useFlowBoardLinkMode.ts` owns 2-click link-mode state (`off/first/second`) and Escape-to-cancel; FlowBoard uses it to create links between two clicked nodes.
 - DB migration script added to extend card links with label metadata:
   - `api/sql/2026-03-03-cardlinks-label.sql` adds `cardlinks.label VARCHAR(70) NULL` and `cardlinks.is_label_visible TINYINT(1) NOT NULL DEFAULT 1`.
+
+Update (2026-03-05)
+
+- Added card details endpoints:
+  - `GET /api/boards/:board_id/cards/:card_id/details` — returns carddetails metadata (card_id, board_id, title, created_at, updated_at) for authorized users (owner/guest/editer).
+  - `GET /api/boards/public/:board_id/cards/:card_id/details` — returns the same carddetails metadata for public boards (optional auth; blocked users filtered).
+- Right menu can switch to a card details view showing the selected node title; node click opens this view (`boardMenuView: 'card'` with `selectedCardDetails`).
+- `openCardDetails` now supports `openMenu` (avoid auto-open); FlowBoard opens the right menu for card details only when `window.innerWidth >= 1700` (on smaller screens it only stores selection without switching menu view).
+- `openFlowCardSettings` now supports `restoreBoardMenu` and `keepBoardMenuOpen` to control right menu closing/restoring (right menu stays open on `window.innerWidth >= 1700`).
+- Card details now track previous right-menu state so closing card details restores the menu to closed if it was closed before opening.
+- `openLinkInspector` preserves the original `linkInspectorPrevMenuOpen` when re-opened while already in `boardMenuView: 'link'` (used by save flow) so close behavior remains consistent with pre-open state.
+- `openCardDetailsFromNode` on narrow screens now clears link-inspector state and forces `boardMenuView: 'board'` while keeping details selection cached (prevents stale hidden `link` view after delayed close transitions).
+- Board page initial auto-open of right menu now uses `BOARD_MENU_WIDE_MIN_WIDTH` from `uiStore` (same 1700px threshold as wide-menu behavior).
 
 Update (2026-03-04)
 

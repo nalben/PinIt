@@ -47,9 +47,11 @@ const Board = () => {
     const boardMenuView = useUIStore((s) => s.boardMenuView);
     const selectedLink = useUIStore((s) => s.selectedLink);
     const selectedLinkDraft = useUIStore((s) => s.selectedLinkDraft);
+    const selectedCardDetails = useUIStore((s) => s.selectedCardDetails);
     const openLinkInspector = useUIStore((s) => s.openLinkInspector);
     const closeLinkInspector = useUIStore((s) => s.closeLinkInspector);
     const patchSelectedLinkDraft = useUIStore((s) => s.patchSelectedLinkDraft);
+    const closeCardDetails = useUIStore((s) => s.closeCardDetails);
     const showTopAlarm = useUIStore((s) => s.showTopAlarm);
     const openBoardSettingsModal = useUIStore((s) => s.openBoardSettingsModal);
     const closeBoardSettingsModal = useUIStore((s) => s.closeBoardSettingsModal);
@@ -759,9 +761,12 @@ const Board = () => {
     return (
             <div className={`${classes.board_container} ${__PLATFORM__ === 'desktop' ? classes.board_container_desktop : classes.board_container_mobile}`.trim()}>
                 <div className={`${classes.board_flow_wrap} ${effectiveBoardMenuOpen ? classes.board_flow_shrink : ''}`.trim()}>
-                    <FlowBoard ref={flowBoardRef} canEditCards={canEditCards} />
+                    <FlowBoard ref={flowBoardRef} canEditCards={canEditCards} boardMenuRef={boardMenuRef} />
                 </div>
-            <div ref={boardMenuRef} className={`${classes.board_menu_con} ${!effectiveBoardMenuOpen ? classes.menu_close : ''}`}>
+            <div
+                ref={boardMenuRef}
+                className={`${classes.board_menu_con} ${!effectiveBoardMenuOpen ? classes.menu_close : ''}`}
+            >
                 <div className={classes.left_menu_btns}>
                     <button
                         className={`${classes.left_menu_btn} ${classes.left_menu_btn_toggle}`.trim()}
@@ -963,6 +968,26 @@ const Board = () => {
                                 </div>
                             </div>
                         </div>
+                    ) : boardMenuView === 'card' && selectedCardDetails ? (
+                        <div className={classes.link_inspector_root}>
+                            <div className={classes.link_inspector_header}>
+                                <div className={classes.link_inspector_title}>Карточка</div>
+                            </div>
+                            <div className={classes.link_inspector_meta}>
+                                <div>
+                                    <span>Название:</span> {selectedCardDetails.title || `#${selectedCardDetails.cardId}`}
+                                </div>
+                            </div>
+                            <div className={classes.link_inspector_actions}>
+                                <Mainbtn
+                                    variant="mini"
+                                    kind="button"
+                                    type="button"
+                                    text="Назад"
+                                    onClick={() => closeCardDetails()}
+                                />
+                            </div>
+                        </div>
                     ) : (
                         <div className={classes.board_info}>
                             {isBoardMetaLoading || !boardInfo?.title ? (
@@ -992,7 +1017,7 @@ const Board = () => {
                             )}
                         </div>
                     )}
-                    {boardMenuView !== 'link' && isLoggedIn && !isOwnerBoard && ownerParticipant ? (
+                    {boardMenuView === 'board' && isLoggedIn && !isOwnerBoard && ownerParticipant ? (
                         <div>
                             <div className={classes.owner_block}>
                                 <span className={classes.owner_title}>Владелец:</span>
@@ -1015,7 +1040,7 @@ const Board = () => {
                             </div>
                         </div>
                     ) : null}
-                    {boardMenuView !== 'link' && isLoggedIn && !isOwnerBoard && isGuestBoard ? (
+                    {boardMenuView === 'board' && isLoggedIn && !isOwnerBoard && isGuestBoard ? (
                         <div className={classes.leave_board_row}>
                             <DropdownWrapper upDel closeOnClick={false} isOpen={leaveConfirmOpen} onClose={() => setLeaveConfirmOpen(false)}>
                                 {[
@@ -1051,7 +1076,7 @@ const Board = () => {
                             </DropdownWrapper>
                         </div>
                     ) : null}
-                    {boardMenuView !== 'link' && isLoggedIn ? (
+                    {boardMenuView === 'board' && isLoggedIn ? (
                         isBoardMetaLoading ? (
                             <div className={classes.board_info_actions}>
                                 <div className={`${classes.skeleton} ${classes.board_info_actions_skeleton}`} />
@@ -1062,7 +1087,7 @@ const Board = () => {
                             </div>
                         ) : null
                     ) : null}
-                    {boardMenuView !== 'link' && !isLoggedIn && isInitialized ? (
+                    {boardMenuView === 'board' && !isLoggedIn && isInitialized ? (
                         <div className={classes.participants}>
                             <div className={classes.participant_add}>
                                 <AuthTrigger type="login">
@@ -1071,7 +1096,7 @@ const Board = () => {
                             </div>
                         </div>
                     ) : null}
-                    {boardMenuView !== 'link' && isLoggedIn && shouldShowParticipants ? (
+                    {boardMenuView === 'board' && isLoggedIn && shouldShowParticipants ? (
                         <div className={classes.participants}>
                             {participantsInitialLoading ? (
                                 <div className={`${classes.skeleton} ${classes.participants_title_skeleton}`} />

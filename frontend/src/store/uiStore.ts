@@ -6,7 +6,7 @@ export type BoardSettingsModalView = 'settings' | 'participants';
 export type BoardSettingsParticipantsInnerView = 'friends' | 'guests';
 export type FlowCardShape = 'rectangle' | 'rhombus' | 'circle';
 export type FlowLinkStyle = 'line' | 'arrow';
-export type BoardMenuView = 'board' | 'link';
+export type BoardMenuView = 'board' | 'link' | 'card';
 export type SelectedLinkSnapshot = {
   linkId: number;
   boardId: number;
@@ -18,6 +18,11 @@ export type SelectedLinkSnapshot = {
   isLabelVisible: boolean;
   fromTitle?: string | null;
   toTitle?: string | null;
+};
+export type SelectedCardDetailsSnapshot = {
+  cardId: number;
+  boardId: number;
+  title: string;
 };
 
 export type SelectedLinkDraft = {
@@ -40,6 +45,10 @@ type RegisteredEscapeHandler = EscapeHandler & { order: number };
 
 const escapeHandlers = new Map<string, RegisteredEscapeHandler>();
 let escapeOrder = 0;
+const BOARD_MENU_CLOSE_DELAY = 520;
+let boardMenuCloseTimeout: number | null = null;
+export const BOARD_MENU_WIDE_MIN_WIDTH = 1700;
+const isWideBoardMenu = () => typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
 
 export type FlowCardSettingsSnapshot = {
   nodeId: string;
@@ -58,7 +67,9 @@ interface UIState {
   boardMenuView: BoardMenuView;
   selectedLink: SelectedLinkSnapshot | null;
   selectedLinkDraft: SelectedLinkDraft | null;
+  selectedCardDetails: SelectedCardDetailsSnapshot | null;
   linkInspectorPrevMenuOpen: boolean | null;
+  cardDetailsPrevMenuOpen: boolean | null;
   restoreBoardMenuAfterFlowCardSettings: boolean;
   boardSettingsModalOpen: boolean;
   boardSettingsModalView: BoardSettingsModalView;
@@ -85,12 +96,17 @@ interface UIState {
   openLinkInspector: (snapshot: SelectedLinkSnapshot) => void;
   closeLinkInspector: () => void;
   patchSelectedLinkDraft: (patch: Partial<SelectedLinkDraft>) => void;
+  openCardDetails: (snapshot: SelectedCardDetailsSnapshot, options?: { openMenu?: boolean }) => void;
+  closeCardDetails: () => void;
+  openCardDetailsFromNode: (snapshot: SelectedCardDetailsSnapshot) => void;
+  openFlowCardSettingsFromNode: (snapshot: FlowCardSettingsSnapshot) => void;
+  handleBoardMenuBlur: () => void;
   openBoardSettingsModal: (view?: BoardSettingsModalView) => void;
   closeBoardSettingsModal: () => void;
   setBoardSettingsModalView: (view: BoardSettingsModalView) => void;
   setBoardSettingsModalParticipantsInnerViewNext: (view: BoardSettingsParticipantsInnerView | null) => void;
 
-  openFlowCardSettings: (snapshot: FlowCardSettingsSnapshot) => void;
+  openFlowCardSettings: (snapshot: FlowCardSettingsSnapshot, options?: { restoreBoardMenu?: boolean; keepBoardMenuOpen?: boolean }) => void;
   closeFlowCardSettings: () => void;
   setFlowCardSettingsDraft: (next: Partial<Omit<FlowCardSettingsSnapshot, 'nodeId'>>) => void;
   commitFlowCardSettingsDraft: () => void;
@@ -102,7 +118,7 @@ interface UIState {
   triggerEscape: () => boolean;
 }
 
-export const useUIStore = create<UIState>((set) => {
+export const useUIStore = create<UIState>((set, get) => {
   let topAlarmHideTimeout: number | null = null;
   let topAlarmUnmountTimeout: number | null = null;
 
@@ -111,6 +127,19 @@ export const useUIStore = create<UIState>((set) => {
     if (topAlarmUnmountTimeout) window.clearTimeout(topAlarmUnmountTimeout);
     topAlarmHideTimeout = null;
     topAlarmUnmountTimeout = null;
+  };
+
+  const clearBoardMenuCloseTimer = () => {
+    if (boardMenuCloseTimeout) window.clearTimeout(boardMenuCloseTimeout);
+    boardMenuCloseTimeout = null;
+  };
+
+  const scheduleBoardMenuViewReset = (next: () => void) => {
+    clearBoardMenuCloseTimer();
+    boardMenuCloseTimeout = window.setTimeout(() => {
+      next();
+      boardMenuCloseTimeout = null;
+    }, BOARD_MENU_CLOSE_DELAY);
   };
 
   return ({
@@ -122,7 +151,9 @@ export const useUIStore = create<UIState>((set) => {
   boardMenuView: 'board',
   selectedLink: null,
   selectedLinkDraft: null,
+  selectedCardDetails: null,
   linkInspectorPrevMenuOpen: null,
+  cardDetailsPrevMenuOpen: null,
   restoreBoardMenuAfterFlowCardSettings: false,
   boardSettingsModalOpen: false,
   boardSettingsModalView: 'settings',
@@ -147,26 +178,72 @@ export const useUIStore = create<UIState>((set) => {
   closeFriendsModal: () => set({ friendsModalOpen: false }),
   setFriendsModalView: (view) => set({ friendsModalView: view }),
 
-  openBoardMenu: () => set({ isBoardMenuOpen: true }),
+  openBoardMenu: () => {
+    clearBoardMenuCloseTimer();
+    set({ isBoardMenuOpen: true });
+  },
   closeBoardMenu: () =>
-    set((s) => ({
-      isBoardMenuOpen: false,
-      boardMenuView: s.boardMenuView === 'link' ? 'board' : s.boardMenuView,
-      selectedLink: s.boardMenuView === 'link' ? null : s.selectedLink,
-      selectedLinkDraft: s.boardMenuView === 'link' ? null : s.selectedLinkDraft,
-      linkInspectorPrevMenuOpen: s.boardMenuView === 'link' ? null : s.linkInspectorPrevMenuOpen,
-    })),
+    set((s) => {
+      if (!s.isBoardMenuOpen) {
+        clearBoardMenuCloseTimer();
+        return {
+          isBoardMenuOpen: false,
+          boardMenuView: s.boardMenuView === 'link' || s.boardMenuView === 'card' ? 'board' : s.boardMenuView,
+          selectedLink: s.boardMenuView === 'link' ? null : s.selectedLink,
+          selectedLinkDraft: s.boardMenuView === 'link' ? null : s.selectedLinkDraft,
+          selectedCardDetails: s.boardMenuView === 'card' ? null : s.selectedCardDetails,
+          linkInspectorPrevMenuOpen: s.boardMenuView === 'link' ? null : s.linkInspectorPrevMenuOpen,
+          cardDetailsPrevMenuOpen: s.boardMenuView === 'card' ? null : s.cardDetailsPrevMenuOpen,
+        };
+      }
+
+      if (s.boardMenuView === 'link' || s.boardMenuView === 'card') {
+        scheduleBoardMenuViewReset(() => {
+          set({
+            boardMenuView: 'board',
+            selectedLink: null,
+            selectedLinkDraft: null,
+            selectedCardDetails: null,
+            linkInspectorPrevMenuOpen: null,
+            cardDetailsPrevMenuOpen: null,
+          });
+        });
+      } else {
+        clearBoardMenuCloseTimer();
+      }
+
+      return { isBoardMenuOpen: false };
+    }),
   toggleBoardMenu: () =>
-    set((s) => ({
-      isBoardMenuOpen: !s.isBoardMenuOpen,
-      boardMenuView: s.isBoardMenuOpen && s.boardMenuView === 'link' ? 'board' : s.boardMenuView,
-      selectedLink: s.isBoardMenuOpen && s.boardMenuView === 'link' ? null : s.selectedLink,
-      selectedLinkDraft: s.isBoardMenuOpen && s.boardMenuView === 'link' ? null : s.selectedLinkDraft,
-      linkInspectorPrevMenuOpen: s.isBoardMenuOpen && s.boardMenuView === 'link' ? null : s.linkInspectorPrevMenuOpen,
-    })),
+    set((s) => {
+      const nextOpen = !s.isBoardMenuOpen;
+      if (!nextOpen) {
+        if (s.boardMenuView === 'link' || s.boardMenuView === 'card') {
+          scheduleBoardMenuViewReset(() => {
+            set({
+              boardMenuView: 'board',
+              selectedLink: null,
+              selectedLinkDraft: null,
+              selectedCardDetails: null,
+              linkInspectorPrevMenuOpen: null,
+              cardDetailsPrevMenuOpen: null,
+            });
+          });
+        } else {
+          clearBoardMenuCloseTimer();
+        }
+
+        return { isBoardMenuOpen: false };
+      }
+
+      clearBoardMenuCloseTimer();
+      return { isBoardMenuOpen: true };
+    }),
 
   openLinkInspector: (snapshot) =>
-    set((s) => ({
+    set((s) => {
+      clearBoardMenuCloseTimer();
+      return ({
       isBoardMenuOpen: true,
       boardMenuView: 'link',
       selectedLink: snapshot,
@@ -179,37 +256,163 @@ export const useUIStore = create<UIState>((set) => {
         fromTitle: snapshot.fromTitle ?? null,
         toTitle: snapshot.toTitle ?? null,
       },
-      linkInspectorPrevMenuOpen: s.boardMenuView === 'link' ? s.linkInspectorPrevMenuOpen : s.isBoardMenuOpen,
-    })),
+      selectedCardDetails: null,
+      linkInspectorPrevMenuOpen:
+        s.boardMenuView === 'link'
+          ? (s.linkInspectorPrevMenuOpen ?? s.isBoardMenuOpen)
+          : s.isBoardMenuOpen,
+      cardDetailsPrevMenuOpen: null,
+      });
+    }),
   closeLinkInspector: () =>
-    set((s) => ({
-      boardMenuView: 'board',
-      selectedLink: null,
-      selectedLinkDraft: null,
-      isBoardMenuOpen: s.linkInspectorPrevMenuOpen === false ? false : s.isBoardMenuOpen,
-      linkInspectorPrevMenuOpen: null,
-    })),
+    set((s) => {
+      const wasOpen = s.isBoardMenuOpen;
+      const shouldKeepOpen = s.linkInspectorPrevMenuOpen === true;
+      if (shouldKeepOpen) {
+        clearBoardMenuCloseTimer();
+        return {
+          boardMenuView: 'board',
+          selectedLink: null,
+          selectedLinkDraft: null,
+          isBoardMenuOpen: true,
+          linkInspectorPrevMenuOpen: null,
+        };
+      }
+      if (!wasOpen) {
+        clearBoardMenuCloseTimer();
+        return {
+          boardMenuView: 'board',
+          selectedLink: null,
+          selectedLinkDraft: null,
+          isBoardMenuOpen: s.linkInspectorPrevMenuOpen === false ? false : s.isBoardMenuOpen,
+          linkInspectorPrevMenuOpen: null,
+        };
+      }
+
+      scheduleBoardMenuViewReset(() => {
+        set({
+          boardMenuView: 'board',
+          selectedLink: null,
+          selectedLinkDraft: null,
+          linkInspectorPrevMenuOpen: null,
+        });
+      });
+
+      return {
+        isBoardMenuOpen: false,
+      };
+    }),
   patchSelectedLinkDraft: (patch) =>
     set((s) => (s.selectedLinkDraft ? { selectedLinkDraft: { ...s.selectedLinkDraft, ...patch } } : {})),
+
+  openCardDetails: (snapshot, options) =>
+    set((s) => {
+      clearBoardMenuCloseTimer();
+      return ({
+      isBoardMenuOpen: options?.openMenu === false ? s.isBoardMenuOpen : true,
+      boardMenuView: 'card',
+      selectedCardDetails: snapshot,
+      selectedLink: null,
+      selectedLinkDraft: null,
+      linkInspectorPrevMenuOpen: null,
+      cardDetailsPrevMenuOpen:
+        s.boardMenuView === 'card'
+          ? (s.cardDetailsPrevMenuOpen ?? s.isBoardMenuOpen)
+          : s.isBoardMenuOpen,
+      });
+    }),
+  closeCardDetails: () =>
+    set((s) => {
+      const wasOpen = s.isBoardMenuOpen;
+      const shouldKeepOpen = s.cardDetailsPrevMenuOpen === true;
+      if (shouldKeepOpen) {
+        clearBoardMenuCloseTimer();
+        return {
+          boardMenuView: 'board',
+          selectedCardDetails: null,
+          isBoardMenuOpen: true,
+          cardDetailsPrevMenuOpen: null,
+        };
+      }
+      if (!wasOpen) {
+        clearBoardMenuCloseTimer();
+        return {
+          boardMenuView: 'board',
+          selectedCardDetails: null,
+          isBoardMenuOpen: s.cardDetailsPrevMenuOpen === false ? false : s.isBoardMenuOpen,
+          cardDetailsPrevMenuOpen: null,
+        };
+      }
+
+      scheduleBoardMenuViewReset(() => {
+        set({
+          boardMenuView: 'board',
+          selectedCardDetails: null,
+          cardDetailsPrevMenuOpen: null,
+        });
+      });
+
+      return {
+        isBoardMenuOpen: false,
+      };
+    }),
+  openCardDetailsFromNode: (snapshot) => {
+    if (!isWideBoardMenu()) {
+      clearBoardMenuCloseTimer();
+      set(() => ({
+        boardMenuView: 'board',
+        selectedCardDetails: snapshot,
+        selectedLink: null,
+        selectedLinkDraft: null,
+        linkInspectorPrevMenuOpen: null,
+        cardDetailsPrevMenuOpen: null,
+      }));
+      return;
+    }
+    get().openCardDetails(snapshot, { openMenu: true });
+  },
+  openFlowCardSettingsFromNode: (snapshot) => {
+    const wide = isWideBoardMenu();
+    get().openFlowCardSettings(snapshot, { restoreBoardMenu: wide, keepBoardMenuOpen: wide });
+  },
+  handleBoardMenuBlur: () => {
+    const view = get().boardMenuView;
+    if (view === 'link') get().closeLinkInspector();
+    if (view === 'card') get().closeCardDetails();
+  },
 
   openBoardSettingsModal: (view = 'settings') => set({ boardSettingsModalOpen: true, boardSettingsModalView: view }),
   closeBoardSettingsModal: () => set({ boardSettingsModalOpen: false, boardSettingsModalView: 'settings' }),
   setBoardSettingsModalView: (view) => set({ boardSettingsModalView: view }),
   setBoardSettingsModalParticipantsInnerViewNext: (view) => set({ boardSettingsModalParticipantsInnerViewNext: view }),
 
-  openFlowCardSettings: (snapshot) =>
-    set((s) => ({
-      flowCardSettingsOpen: true,
-      flowCardSettings: snapshot,
-      flowCardSettingsDraft: {
-        type: snapshot.type,
-        title: snapshot.title,
-        isLocked: snapshot.isLocked,
-        imageSrc: snapshot.imageSrc,
-      },
-      restoreBoardMenuAfterFlowCardSettings: s.flowCardSettingsOpen ? s.restoreBoardMenuAfterFlowCardSettings : s.isBoardMenuOpen,
-      isBoardMenuOpen: false,
-    })),
+  openFlowCardSettings: (snapshot, options) =>
+    set((s) => {
+      clearBoardMenuCloseTimer();
+      return ({
+        flowCardSettingsOpen: true,
+        flowCardSettings: snapshot,
+        flowCardSettingsDraft: {
+          type: snapshot.type,
+          title: snapshot.title,
+          isLocked: snapshot.isLocked,
+          imageSrc: snapshot.imageSrc,
+        },
+        restoreBoardMenuAfterFlowCardSettings:
+          s.flowCardSettingsOpen
+            ? s.restoreBoardMenuAfterFlowCardSettings
+            : options?.restoreBoardMenu === false
+              ? false
+              : s.isBoardMenuOpen,
+        isBoardMenuOpen: options?.keepBoardMenuOpen ? s.isBoardMenuOpen : false,
+        boardMenuView: 'board',
+        selectedLink: null,
+        selectedLinkDraft: null,
+        selectedCardDetails: null,
+        linkInspectorPrevMenuOpen: null,
+        cardDetailsPrevMenuOpen: null,
+      });
+    }),
   closeFlowCardSettings: () =>
     set((s) => ({
       flowCardSettingsOpen: false,

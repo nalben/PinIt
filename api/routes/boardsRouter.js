@@ -47,6 +47,7 @@ const maybeUploadSingleImage = (req, res, next) => {
 router.get('/public/popular', optionalAuth, boardsController.getPopularPublicBoards);
 router.get('/public/:board_id', optionalAuth, boardsController.getPublicBoardById);
 router.get('/public/:board_id/cards', optionalAuth, boardsController.getPublicBoardCards);
+router.get('/public/:board_id/cards/:card_id/details', optionalAuth, boardsController.getPublicCardDetails);
 router.get('/public/:board_id/links', optionalAuth, boardsController.getPublicBoardLinks);
 router.get('/invite-link/resolve', boardsController.resolveBoardInviteLink);
 router.get('/invite-link/preview', boardsController.previewBoardInviteLink);
@@ -81,6 +82,7 @@ router.patch('/:board_id/public', boardsController.updateBoardPublic);
 router.patch('/:board_id/image', maybeUploadSingleImage, boardsController.updateBoardImage);
 router.post('/:board_id/cards', boardsController.createCard);
 router.get('/:board_id/cards', boardsController.getBoardCards);
+router.get('/:board_id/cards/:card_id/details', boardsController.getCardDetails);
 router.patch('/:board_id/cards/:card_id', boardsController.updateCard);
 router.patch('/:board_id/cards/:card_id/lock', boardsController.updateCardLock);
 router.patch('/:board_id/cards/:card_id/image', maybeUploadSingleImage, boardsController.updateCardImage);

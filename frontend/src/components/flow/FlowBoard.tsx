@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import ReactFlow, {
   Background,
@@ -29,8 +29,9 @@ import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import LockClose from '@/assets/icons/monochrome/lock_close.svg';
 import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
+import Details from '@/assets/icons/monochrome/details.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
-import { useUIStore } from '@/store/uiStore';
+import { BOARD_MENU_WIDE_MIN_WIDTH, useUIStore } from '@/store/uiStore';
 import { useAuthStore } from '@/store/authStore';
 import type { ApiCard, ApiCardLink, ApiLinkStyle, FlowNodeData, FlowNodeType } from './flowBoardModel';
 import {
@@ -56,7 +57,7 @@ export type FlowBoardHandle = {
 };
 
 const DEFAULT_LINK_STYLE: ApiLinkStyle = 'line';
-const DEFAULT_LINK_COLOR = '#e7cd73';
+const DEFAULT_LINK_COLOR = 'var(--pink)';
 
 const MAX_CARD_IMAGE_SIZE_MB = 5;
 const MAX_CARD_IMAGE_SIZE_BYTES = MAX_CARD_IMAGE_SIZE_MB * 1024 * 1024;
@@ -92,10 +93,10 @@ const MiniMapNode: React.FC<MiniMapNodeProps> = (props) => {
   return <rect {...commonProps} x={x} y={y} width={width} height={height} rx={props.borderRadius} ry={props.borderRadius} />;
 };
 
-const ConnectionHandles = ({ isConnectable, shape }: { isConnectable: boolean; shape: FlowNodeType }) => {
+const ConnectionHandles = ({ isConnectable, shape, isLocked = false }: { isConnectable: boolean; shape: FlowNodeType; isLocked?: boolean }) => {
   const sourceClass = `${classes.flow_link_handle} ${classes.flow_link_handle_source} nodrag`.trim();
   const targetClass = `${classes.flow_link_handle} ${classes.flow_link_handle_target} nodrag`.trim();
-  const style = getLinkHandleStyle(shape);
+  const style = getLinkHandleStyle(shape, { isLocked });
   return (
     <>
       <Handle type="source" id="s" position={Position.Top} className={sourceClass} style={style} isConnectable={isConnectable} />
@@ -119,7 +120,7 @@ const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
           aria-hidden="true"
         />
       ) : null}
-      {isDraft ? null : <ConnectionHandles shape="rectangle" isConnectable={!data.isLocked} />}
+      {isDraft ? null : <ConnectionHandles shape="rectangle" isConnectable={!data.isLocked} isLocked={Boolean(data.isLocked)} />}
       {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_rect}`.trim()} aria-hidden="true" /> : null}
       <svg className={classes.flow_hit_svg} viewBox="0 0 240 80" aria-hidden="true">
         <rect className={classes.flow_drag_handle} x="0" y="0" width="240" height="80" rx="10" ry="10" />
@@ -282,12 +283,12 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   const lineEndY = isArrow ? baseY : ty;
   const path = `M${sx},${sy}L${lineEndX},${lineEndY}`;
 
-  const renderedStyle = isSelected ? { ...(style ?? {}), stroke: '#ffffff' } : style;
+  const renderedStyle = isSelected ? { ...(style ?? {}), stroke: 'var(--white)' } : style;
   const strokeColor = typeof (renderedStyle as { stroke?: unknown } | undefined)?.stroke === 'string'
     ? String((renderedStyle as { stroke?: unknown }).stroke)
     : typeof (style as { stroke?: unknown } | undefined)?.stroke === 'string'
       ? String((style as { stroke?: unknown }).stroke)
-      : '#ffffff';
+      : 'var(--pink)';
 
   const renderedStyleWithCap = isArrow ? { ...(renderedStyle ?? {}), strokeLinecap: 'butt' as const } : renderedStyle;
 
@@ -321,7 +322,12 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
 
 const EDGE_TYPES = { flowStraight: FlowStraightEdge } as const;
 
-const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(({ canEditCards = false }, ref) => {
+type FlowBoardProps = {
+  canEditCards?: boolean;
+  boardMenuRef?: React.RefObject<HTMLDivElement | null>;
+};
+
+const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCards = false, boardMenuRef }, ref) => {
   const { boardId } = useParams<{ boardId: string }>();
   const numericBoardId = Number(boardId);
   const isAuth = useAuthStore((s) => s.isAuth);
@@ -388,10 +394,15 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   const flowCardSettings = useUIStore((s) => s.flowCardSettings);
   const flowCardSettingsDraft = useUIStore((s) => s.flowCardSettingsDraft);
   const openFlowCardSettings = useUIStore((s) => s.openFlowCardSettings);
+  const openFlowCardSettingsFromNode = useUIStore((s) => s.openFlowCardSettingsFromNode);
   const closeFlowCardSettings = useUIStore((s) => s.closeFlowCardSettings);
   const setFlowCardSettingsDraft = useUIStore((s) => s.setFlowCardSettingsDraft);
   const openLinkInspector = useUIStore((s) => s.openLinkInspector);
   const closeLinkInspector = useUIStore((s) => s.closeLinkInspector);
+  const openCardDetails = useUIStore((s) => s.openCardDetails);
+  const openCardDetailsFromNode = useUIStore((s) => s.openCardDetailsFromNode);
+  const closeCardDetails = useUIStore((s) => s.closeCardDetails);
+  const handleBoardMenuBlur = useUIStore((s) => s.handleBoardMenuBlur);
   const boardMenuView = useUIStore((s) => s.boardMenuView);
   const selectedLink = useUIStore((s) => s.selectedLink);
   const selectedLinkDraft = useUIStore((s) => s.selectedLinkDraft);
@@ -514,7 +525,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
   }, [boardMenuView, edges, selectedLink, selectedLinkDraft]);
 
   const activeNodeId = flowCardSettingsOpen ? flowCardSettings?.nodeId ?? null : null;
+  const activeCardId = useMemo(() => {
+    if (!activeNodeId) return null;
+    if (String(activeNodeId).startsWith('draft-')) return null;
+    const id = Number(activeNodeId);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }, [activeNodeId]);
   const isEditing = Boolean(flowCardSettingsOpen && flowCardSettings && flowCardSettingsDraft && activeNodeId);
+  const canOpenDetails = Boolean(activeCardId && Number.isFinite(numericBoardId) && numericBoardId > 0);
   const editingStateRef = useRef<{ isEditing: boolean; activeNodeId: string | null }>({ isEditing: false, activeNodeId: null });
   const visualDraftRef = useRef<Omit<NonNullable<typeof flowCardSettingsDraft>, never> | null>(null);
   const [visualEditing, setVisualEditing] = useState(false);
@@ -534,6 +552,26 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     []
   );
 
+  const getNodeWrapperClassName = useCallback(
+    (nodeId: string, isSelected: boolean) => {
+      const nextClassParts = [classes.flow_node_wrapper];
+      if (isSelected) nextClassParts.push(classes.flow_node_selected);
+
+      if (isConnecting) {
+        if (connectingSourceNodeId && nodeId === String(connectingSourceNodeId)) nextClassParts.push(classes.flow_node_link_source);
+      } else if (linkSourceNodeId && nodeId === String(linkSourceNodeId)) {
+        nextClassParts.push(classes.flow_node_link_source);
+      }
+
+      if (isConnecting && connectingHoverTargetNodeId && nodeId === String(connectingHoverTargetNodeId)) {
+        nextClassParts.push(classes.flow_node_link_hover);
+      }
+
+      return nextClassParts.join(' ');
+    },
+    [connectingHoverTargetNodeId, connectingSourceNodeId, isConnecting, linkSourceNodeId]
+  );
+
   const cardToNode = useCallback(
     (c: ApiCard): RFNode<FlowNodeData> => {
       const nodeType = mapApiTypeToNodeType(c.type);
@@ -542,7 +580,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       return {
         id: String(c.id),
         type: nodeType,
-        className: 'flow_node_wrapper',
+        className: getNodeWrapperClassName(String(c.id), false),
         dragHandle: getNodeDragHandleSelector(nodeType),
         position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
         draggable: canEditCards && !Boolean(c.is_locked),
@@ -554,26 +592,19 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         },
       };
     },
-    [canEditCards, getNodeDragHandleSelector]
+    [canEditCards, getNodeDragHandleSelector, getNodeWrapperClassName]
   );
 
   useEffect(() => {
     setNodes((prev) =>
       prev.map((n) => {
         const id = String(n.id);
-        const nextClassParts = ['flow_node_wrapper'];
-        if (isConnecting) {
-          if (connectingSourceNodeId && id === String(connectingSourceNodeId)) nextClassParts.push('flow_node_link_source');
-        } else {
-          if (linkSourceNodeId && id === String(linkSourceNodeId)) nextClassParts.push('flow_node_link_source');
-        }
-        if (isConnecting && connectingHoverTargetNodeId && id === String(connectingHoverTargetNodeId)) nextClassParts.push('flow_node_link_hover');
-        const nextClass = nextClassParts.join(' ');
+        const nextClass = getNodeWrapperClassName(id, Boolean(n.selected));
         if (String(n.className || '') === nextClass) return n;
         return { ...n, className: nextClass };
       })
     );
-  }, [connectingHoverTargetNodeId, connectingSourceNodeId, isConnecting, linkSourceNodeId]);
+  }, [getNodeWrapperClassName, nodes]);
 
   const pickNodeIdAtClientPoint = useCallback((clientX: number, clientY: number) => {
     const elements = document.elementsFromPoint(clientX, clientY) as unknown as HTMLElement[];
@@ -1013,7 +1044,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     (node: RFNode<FlowNodeData>) => {
       if (!canEditCards) return;
       clearPendingImage();
-      openFlowCardSettings({
+      openFlowCardSettingsFromNode({
         nodeId: String(node.id),
         type: node.type as FlowNodeType,
         title: node.data.title,
@@ -1021,7 +1052,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         imageSrc: node.data.imageSrc,
       });
     },
-    [canEditCards, clearPendingImage, openFlowCardSettings]
+    [canEditCards, clearPendingImage, openFlowCardSettingsFromNode]
   );
 
   const cancelCardSettings = useCallback(() => {
@@ -1083,6 +1114,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       const panelEl = createPanelRef.current;
       if (panelEl && target && panelEl.contains(target)) return;
       const targetEl = target instanceof HTMLElement ? target : null;
+      const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
+      const menuEl = boardMenuRef?.current;
+      if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
       if (targetEl?.closest?.('.react-flow__node')) return;
 
       activePointerId = e.pointerId;
@@ -1107,6 +1141,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       const panelEl = createPanelRef.current;
       if (panelEl && target && panelEl.contains(target)) return;
       const targetEl = target instanceof HTMLElement ? target : null;
+      const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
+      const menuEl = boardMenuRef?.current;
+      if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
       if (targetEl?.closest?.('.react-flow__node')) return;
 
       if (!moved) cancelCardSettings();
@@ -1122,7 +1159,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       window.removeEventListener('pointerup', onPointerUpCapture, true);
       window.removeEventListener('pointercancel', onPointerUpCapture, true);
     };
-  }, [activeNodeId, cancelCardSettings, flowCardSettingsOpen]);
+  }, [activeNodeId, boardMenuRef, cancelCardSettings, flowCardSettingsOpen]);
 
   const createDraftNodeAt = useCallback((anchorX: number, anchorY: number) => {
     if (!canEditCards) return;
@@ -1146,7 +1183,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     const draftNode: RFNode<FlowNodeData> = {
       id,
       type: startType,
-      className: 'flow_node_wrapper',
+      className: getNodeWrapperClassName(id, false),
       dragHandle: `.${classes.node_rectangle}`,
       position,
       data: { title: startTitle, imageSrc: null, isLocked: false },
@@ -1170,7 +1207,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
         { duration: 0 }
       );
     }
-  }, [canEditCards, closeContextMenu, nodes, openSettingsForNode, reactFlow]);
+  }, [canEditCards, closeContextMenu, getNodeWrapperClassName, nodes, openSettingsForNode, reactFlow]);
 
   const createDraftNode = useCallback(() => {
     createDraftNodeAt(contextMenu.anchorX, contextMenu.anchorY);
@@ -1214,6 +1251,18 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
     const next = !flowCardSettingsDraft.isLocked;
     setFlowCardSettingsDraft({ isLocked: next });
     applyPreviewToNode(activeNodeId, { isLocked: next });
+  };
+
+  const openDetailsFromPanel = () => {
+    if (!activeCardId) return;
+    if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+    const title = String(flowCardSettingsDraft?.title ?? flowCardSettings?.title ?? '').trim();
+    openCardDetails({
+      cardId: activeCardId,
+      boardId: numericBoardId,
+      title
+    });
+    closeFlowCardSettings();
   };
 
   const handleImageSelected = (file: File | null) => {
@@ -1506,7 +1555,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               setEdgeHighlightBySelectedNodes(new Set(selectedNodes.map((n) => String(n.id))));
             }}
             onPaneClick={() => {
-              closeLinkInspector();
+              handleBoardMenuBlur();
               closeContextMenu();
               clearSelectedElements();
             }}
@@ -1525,6 +1574,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               const toTitle = nodes.find((n) => String(n.id) === String(edge.target))?.data?.title ?? null;
 
               if (flowCardSettingsOpen) closeFlowCardSettings();
+              if (boardMenuView === 'card') closeCardDetails();
 
               setEdgeHighlightBySelectedNodes(new Set());
 
@@ -1649,7 +1699,19 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               setEdgeHighlightBySelectedNodes(new Set([clickedId]));
             }
             setLinkSourceNodeId(String(typed.id));
+            const cardDetailsSnapshot = (() => {
+              if (clickedId.startsWith('draft-')) return null;
+              const cardId = Number(clickedId);
+              if (!Number.isFinite(cardId) || cardId <= 0) return null;
+              if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return null;
+              return {
+                cardId,
+                boardId: numericBoardId,
+                title: typed.data.title,
+              };
+            })();
             if (flowCardSettingsOpen && activeNodeId && String(typed.id) === String(activeNodeId)) {
+              if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot);
               closeContextMenu();
               return;
             }
@@ -1657,6 +1719,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
               cancelCardSettings();
             }
             openSettingsForNode(typed);
+            if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot);
             closeContextMenu();
           }}
         >
@@ -1709,15 +1772,26 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, { canEditCards?: boolean }>(
       >
         <div className={classes.create_panel_header}>
           <div className={classes.create_panel_title}>Настройте вид записи:</div>
-          <Mainbtn
-            variant="mini"
-            kind="button"
-            type="button"
-            text={displayLocked ? <LockClose /> : <LockOpen />}
-            onClick={toggleLockLive}
-            disabled={!isEditing || draftSaving || imageUploading}
-            className={` ${displayLocked ? classes.icon_btn_active : ''} ${classes.create_panel_lock}`.trim()}
-          />
+          <div className={classes.create_panel_actions}>
+            <Mainbtn
+              variant="mini"
+              kind="button"
+              type="button"
+              text={<Details />}
+              onClick={openDetailsFromPanel}
+              disabled={!isEditing || draftSaving || imageUploading || !canOpenDetails}
+              className={`${classes.create_panel_lock} ${classes.create_panel_details}`.trim()}
+            />
+            <Mainbtn
+              variant="mini"
+              kind="button"
+              type="button"
+              text={displayLocked ? <LockClose /> : <LockOpen />}
+              onClick={toggleLockLive}
+              disabled={!isEditing || draftSaving || imageUploading}
+              className={` ${displayLocked ? classes.icon_btn_active : ''} ${classes.create_panel_lock}`.trim()}
+            />
+          </div>
         </div>
 
         <div className={classes.create_panel_body}>

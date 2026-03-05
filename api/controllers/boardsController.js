@@ -757,7 +757,7 @@ exports.inviteToBoard = async (req, res) => {
     const friend_code = typeof req.body?.friend_code === 'string' ? req.body.friend_code.trim() : '';
 
     if (!username && !friend_code) {
-      return res.status(400).json({ message: 'РќСѓР¶РµРЅ username РёР»Рё friend_code' });
+      return res.status(400).json({ message: 'Нужен username или friend_code' });
     }
     if (username && friend_code) {
       return res.status(400).json({ message: 'Укажи только одно: username или friend_code' });
@@ -2039,6 +2039,56 @@ exports.getBoardCards = async (req, res) => {
 };
 
 
+exports.getCardDetails = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [accessRows] = await db.execute(
+      `SELECT 1
+       FROM boards b
+       LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role IN ('guest','editer')
+       WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
+       LIMIT 1`,
+      [user_id, boardId, user_id]
+    );
+
+    if (!accessRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT cd.card_id, c.board_id, c.title, cd.created_at, cd.updated_at
+       FROM carddetails cd
+       JOIN cards c ON c.id = cd.card_id
+       WHERE cd.card_id = ? AND c.board_id = ?
+       LIMIT 1`,
+      [cardId, boardId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Запись не найдена' });
+    }
+
+    return res.status(200).json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка получения карточки' });
+  }
+};
+
 exports.getPublicBoardCards = async (req, res) => {
   try {
     const boardId = Number(req.params?.board_id);
@@ -2085,6 +2135,62 @@ exports.getPublicBoardCards = async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ message: 'Ошибка получения записей' });
+  }
+};
+
+exports.getPublicCardDetails = async (req, res) => {
+  try {
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+
+    if (!Number.isFinite(boardId) || boardId <= 0 || !Number.isFinite(cardId) || cardId <= 0) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const userId = req.user?.id ? Number(req.user.id) : null;
+
+    if (Number.isFinite(userId) && userId && userId > 0) {
+      const [boardRows] = await db.execute(
+        `SELECT 1
+         FROM boards b
+         LEFT JOIN boardguests bg_block ON bg_block.board_id = b.id AND bg_block.user_id = ? AND bg_block.role = 'blocked'
+         WHERE b.id = ? AND b.is_public = 1 AND bg_block.user_id IS NULL
+         LIMIT 1`,
+        [userId, boardId]
+      );
+      if (!boardRows.length) {
+        return res.status(404).json({ message: 'Доска не найдена' });
+      }
+    } else {
+      const [boardRows] = await db.execute(
+        `SELECT 1
+         FROM boards
+         WHERE id = ? AND is_public = 1
+         LIMIT 1`,
+        [boardId]
+      );
+      if (!boardRows.length) {
+        return res.status(404).json({ message: 'Доска не найдена' });
+      }
+    }
+
+    const [rows] = await db.execute(
+      `SELECT cd.card_id, c.board_id, c.title, cd.created_at, cd.updated_at
+       FROM carddetails cd
+       JOIN cards c ON c.id = cd.card_id
+       WHERE cd.card_id = ? AND c.board_id = ?
+       LIMIT 1`,
+      [cardId, boardId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Запись не найдена' });
+    }
+
+    return res.status(200).json(rows[0]);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка получения карточки' });
   }
 };
 
@@ -2708,7 +2814,7 @@ exports.updateCard = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹' });
+      return res.status(400).json({ message: 'Некорректные параметры' });
     }
 
     const body = req.body || {};
@@ -2720,14 +2826,14 @@ exports.updateCard = async (req, res) => {
     const hasY = Object.prototype.hasOwnProperty.call(body, 'y');
 
     if (!hasTitle && !hasType && !hasLocked && !hasX && !hasY) {
-      return res.status(400).json({ message: 'РќРµС‚ РїРѕР»РµР№ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ' });
+      return res.status(400).json({ message: 'Нет полей для обновления' });
     }
 
     let rawTitle = null;
     if (hasTitle) {
       rawTitle = String(body?.title || '').trim();
       if (!rawTitle || rawTitle.length > 50) {
-        return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Р·Р°РіРѕР»РѕРІРѕРє' });
+        return res.status(400).json({ message: 'Некорректный заголовок' });
       }
     }
 
@@ -2736,7 +2842,7 @@ exports.updateCard = async (req, res) => {
       rawType = String(body?.type || '').trim();
       const allowedTypes = new Set(['rectangle', 'circle', 'diamond']);
       if (!allowedTypes.has(rawType)) {
-        return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РёРї' });
+        return res.status(400).json({ message: 'Некорректный тип' });
       }
     }
 
@@ -2748,13 +2854,13 @@ exports.updateCard = async (req, res) => {
       x = Number(body?.x);
       y = Number(body?.y);
       if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РєРѕРѕСЂРґРёРЅР°С‚С‹' });
+        return res.status(400).json({ message: 'Некорректные координаты' });
       }
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Доска не найдена' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -2769,12 +2875,12 @@ exports.updateCard = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'РќРµС‚ РґРѕСЃС‚СѓРїР°' });
+      return res.status(403).json({ message: 'Нет доступа' });
     }
 
     const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
     if (!cardRows.length) {
-      return res.status(404).json({ message: 'Р—Р°РїРёСЃСЊ РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Запись не найдена' });
     }
 
     const set = [];
@@ -2803,7 +2909,7 @@ exports.updateCard = async (req, res) => {
     }
 
     if (!set.length) {
-      return res.status(400).json({ message: 'РќРµС‚ РїРѕР»РµР№ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ' });
+      return res.status(400).json({ message: 'Нет полей для обновления' });
     }
 
     params.push(cardId, boardId);
@@ -2835,7 +2941,7 @@ exports.updateCard = async (req, res) => {
     return res.status(200).json(payload);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° РѕР±РЅРѕРІР»РµРЅРёСЏ' });
+    return res.status(500).json({ message: 'Ошибка обновления' });
   }
 };
 

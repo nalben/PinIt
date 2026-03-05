@@ -25,8 +25,8 @@ export const buildEdgeFromLink = (l: ApiCardLink): Edge => ({
   target: String(l.to_card_id),
   type: 'flowStraight',
   className: 'flow_edge',
-  style: { stroke: l.color || 'var(--pink)', strokeWidth: 2 },
-  markerEnd: l.style === 'arrow' ? { type: MarkerType.ArrowClosed, color: l.color || 'var(--pink)' } : undefined,
+  style: { stroke: 'var(--pink)', strokeWidth: 2 },
+  markerEnd: l.style === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--pink)' } : undefined,
   data: {
     linkId: l.id,
     fromCardId: l.from_card_id,
@@ -93,14 +93,22 @@ export const getNodeRect = (n: RFNode | undefined | null): { cx: number; cy: num
   return { cx: base.x + size.width / 2, cy: base.y + size.height / 2, hw: size.width / 2, hh: size.height / 2 };
 };
 
-const LINK_HANDLE_OFFSETS_RB: Record<FlowNodeType, { right: number; bottom: number }> = {
-  rectangle: { right: 15, bottom: 15 },
+const LINK_HANDLE_OFFSETS_RB: Record<Exclude<FlowNodeType, 'rectangle'>, { right: number; bottom: number }> = {
   circle: { right: 28, bottom: 28 },
   rhombus: { right: 21, bottom: 60 },
 };
 
-export const getLinkHandleStyle = (shape: FlowNodeType) => {
-  const { right, bottom } = LINK_HANDLE_OFFSETS_RB[shape] ?? LINK_HANDLE_OFFSETS_RB.rectangle;
+const RECTANGLE_LINK_HANDLE_OFFSETS = {
+  locked: { right: 35, bottom: 12 },
+  unlocked: { right: 15, bottom: 15 },
+} as const;
+
+export const getLinkHandleStyle = (shape: FlowNodeType, options?: { isLocked?: boolean }) => {
+  const isLocked = Boolean(options?.isLocked);
+  const { right, bottom } =
+    shape === 'rectangle'
+      ? (isLocked ? RECTANGLE_LINK_HANDLE_OFFSETS.locked : RECTANGLE_LINK_HANDLE_OFFSETS.unlocked)
+      : (LINK_HANDLE_OFFSETS_RB[shape] ?? LINK_HANDLE_OFFSETS_RB.circle);
   return {
     right,
     bottom,

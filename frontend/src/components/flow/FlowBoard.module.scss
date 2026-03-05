@@ -1,3 +1,5 @@
+$board-menu-wide-min: 1700px;
+
 .space_container{
     height: 100dvh;
     flex: 1;
@@ -32,25 +34,37 @@
     background: rgba(231, 205, 115, 0.12) !important;
 }
 
-:global(.react-flow__node.flow_node_wrapper.selected) .node_rectangle{
-    box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
-    border-color: rgba(255, 255, 255, 0.9);
-}
+.flow_node_selected{
+    .node_rectangle{
+        box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
+        border-color: var(--white);
+    }
 
-:global(.react-flow__node.flow_node_wrapper.selected) .rhombus_content{
-    box-shadow: none;
-    filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.45));
-    border-color: rgba(255, 255, 255, 0.9);
-}
+    .rhombus_content{
+        box-shadow: none;
+        filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.45));
+        border-color: var(--white);
+    }
 
-:global(.react-flow__node.flow_node_wrapper.selected) .circle_content{
-    box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
-    border-color: rgba(255, 255, 255, 0.9);
-}
+    .node_lock_overlay_rhombus{
+        border-color: var(--white);
+    }
+    .node_lock_overlay_circle{
+        border-color: var(--white);
+    }
+    .node_lock_overlay_rectangle{
+        border-color: var(--white);
+    }
 
-:global(.react-flow__node.flow_node_wrapper.selected) .flow_link_handle{
-    border-color: rgba(255, 255, 255, 0.9) !important;
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+    .circle_content{
+        box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
+        border-color: rgba(255, 255, 255, 0.9);
+    }
+
+    .flow_link_handle{
+        border-color: rgba(255, 255, 255, 0.9) !important;
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.18);
+    }
 }
 
 .flow_hit_svg{
@@ -86,7 +100,7 @@
 
 :global(.react-flow__edge.flow_edge.flow_edge_highlight) :global(.react-flow__edge-path){
     filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
-    stroke: rgba(255, 255, 255, 0.95) !important;
+    stroke: var(--white) !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -94,15 +108,15 @@
         filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
     }
 
-    .space_container_desktop :global(.react-flow__node.flow_node_wrapper:hover) .node_rectangle{
+    .space_container_desktop .flow_node_wrapper:hover .node_rectangle{
         box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
     }
 
-    .space_container_desktop :global(.react-flow__node.flow_node_wrapper:hover) .rhombus_content{
+    .space_container_desktop .flow_node_wrapper:hover .rhombus_content{
         filter: drop-shadow(0 0 22px rgba(255, 255, 255, 0.45));
     }
 
-    .space_container_desktop :global(.react-flow__node.flow_node_wrapper:hover) .circle_content{
+    .space_container_desktop .flow_node_wrapper:hover .circle_content{
         box-shadow: 0 0 0 0px rgba(255, 255, 255, 0.6), 0 0 22px rgba(255, 255, 255, 0.45);
     }
 }
@@ -122,6 +136,7 @@
 :global(.react-flow__edge.flow_edge.selected) .flow_edge_arrowhead,
 :global(.react-flow__edge.flow_edge.flow_edge_highlight) .flow_edge_arrowhead{
     filter: drop-shadow(0 0 18px rgba(255, 255, 255, 0.55));
+    fill: var(--white);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -154,7 +169,7 @@
     top: 50% !important;
 }
 
-:global(.react-flow__node.flow_node_link_source) .flow_link_handle_source{
+.flow_node_link_source .flow_link_handle_source{
     opacity: 1;
     pointer-events: all !important;
 }
@@ -163,24 +178,24 @@
 .flow_link_handle_target{}
 
 @media (hover: hover) and (pointer: fine) {
-    .space_container_desktop.space_container_can_edit:not(.space_container_connecting) :global(.react-flow__node.flow_node_wrapper:hover) .flow_link_handle_source{
+    .space_container_desktop.space_container_can_edit:not(.space_container_connecting) .flow_node_wrapper:hover .flow_link_handle_source{
         opacity: 1;
         pointer-events: all !important;
     }
 }
 
-:global(.react-flow__node.flow_node_link_hover) .node_rectangle{
+.flow_node_link_hover .node_rectangle{
     box-shadow: 0 0 0 0px var(--pink), 0 0 20px rgba(231, 205, 115, 0.55);
     border-color: var(--pink);
 }
 
-:global(.react-flow__node.flow_node_link_hover) .rhombus_content{
+.flow_node_link_hover .rhombus_content{
     box-shadow: none;
     filter: drop-shadow(0 0 20px rgba(231, 205, 115, 0.55));
     border-color: var(--pink);
 }
 
-:global(.react-flow__node.flow_node_link_hover) .circle_content{
+.flow_node_link_hover .circle_content{
     box-shadow: 0 0 0 0px var(--pink), 0 0 20px rgba(231, 205, 115, 0.55);
     border-color: var(--pink);
 }
@@ -346,14 +361,38 @@
     gap: 0.75rem;
 }
 
-.create_panel_lock{
+.create_panel_actions{
     position: absolute;
-    right: -1px;
-    top: -1px;
+    right: 0px;
+    top: 0px;
+    display: flex;
+    align-items: center;
+    & button{
+        border-top: none;
+    }
+    & button:first-child{
+        border-right: none;
+    }
+    & button:last-child{
+        border-right: none;
+    }
+
+}
+
+.create_panel_lock{
     padding: 10px;
+    width: fluid-prop(52, 44, 1920, 320);
+    height: fluid-prop(52, 44, 1920, 320);
+    
     & svg{
-        width: 25px;
-        height: 25px;
+        width: fluid-prop(30,25,1920,320);
+        height: fluid-prop(30, 25, 1920, 320);
+    }
+}
+
+.create_panel_details{
+    @media (min-width: $board-menu-wide-min) {
+        display: none;
     }
 }
 
@@ -712,6 +751,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow: hidden;
     width: 240px;
     height: 80px;
     border: 3px solid var(--pink);
@@ -729,7 +769,7 @@
     inset: 0;
     z-index: 0;
     pointer-events: none;
-    border-radius: inherit;
+    // border-radius: inherit;
 }
 
 .node_rectangle_title{
@@ -826,6 +866,7 @@
     border: solid 3px var(--pink);
     padding: 3px;
     background: rgba(0, 0, 0, 0.55);
+    transition: box-shadow 0.5s ease, border-color 0.5s ease, filter 0.5s ease, background-color 0.5s ease;
     & svg{
         width: 14px;
         height: 14px;
@@ -844,7 +885,7 @@
     border-radius: 100%;
     corner-shape: bevel;
     bottom: 0px;
-    padding: 7px;
+    padding: 8px;
 }
 .node_lock_overlay_circle{
     background: transparent;
