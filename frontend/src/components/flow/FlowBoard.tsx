@@ -580,7 +580,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       return {
         id: String(c.id),
         type: nodeType,
-        className: getNodeWrapperClassName(String(c.id), false),
+        className: classes.flow_node_wrapper,
         dragHandle: getNodeDragHandleSelector(nodeType),
         position: { x: Number(c.x) || 0, y: Number(c.y) || 0 },
         draggable: canEditCards && !Boolean(c.is_locked),
@@ -592,7 +592,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
         },
       };
     },
-    [canEditCards, getNodeDragHandleSelector, getNodeWrapperClassName]
+    [canEditCards, getNodeDragHandleSelector]
   );
 
   useEffect(() => {
@@ -1545,13 +1545,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
               const selectedNodes = sel?.nodes ?? [];
               if (selectedNodes.length === 1) setLinkSourceNodeId(String(selectedNodes[0].id));
               else setLinkSourceNodeId(null);
-
-              const edgeIsActive = boardMenuView === 'link' && Boolean(selectedLink);
-              if (edgeIsActive) {
-                setEdgeHighlightBySelectedNodes(new Set());
-                return;
-              }
-
               setEdgeHighlightBySelectedNodes(new Set(selectedNodes.map((n) => String(n.id))));
             }}
             onPaneClick={() => {
@@ -1575,8 +1568,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
 
               if (flowCardSettingsOpen) closeFlowCardSettings();
               if (boardMenuView === 'card') closeCardDetails();
-
-              setEdgeHighlightBySelectedNodes(new Set());
 
               const edgeId = `link-${linkId}`;
               selectEdgeAndNodes({
