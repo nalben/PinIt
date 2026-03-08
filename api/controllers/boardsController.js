@@ -51,6 +51,213 @@ const safeUnlinkUpload = async uploadPath => {
 };
 
 const generateInviteToken = () => crypto.randomBytes(24).toString('hex');
+const CARD_DETAIL_BLOCK_TYPES = new Set(['text', 'image', 'facts', 'checklist']);
+const CARD_DETAIL_IMAGE_CAPTION_DEFAULT = 'Описание';
+
+const trimNullableString = value => {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  return normalized ? normalized : null;
+};
+
+const normalizeCardDetailCaption = value => {
+  const caption = trimNullableString(value);
+  if (caption && caption.length > 70) return { ok: false };
+  return { ok: true, value: caption };
+};
+
+const normalizeCardDetailItemContent = value => {
+  const content = trimNullableString(value);
+  if (!content || content.length > 200) return { ok: false };
+  return { ok: true, value: content };
+};
+
+const normalizeCardDetailTextContent = value => {
+  const content = trimNullableString(value);
+  if (!content) return { ok: false };
+  return { ok: true, value: content };
+};
+
+const getNextCardDetailBlockSortOrder = async (connection, cardId) => {
+  const [rows] = await connection.execute(
+    `SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order
+     FROM carddetail_blocks
+     WHERE card_id = ?`,
+    [cardId]
+  );
+
+  const nextSortOrder = Number(rows[0]?.max_sort_order) + 1;
+  return Number.isFinite(nextSortOrder) && nextSortOrder > 0 ? nextSortOrder : 1;
+};
+
+const insertCardDetailBlock = async (connection, params) => {
+  const { cardId, blockType, sortOrder, heading = null } = params;
+  const [result] = await connection.execute(
+    `INSERT INTO carddetail_blocks (card_id, block_type, sort_order, heading)
+     VALUES (?, ?, ?, ?)`,
+    [cardId, blockType, sortOrder, heading]
+  );
+
+  const blockId = Number(result?.insertId);
+  if (!Number.isFinite(blockId) || blockId <= 0) {
+    throw new Error('Failed to create card detail block');
+  }
+
+  return blockId;
+};
+
+const ensureCardDetailsDefaults = async (connection, params) => {
+  const { cardId } = params;
+  const [detailsRows] = await connection.execute(
+    `SELECT card_id
+     FROM carddetails
+     WHERE card_id = ?
+     LIMIT 1`,
+    [cardId]
+  );
+
+  if (!detailsRows.length) {
+    await connection.execute(`INSERT INTO carddetails (card_id) VALUES (?)`, [cardId]);
+  }
+};
+
+const loadCardDetailsPayload = async (connection, cardId, boardId) => {
+  const [detailsRows] = await connection.execute(
+    `SELECT cd.card_id, c.board_id, c.title, c.image_path, cd.created_at, cd.updated_at
+     FROM carddetails cd
+     JOIN cards c ON c.id = cd.card_id
+     WHERE cd.card_id = ? AND c.board_id = ?
+     LIMIT 1`,
+    [cardId, boardId]
+  );
+
+  if (!detailsRows.length) return null;
+
+  const detailsRow = detailsRows[0];
+
+  const [blockRows] = await connection.execute(
+    `SELECT id, card_id, block_type, sort_order, heading, created_at
+     FROM carddetail_blocks
+     WHERE card_id = ?
+     ORDER BY sort_order ASC, id ASC`,
+    [cardId]
+  );
+
+  const blockIds = blockRows.map(row => Number(row.id)).filter(id => Number.isFinite(id) && id > 0);
+  const placeholders = blockIds.map(() => '?').join(', ');
+
+  let textRows = [];
+  let imageRows = [];
+  let factRows = [];
+  let checklistRows = [];
+
+  if (blockIds.length) {
+    [textRows] = await connection.execute(
+      `SELECT block_id, content
+       FROM carddetail_text_blocks
+       WHERE block_id IN (${placeholders})`,
+      blockIds
+    );
+    [imageRows] = await connection.execute(
+      `SELECT block_id, image_path, caption
+       FROM carddetail_image_blocks
+       WHERE block_id IN (${placeholders})`,
+      blockIds
+    );
+    [factRows] = await connection.execute(
+      `SELECT id, block_id, content, sort_order
+       FROM carddetail_fact_items
+       WHERE block_id IN (${placeholders})
+       ORDER BY sort_order ASC, id ASC`,
+      blockIds
+    );
+    [checklistRows] = await connection.execute(
+      `SELECT id, block_id, content, is_checked, sort_order
+       FROM carddetail_checklist_items
+       WHERE block_id IN (${placeholders})
+       ORDER BY sort_order ASC, id ASC`,
+      blockIds
+    );
+  }
+
+  const textByBlockId = new Map(textRows.map(row => [Number(row.block_id), row]));
+  const imageByBlockId = new Map(imageRows.map(row => [Number(row.block_id), row]));
+  const factsByBlockId = new Map();
+  const checklistByBlockId = new Map();
+
+  for (const row of factRows) {
+    const key = Number(row.block_id);
+    const list = factsByBlockId.get(key) || [];
+    list.push({
+      id: Number(row.id),
+      content: row.content,
+      sort_order: Number(row.sort_order),
+    });
+    factsByBlockId.set(key, list);
+  }
+
+  for (const row of checklistRows) {
+    const key = Number(row.block_id);
+    const list = checklistByBlockId.get(key) || [];
+    list.push({
+      id: Number(row.id),
+      content: row.content,
+      is_checked: typeof row.is_checked === 'number' ? row.is_checked : Number(Boolean(row.is_checked)),
+      sort_order: Number(row.sort_order),
+    });
+    checklistByBlockId.set(key, list);
+  }
+
+  const blocks = blockRows.map(row => {
+    const blockId = Number(row.id);
+    const base = {
+      id: blockId,
+      card_id: Number(row.card_id),
+      block_type: row.block_type,
+      sort_order: Number(row.sort_order),
+      heading: row.heading ?? null,
+      created_at: row.created_at,
+    };
+
+    if (row.block_type === 'text') {
+      return {
+        ...base,
+        content: textByBlockId.get(blockId)?.content ?? '',
+      };
+    }
+
+    if (row.block_type === 'image') {
+      const imageRow = imageByBlockId.get(blockId);
+      return {
+        ...base,
+        image_path: imageRow?.image_path ?? null,
+        caption: imageRow?.caption ?? null,
+      };
+    }
+
+    if (row.block_type === 'facts') {
+      return {
+        ...base,
+        items: factsByBlockId.get(blockId) || [],
+      };
+    }
+
+    return {
+      ...base,
+      items: checklistByBlockId.get(blockId) || [],
+    };
+  });
+
+  return {
+    card_id: Number(detailsRow.card_id),
+    board_id: Number(detailsRow.board_id),
+    title: detailsRow.title,
+    image_path: detailsRow.image_path ?? null,
+    created_at: detailsRow.created_at,
+    updated_at: detailsRow.updated_at,
+    blocks,
+  };
+};
 
 const emitBoardsUpdatedToBoardUsers = async (req, boardId, payload, extraUserIds = []) => {
   try {
@@ -2069,20 +2276,34 @@ exports.getCardDetails = async (req, res) => {
       return res.status(404).json({ message: 'Доска не найдена' });
     }
 
-    const [rows] = await db.execute(
-      `SELECT cd.card_id, c.board_id, c.title, cd.created_at, cd.updated_at
-       FROM carddetails cd
-       JOIN cards c ON c.id = cd.card_id
-       WHERE cd.card_id = ? AND c.board_id = ?
-       LIMIT 1`,
-      [cardId, boardId]
-    );
+    const connection = await db.getConnection();
+    try {
+      const [cardRows] = await connection.execute(
+        `SELECT title, image_path
+         FROM cards
+         WHERE id = ? AND board_id = ?
+         LIMIT 1`,
+        [cardId, boardId]
+      );
 
-    if (!rows.length) {
-      return res.status(404).json({ message: 'Запись не найдена' });
+      if (!cardRows.length) {
+        return res.status(404).json({ message: 'Запись не найдена' });
+      }
+
+      await ensureCardDetailsDefaults(connection, {
+        cardId,
+        cardTitle: cardRows[0]?.title ?? null,
+      });
+
+      const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      if (!payload) {
+        return res.status(404).json({ message: 'Запись не найдена' });
+      }
+
+      return res.status(200).json(payload);
+    } finally {
+      connection.release();
     }
-
-    return res.status(200).json(rows[0]);
   } catch (e) {
     console.error(e);
     return res.status(500).json({ message: 'Ошибка получения карточки' });
@@ -2174,26 +2395,595 @@ exports.getPublicCardDetails = async (req, res) => {
       }
     }
 
-    const [rows] = await db.execute(
-      `SELECT cd.card_id, c.board_id, c.title, cd.created_at, cd.updated_at
-       FROM carddetails cd
-       JOIN cards c ON c.id = cd.card_id
-       WHERE cd.card_id = ? AND c.board_id = ?
-       LIMIT 1`,
-      [cardId, boardId]
-    );
+    const connection = await db.getConnection();
+    try {
+      const [cardRows] = await connection.execute(
+        `SELECT title, image_path
+         FROM cards
+         WHERE id = ? AND board_id = ?
+         LIMIT 1`,
+        [cardId, boardId]
+      );
 
-    if (!rows.length) {
-      return res.status(404).json({ message: 'Запись не найдена' });
+      if (!cardRows.length) {
+        return res.status(404).json({ message: 'Запись не найдена' });
+      }
+
+      await ensureCardDetailsDefaults(connection, {
+        cardId,
+        cardTitle: cardRows[0]?.title ?? null,
+      });
+
+      const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      if (!payload) {
+        return res.status(404).json({ message: 'Запись не найдена' });
+      }
+
+      return res.status(200).json(payload);
+    } finally {
+      connection.release();
     }
-
-    return res.status(200).json(rows[0]);
   } catch (e) {
     console.error(e);
     return res.status(500).json({ message: 'Ошибка получения карточки' });
   }
 };
 
+exports.createCardDetailsBlock = async (req, res) => {
+  let newImage = null;
+
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+    const blockType = String(req.body?.type || '').trim();
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    if (!CARD_DETAIL_BLOCK_TYPES.has(blockType)) {
+      if (req.file) await safeUnlinkUpload(`/uploads/${req.file.filename}`);
+      return res.status(400).json({ message: 'Некорректный тип блока' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      if (req.file) await safeUnlinkUpload(`/uploads/${req.file.filename}`);
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      if (req.file) await safeUnlinkUpload(`/uploads/${req.file.filename}`);
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    if (blockType === 'image') {
+      if (!req.file) {
+        return res.status(400).json({ message: 'Картинка обязательна' });
+      }
+      newImage = `/uploads/${req.file.filename}`;
+      if (newImage.length > 255) {
+        await safeUnlinkUpload(newImage);
+        return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
+      }
+    }
+
+    if (blockType === 'text') {
+      const textResult = normalizeCardDetailTextContent(req.body?.content);
+      if (!textResult.ok) {
+        return res.status(400).json({ message: 'Пустой текст нельзя сохранить' });
+      }
+    }
+
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      const [cardRows] = await connection.execute(
+        `SELECT title, image_path
+         FROM cards
+         WHERE id = ? AND board_id = ?
+         LIMIT 1`,
+        [cardId, boardId]
+      );
+
+      if (!cardRows.length) {
+        await connection.rollback();
+        if (newImage) await safeUnlinkUpload(newImage);
+        return res.status(404).json({ message: 'Запись не найдена' });
+      }
+
+      await ensureCardDetailsDefaults(connection, {
+        cardId,
+        cardTitle: cardRows[0]?.title ?? null,
+      });
+
+      const nextSortOrder = await getNextCardDetailBlockSortOrder(connection, cardId);
+      const blockId = await insertCardDetailBlock(connection, {
+        cardId,
+        blockType,
+        sortOrder: nextSortOrder,
+      });
+
+      if (blockType === 'image') {
+        await connection.execute(
+          `INSERT INTO carddetail_image_blocks (block_id, image_path, caption)
+           VALUES (?, ?, ?)`,
+          [blockId, newImage, CARD_DETAIL_IMAGE_CAPTION_DEFAULT]
+        );
+      } else if (blockType === 'text') {
+        await connection.execute(
+          `INSERT INTO carddetail_text_blocks (block_id, content)
+           VALUES (?, ?)`,
+          [blockId, String(req.body?.content).trim()]
+        );
+      }
+
+      await connection.commit();
+
+      const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      return res.status(201).json(payload);
+    } catch (e) {
+      try {
+        await connection.rollback();
+      } catch {
+        // ignore
+      }
+      throw e;
+    } finally {
+      connection.release();
+    }
+  } catch (e) {
+    if (newImage) await safeUnlinkUpload(newImage);
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка создания блока' });
+  }
+};
+exports.updateCardDetailsBlock = async (req, res) => {
+  let newImage = null;
+
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+    const blockId = Number(req.params?.block_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0 ||
+      !Number.isFinite(blockId) ||
+      blockId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+      const [blockRows] = await connection.execute(
+        `SELECT b.id, b.block_type
+         FROM carddetail_blocks b
+         JOIN cards c ON c.id = b.card_id
+         WHERE b.id = ? AND b.card_id = ? AND c.board_id = ?
+         LIMIT 1`,
+        [blockId, cardId, boardId]
+      );
+
+      if (!blockRows.length) {
+        return res.status(404).json({ message: 'Блок не найден' });
+      }
+
+      const blockType = String(blockRows[0]?.block_type || '');
+
+      if (blockType === 'text') {
+        const textResult = normalizeCardDetailTextContent(req.body?.content);
+        if (!textResult.ok) {
+          return res.status(400).json({ message: 'Пустой текст нельзя сохранить' });
+        }
+
+        await connection.execute(
+          `UPDATE carddetail_text_blocks
+           SET content = ?
+           WHERE block_id = ?`,
+          [textResult.value, blockId]
+        );
+      } else if (blockType === 'image') {
+        const hasCaption = Object.prototype.hasOwnProperty.call(req.body || {}, 'caption');
+        const hasImageRemove = req.body?.image === null;
+        const hasImageUpload = Boolean(req.file);
+        const updates = [];
+        const params = [];
+
+        if (hasCaption) {
+          const captionResult = normalizeCardDetailCaption(req.body?.caption);
+          if (!captionResult.ok) {
+            return res.status(400).json({ message: 'Некорректная подпись' });
+          }
+          updates.push('caption = ?');
+          params.push(captionResult.value);
+        }
+
+        if (hasImageUpload || hasImageRemove) {
+          const [imageRows] = await connection.execute(
+            `SELECT image_path
+             FROM carddetail_image_blocks
+             WHERE block_id = ?
+             LIMIT 1`,
+            [blockId]
+          );
+
+          const oldImage = imageRows[0]?.image_path ?? null;
+          newImage = hasImageUpload && req.file ? `/uploads/${req.file.filename}` : null;
+
+          if (newImage && newImage.length > 255) {
+            await safeUnlinkUpload(newImage);
+            return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
+          }
+
+          updates.push('image_path = ?');
+          params.push(hasImageRemove ? null : newImage);
+
+          const oldRel = getUploadsRelativePath(oldImage);
+          const nextRel = getUploadsRelativePath(hasImageRemove ? null : newImage);
+          if (oldRel && oldRel !== nextRel) {
+            await safeUnlinkUpload(oldImage);
+          }
+        }
+
+        if (!updates.length) {
+          return res.status(400).json({ message: 'Нет полей для обновления' });
+        }
+
+        params.push(blockId);
+        await connection.execute(
+          `UPDATE carddetail_image_blocks
+           SET ${updates.join(', ')}
+           WHERE block_id = ?`,
+          params
+        );
+      } else {
+        return res.status(400).json({ message: 'Этот блок пока не поддерживает PATCH' });
+      }
+
+      const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      return res.status(200).json(payload);
+    } finally {
+      connection.release();
+    }
+  } catch (e) {
+    if (newImage) await safeUnlinkUpload(newImage);
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления блока' });
+  }
+};
+
+exports.deleteCardDetailsBlock = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+    const blockId = Number(req.params?.block_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0 ||
+      !Number.isFinite(blockId) ||
+      blockId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+      const [blockRows] = await connection.execute(
+        `SELECT ib.image_path
+         FROM carddetail_blocks b
+         JOIN cards c ON c.id = b.card_id
+         LEFT JOIN carddetail_image_blocks ib ON ib.block_id = b.id
+         WHERE b.id = ? AND b.card_id = ? AND c.board_id = ?
+         LIMIT 1`,
+        [blockId, cardId, boardId]
+      );
+
+      if (!blockRows.length) {
+        return res.status(404).json({ message: 'Блок не найден' });
+      }
+
+      const imagePath = blockRows[0]?.image_path ?? null;
+      await connection.execute(`DELETE FROM carddetail_blocks WHERE id = ? AND card_id = ?`, [blockId, cardId]);
+      if (imagePath) {
+        await safeUnlinkUpload(imagePath);
+      }
+
+      const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      return res.status(200).json(payload);
+    } finally {
+      connection.release();
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка удаления блока' });
+  }
+};
+exports.createCardDetailsBlockItem = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+    const blockId = Number(req.params?.block_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0 ||
+      !Number.isFinite(blockId) ||
+      blockId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const itemResult = normalizeCardDetailItemContent(req.body?.content);
+    if (!itemResult.ok) {
+      return res.status(400).json({ message: 'Некорректный текст элемента' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+      const [blockRows] = await connection.execute(
+        `SELECT block_type
+         FROM carddetail_blocks b
+         JOIN cards c ON c.id = b.card_id
+         WHERE b.id = ? AND b.card_id = ? AND c.board_id = ?
+         LIMIT 1`,
+        [blockId, cardId, boardId]
+      );
+
+      if (!blockRows.length) {
+        return res.status(404).json({ message: 'Блок не найден' });
+      }
+
+      const blockType = String(blockRows[0]?.block_type || '');
+      if (blockType !== 'facts' && blockType !== 'checklist') {
+        return res.status(400).json({ message: 'Некорректный тип блока для элементов' });
+      }
+
+      const tableName = blockType === 'facts' ? 'carddetail_fact_items' : 'carddetail_checklist_items';
+      const [sortRows] = await connection.execute(
+        `SELECT COALESCE(MAX(sort_order), 0) AS max_sort_order
+         FROM ${tableName}
+         WHERE block_id = ?`,
+        [blockId]
+      );
+      const nextSortOrder = Number(sortRows[0]?.max_sort_order) + 1;
+
+      if (blockType === 'facts') {
+        await connection.execute(
+          `INSERT INTO carddetail_fact_items (block_id, content, sort_order)
+           VALUES (?, ?, ?)`,
+          [blockId, itemResult.value, nextSortOrder]
+        );
+      } else {
+        await connection.execute(
+          `INSERT INTO carddetail_checklist_items (block_id, content, is_checked, sort_order)
+           VALUES (?, ?, 0, ?)`,
+          [blockId, itemResult.value, nextSortOrder]
+        );
+      }
+
+      const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      return res.status(201).json(payload);
+    } finally {
+      connection.release();
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка создания элемента' });
+  }
+};
+
+exports.updateCardDetailsBlockItem = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+    const blockId = Number(req.params?.block_id);
+    const itemId = Number(req.params?.item_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0 ||
+      !Number.isFinite(blockId) ||
+      blockId <= 0 ||
+      !Number.isFinite(itemId) ||
+      itemId <= 0
+    ) {
+      return res.status(400).json({ message: 'Некорректные параметры' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Доска не найдена' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'Нет доступа' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+      const [blockRows] = await connection.execute(
+        `SELECT block_type
+         FROM carddetail_blocks b
+         JOIN cards c ON c.id = b.card_id
+         WHERE b.id = ? AND b.card_id = ? AND c.board_id = ?
+         LIMIT 1`,
+        [blockId, cardId, boardId]
+      );
+
+      if (!blockRows.length) {
+        return res.status(404).json({ message: 'Блок не найден' });
+      }
+
+      const blockType = String(blockRows[0]?.block_type || '');
+      if (blockType !== 'facts' && blockType !== 'checklist') {
+        return res.status(400).json({ message: 'Некорректный тип блока для элемента' });
+      }
+
+      const itemResult = Object.prototype.hasOwnProperty.call(req.body || {}, 'content')
+        ? normalizeCardDetailItemContent(req.body?.content)
+        : null;
+
+      if (itemResult && !itemResult.ok) {
+        return res.status(400).json({ message: 'Некорректный текст элемента' });
+      }
+
+      if (blockType === 'facts') {
+        if (!itemResult) {
+          return res.status(400).json({ message: 'Нет полей для обновления' });
+        }
+
+        await connection.execute(
+          `UPDATE carddetail_fact_items
+           SET content = ?
+           WHERE id = ? AND block_id = ?`,
+          [itemResult.value, itemId, blockId]
+        );
+      } else {
+        const updates = [];
+        const params = [];
+
+        if (itemResult) {
+          updates.push('content = ?');
+          params.push(itemResult.value);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(req.body || {}, 'is_checked')) {
+          updates.push('is_checked = ?');
+          params.push(Boolean(req.body?.is_checked) ? 1 : 0);
+        }
+
+        if (!updates.length) {
+          return res.status(400).json({ message: 'Нет полей для обновления' });
+        }
+
+        params.push(itemId, blockId);
+        await connection.execute(
+          `UPDATE carddetail_checklist_items
+           SET ${updates.join(', ')}
+           WHERE id = ? AND block_id = ?`,
+          params
+        );
+      }
+
+      const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      return res.status(200).json(payload);
+    } finally {
+      connection.release();
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Ошибка обновления элемента' });
+  }
+};
 exports.getBoardLinks = async (req, res) => {
   try {
     const user_id = Number(req.user?.id);
@@ -2770,7 +3560,7 @@ exports.updateCardImage = async (req, res) => {
     }
 
     const [cardRows] = await db.execute(
-      `SELECT image_path FROM cards WHERE id = ? AND board_id = ? LIMIT 1`,
+      `SELECT title, image_path FROM cards WHERE id = ? AND board_id = ? LIMIT 1`,
       [cardId, boardId]
     );
 
@@ -2782,6 +3572,16 @@ exports.updateCardImage = async (req, res) => {
     const oldImage = cardRows[0]?.image_path ?? null;
 
     await db.execute(`UPDATE cards SET image_path = ? WHERE id = ? AND board_id = ?`, [newImage, cardId, boardId]);
+
+    const connection = await db.getConnection();
+    try {
+      await ensureCardDetailsDefaults(connection, {
+        cardId,
+        cardTitle: cardRows[0]?.title ?? null,
+      });
+    } finally {
+      connection.release();
+    }
 
     const oldRel = getUploadsRelativePath(oldImage);
     const newRel = getUploadsRelativePath(newImage);
@@ -3174,3 +3974,5 @@ exports.deleteCard = async (req, res) => {
     return res.status(500).json({ message: 'Ошибка удаления' });
   }
 };
+
+

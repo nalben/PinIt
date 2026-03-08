@@ -92,6 +92,23 @@ const Root = () => {
   }, [triggerEscape]);
 
   useEffect(() => {
+    const suppressedMessages = new Set([
+      'ResizeObserver loop completed with undelivered notifications.',
+      'ResizeObserver loop limit exceeded',
+    ]);
+
+    const onWindowError = (e: Event) => {
+      const errorEvent = e as ErrorEvent;
+      if (!suppressedMessages.has(String(errorEvent.message ?? ''))) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+    };
+
+    window.addEventListener('error', onWindowError, true);
+    return () => window.removeEventListener('error', onWindowError, true);
+  }, []);
+
+  useEffect(() => {
     if (!isInitialized) return;
     if (!isAuth) {
       disconnectSocket();

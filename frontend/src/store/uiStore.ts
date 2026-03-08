@@ -107,6 +107,7 @@ interface UIState {
   openCardDetails: (snapshot: SelectedCardDetailsSnapshot, options?: { openMenu?: boolean }) => void;
   closeCardDetails: () => void;
   openCardDetailsFromNode: (snapshot: SelectedCardDetailsSnapshot) => void;
+  patchSelectedCardDetails: (patch: Partial<SelectedCardDetailsSnapshot>) => void;
   openFlowCardSettingsFromNode: (snapshot: FlowCardSettingsSnapshot) => void;
   handleBoardMenuBlur: () => void;
   openBoardSettingsModal: (view?: BoardSettingsModalView) => void;
@@ -344,6 +345,8 @@ export const useUIStore = create<UIState>((set, get) => {
     }
     get().openCardDetails(snapshot, { openMenu: true });
   },
+  patchSelectedCardDetails: (patch) =>
+    set((s) => (s.selectedCardDetails ? { selectedCardDetails: { ...s.selectedCardDetails, ...patch } } : {})),
   openFlowCardSettingsFromNode: (snapshot) => {
     const wide = isWideBoardMenu();
     get().openFlowCardSettings(snapshot, { keepBoardMenuOpen: wide });

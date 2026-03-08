@@ -49,7 +49,7 @@
 .menu.middleleft{
     top: auto;
     bottom: -60%;
-    right: 130%;
+    right: calc(100% + 5px);
 }
 .menu.upDel{
     top: auto;

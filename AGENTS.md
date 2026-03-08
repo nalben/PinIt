@@ -1126,6 +1126,42 @@ Update (2026-03-05)
 - Board page right menu default state in `uiStore` is closed on mount; `frontend/src/pages/board/Board.tsx` auto-opens it only on `window.innerWidth >= 1440` (`BOARD_MENU_AUTO_OPEN_MIN_WIDTH`).
 - Wide-menu behavior for combined board/details flows still uses `BOARD_MENU_WIDE_MIN_WIDTH` from `uiStore` (`1700px` threshold).
 
+Update (2026-03-06)
+
+- `carddetails` now also stores independent details heading in `carddetails.heading VARCHAR(50) NULL`; SQL migration: `api/sql/2026-03-06-carddetails-heading.sql`.
+- Card details GET endpoints now return full details payload (not only metadata): `card_id`, `board_id`, `title`, `image_path`, `heading`, timestamps, and ordered `blocks[]` with normalized payload by type:
+  - `image`: `image_path`, `caption`
+  - `text`: `content`
+  - `facts` / `checklist`: `items[]` ordered by `sort_order` (`checklist` items also carry `is_checked`)
+- New authenticated card-details mutation endpoints:
+  - `PATCH /api/boards/:board_id/cards/:card_id/details` — updates `carddetails.heading` (owner/`editer` only).
+  - `POST /api/boards/:board_id/cards/:card_id/details/blocks` — appends a details block; supports `type: image|text|facts|checklist`, and for `image` accepts multipart `image`.
+  - `PATCH /api/boards/:board_id/cards/:card_id/details/blocks/:block_id` — updates text-block `content` or image-block `caption`.
+  - `POST /api/boards/:board_id/cards/:card_id/details/blocks/:block_id/items` — appends an item inside `facts` / `checklist` block.
+  - `PATCH /api/boards/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id` — updates fact/checklist item text; for checklist also updates `is_checked`.
+- `api/controllers/boardsController.js` now ensures default details state:
+  - `createCard` initializes `carddetails.heading` from the new card title.
+  - `updateCardImage` does not create details blocks automatically.
+  - Both details GET endpoints lazily backfill only `carddetails.heading` for older records.
+- Right-menu card details UI now lives in `frontend/src/pages/board/BoardRightMenuCardDetails.tsx` and is rendered from `frontend/src/pages/board/BoardRightMenu.tsx`:
+  - panel heading is editable independently from node title;
+  - panel can open with zero details blocks by default.
+  - bottom buttons create local draft UI for `image` / `text` / `facts` / `checklist`; DB rows are created only after explicit save.
+  - empty draft blocks are removed on blur/cancel and are not persisted.
+  - saved blocks render as static content in the menu; drafts use temporary inputs/textareas before save.
+
+Update (2026-03-08)
+
+- Right-menu card details title is now taken directly from the selected node title snapshot (`selectedCardDetails.title`) and no longer depends on `carddetails.heading`.
+- `frontend/src/store/uiStore.ts` now exposes `patchSelectedCardDetails(patch)`; `frontend/src/components/flow/FlowBoard.tsx` calls it from live title editing so the right-menu card title updates immediately while typing in the lower node editor.
+- Backend card-details reads/writes no longer require `carddetails.heading`; current code only ensures the `carddetails` row exists and returns card meta + blocks.
+- Card-details block routes now also support image-block management:
+  - `PATCH /api/boards/:board_id/cards/:card_id/details/blocks/:block_id` accepts multipart `image` to replace `carddetail_image_blocks.image_path` for image blocks (and still updates text content / image caption).
+  - `DELETE /api/boards/:board_id/cards/:card_id/details/blocks/:block_id` deletes a details block and removes its uploaded image file when applicable.
+- `frontend/src/pages/board/BoardRightMenuCardDetails.tsx` image blocks now expose replace/delete controls:
+  - desktop: delete button appears at top-right on hover, edit button appears centered on hover;
+  - mobile: both buttons are always visible at top-right.
+
 Update (2026-03-04)
 
 - Added admin-only guard endpoint `GET /api/admin/check` (JWT required; verifies `users.role = 'admin'`) via `api/middleware/adminOnly.js` + `api/routes/adminRouter.js`.
@@ -1150,13 +1186,13 @@ Update (2026-03-03, `components/flowboard` usage and function-sorting rules)
   - `components/FlowLinkModeAlarm.tsx`: shared centered overlay for 2-click link mode prompts.
   - `hooks/useBoardAccess.ts`: board access/loading flow orchestration for `/spaces/:boardId` (auth/non-auth/public/invite paths).
   - `hooks/useFlowBoardMenuTransitions.ts`: FlowBoard node/edge click orchestration for menu transitions (right board menu, link inspector, card details, bottom card settings).
-  - `hooks/useParticipantsListScroll.ts`: participants list overflow detection (layout + resize observer handling).
   - `hooks/useFlowSelection.ts`: shared node/edge selection actions (`clear/select/highlight`) for FlowBoard.
   - `utils/linkSocketPayload.ts`: parser/normalizer for `boards:updated` link payload (`link_created/link_updated`).
   - `utils/flowEdgeData.ts`: parser/normalizer for ReactFlow edge `data` into typed link inspector payload.
   - `utils/avatar.ts`: avatar URL resolver (uploads path handling).
 - Verified consumers:
-  - `Board.tsx` uses `useBoardAccess`, `useParticipantsListScroll`, `resolveAvatarSrc`, `InviteAuthModals`.
+  - `Board.tsx` uses `useBoardAccess`, `BoardRightMenu`, `InviteAuthModals`.
+  - `BoardRightMenu.tsx` (in `frontend/src/pages/board/`) owns right-menu UI rendering for board/link/card views and uses `resolveAvatarSrc`.
   - `FlowBoard.tsx` uses `useFlowSelection`, `useFlowBoardMenuTransitions`, `parseFlowEdgeData`, `FlowLinkModeAlarm`.
   - `useFlowBoardBoardsUpdatedSocket.ts` uses `parseLinkFromBoardsUpdated`.
 

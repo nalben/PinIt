@@ -20,6 +20,7 @@ import Members from '@/assets/icons/monochrome/members.svg';
 import SwitchIcon from '@/assets/icons/monochrome/switch.svg';
 import Plus from '@/assets/icons/monochrome/plus.svg';
 import LinkIcon from '@/assets/icons/monochrome/link.svg';
+import { BoardRightMenuCardDetails } from './BoardRightMenuCardDetails';
 
 type BoardInfoViewModel = {
   title: string | null;
@@ -321,17 +322,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
           </div>
         ) : boardMenuView === 'card' && selectedCardDetails ? (
           <div className={classes.link_inspector_root}>
-            <div className={classes.link_inspector_header}>
-              <div className={classes.link_inspector_title}>Карточка</div>
-            </div>
-            <div className={classes.link_inspector_meta}>
-              <div>
-                <span>Название:</span> {selectedCardDetails.title || `#${selectedCardDetails.cardId}`}
-              </div>
-            </div>
-            <div className={classes.link_inspector_actions}>
-              <Mainbtn variant="mini" kind="button" type="button" text="Назад" onClick={() => closeCardDetails()} />
-            </div>
+            <BoardRightMenuCardDetails canEditCards={canEditCards} isLoggedIn={isLoggedIn} selectedCardDetails={selectedCardDetails} />
           </div>
         ) : (
           <div className={classes.board_info}>
@@ -567,4 +558,3 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
     </div>
   );
 };
-

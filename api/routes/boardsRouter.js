@@ -83,6 +83,11 @@ router.patch('/:board_id/image', maybeUploadSingleImage, boardsController.update
 router.post('/:board_id/cards', boardsController.createCard);
 router.get('/:board_id/cards', boardsController.getBoardCards);
 router.get('/:board_id/cards/:card_id/details', boardsController.getCardDetails);
+router.post('/:board_id/cards/:card_id/details/blocks', maybeUploadSingleImage, boardsController.createCardDetailsBlock);
+router.patch('/:board_id/cards/:card_id/details/blocks/:block_id', maybeUploadSingleImage, boardsController.updateCardDetailsBlock);
+router.delete('/:board_id/cards/:card_id/details/blocks/:block_id', boardsController.deleteCardDetailsBlock);
+router.post('/:board_id/cards/:card_id/details/blocks/:block_id/items', boardsController.createCardDetailsBlockItem);
+router.patch('/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id', boardsController.updateCardDetailsBlockItem);
 router.patch('/:board_id/cards/:card_id', boardsController.updateCard);
 router.patch('/:board_id/cards/:card_id/lock', boardsController.updateCardLock);
 router.patch('/:board_id/cards/:card_id/image', maybeUploadSingleImage, boardsController.updateCardImage);

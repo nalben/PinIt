@@ -401,6 +401,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   const closeLinkInspector = useUIStore((s) => s.closeLinkInspector);
   const openCardDetails = useUIStore((s) => s.openCardDetails);
   const openCardDetailsFromNode = useUIStore((s) => s.openCardDetailsFromNode);
+  const patchSelectedCardDetails = useUIStore((s) => s.patchSelectedCardDetails);
   const closeCardDetails = useUIStore((s) => s.closeCardDetails);
   const handleBoardMenuBlur = useUIStore((s) => s.handleBoardMenuBlur);
   const boardMenuView = useUIStore((s) => s.boardMenuView);
@@ -1271,6 +1272,12 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     const next = String(title ?? '').slice(0, 50);
     setFlowCardSettingsDraft({ title: next });
     applyPreviewToNode(activeNodeId, { title: next });
+    if (!String(activeNodeId).startsWith('draft-')) {
+      const cardId = Number(activeNodeId);
+      if (Number.isFinite(cardId) && cardId > 0) {
+        patchSelectedCardDetails({ cardId, boardId: numericBoardId, title: next });
+      }
+    }
   };
 
   const setDraftTypeLive = (type: FlowNodeType) => {
@@ -1513,6 +1520,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
             edges={edgesForRender}
             fitView
             zoomOnDoubleClick={false}
+            deleteKeyCode={null}
             selectionKeyCode={null}
             selectionOnDrag={__PLATFORM__ === 'desktop' ? selectionModifierPressed : false}
             panOnDrag={__PLATFORM__ === 'desktop' ? !selectionModifierPressed : true}
