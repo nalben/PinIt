@@ -302,7 +302,8 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
             const src = resolveImageSrc(block.image_path ?? null);
             const isDeleteConfirmOpen = confirmDeleteBlockId === block.id;
             const isCaptionEditing = editingCaptionBlockId === block.id;
-            const captionText = (block.caption ?? 'Описание').slice(0, IMAGE_CAPTION_MAX_LENGTH);
+            const savedCaption = (block.caption ?? '').slice(0, IMAGE_CAPTION_MAX_LENGTH);
+            const captionText = isCaptionEditing ? savedCaption : savedCaption || 'Описание';
             return (
               <div key={block.id} className={classes.image_block}>
                 <input
