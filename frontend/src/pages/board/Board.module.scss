@@ -1202,24 +1202,39 @@
     vertical-align: text-bottom;
     position: relative;
     z-index: 1;
-    align-items: center;
     .text_block_edit_btn{
         margin-left: 0;
     }
+    & button{
+        & svg {
+            width: 26px;
+            height: 26px;
+        }
+    }
+    & div{
+        & button{
+            & svg {
+                width: 20px;
+                height: 20px;
+                min-height: 20px;
+            }
+        }
+    }
+    & div:nth-child(2){
+        & div:nth-child(1){
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+    }
 }
 .text_block_edit_btn{
-    width: 24px;
-    height: 24px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     margin-left: 0.3rem;
     vertical-align: text-bottom;
-    & svg{
-        width: 24px;
-        height: 24px;
-    }
 }
 .text_block_textarea{
     width: 100%;
@@ -1360,11 +1375,16 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
+    padding-right: 0.5rem;
 }
 
 .details_editor_block{
 
 }
 .details_textarea{
-
+    font-weight: 500;
+    font-family: inherit;
+    font-size: inherit;
+    border-color: var(--pink);
+    padding: 0px;
 }

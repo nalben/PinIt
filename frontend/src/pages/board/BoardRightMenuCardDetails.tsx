@@ -80,13 +80,19 @@ const createDraftId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random
 const IMAGE_CAPTION_MAX_LENGTH = 70;
 const IMAGE_BLOCK_TOO_LARGE_MESSAGE = 'Вес слишком большой — выберите изображение весом до 5 МБ.';
 const normalizeSingleLine = (value: string) => value.replace(/[\r\n]+/g, ' ');
-const autosizeTextarea = (node: HTMLTextAreaElement | null) => {
+const shouldAddExtraSpacer = (node: HTMLTextAreaElement | null) => {
+  if (!node) return false;
+  const detailsContainer = node.closest(`.${classes.details_blocks}`);
+  if (!detailsContainer) return false;
+  return detailsContainer.scrollHeight > detailsContainer.clientHeight;
+};
+const autosizeTextarea = (node: HTMLTextAreaElement | null, needsExtra = false) => {
   if (!node) return;
   const computed = window.getComputedStyle(node);
   const borderTop = Number.parseFloat(computed.borderTopWidth) || 0;
   const borderBottom = Number.parseFloat(computed.borderBottomWidth) || 0;
   node.style.height = 'auto';
-  node.style.height = `${node.scrollHeight + borderTop + borderBottom +30}px`;
+  node.style.height = `${node.scrollHeight + borderTop + borderBottom + (needsExtra ? 30 : 0)}px`;
 };
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   const maybeError = error as { response?: { data?: { message?: unknown } } } | null;
@@ -485,12 +491,15 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   <textarea
                     ref={(node) => {
                       textBlockRefs.current[block.id] = node;
-                      autosizeTextarea(node);
+                      autosizeTextarea(node, shouldAddExtraSpacer(node));
                     }}
                     className={classes.text_block_textarea}
                     defaultValue={block.content}
                     autoFocus
-                    onInput={(event) => autosizeTextarea(event.currentTarget)}
+                    onInput={(event) => {
+                      const target = event.currentTarget;
+                      autosizeTextarea(target, shouldAddExtraSpacer(target));
+                    }}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' && !event.shiftKey) {
                         event.preventDefault();
