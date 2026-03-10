@@ -8,8 +8,11 @@ type DropdownWrapperProps = {
   noti?: boolean;
   middle?: boolean;
   middleleft?: boolean;
+  middleleftTop?: boolean;
   up?: boolean;
   upDel?: boolean;
+  fixed?: boolean;
+  minWidthPx?: number;
   menuClassName?: string;
   children: [React.ReactNode, React.ReactNode];
   closeOnClick?: boolean;
@@ -22,10 +25,13 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   right,
   middle,
   middleleft,
+  middleleftTop,
   profile,
   noti,
   up,
   upDel,
+  fixed,
+  minWidthPx,
   menuClassName,
   children,
   closeOnClick = true,
@@ -54,8 +60,9 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   };
 
   const handleItemClick = (event: React.MouseEvent, child: React.ReactNode) => {
+    const shouldProxyItemClick = middleleft || middleleftTop || up || upDel || fixed;
     if (
-      (middleleft || up || upDel) &&
+      shouldProxyItemClick &&
       event.target === event.currentTarget &&
       React.isValidElement(child) &&
       typeof (child.props as { onClick?: unknown }).onClick === "function"
@@ -72,7 +79,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   const positionClass = [
     profile ? styles.profile : "",
     noti ? styles.noti : "",
-    !profile && !noti
+    !fixed && !profile && !noti
       ? left
         ? styles.left
         : right
@@ -81,12 +88,12 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
             ? styles.middle
             : styles.middle
       : "",
-    middleleft ? styles.middleleft : "",
-    up || upDel ? styles.up : "",
-    upDel ? styles.upDel : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    !fixed && middleleft ? styles.middleleft : "",
+    !fixed && middleleftTop ? styles.middleleftTop : "",
+    !fixed && (up || upDel) ? styles.up : "",
+    !fixed && upDel ? styles.upDel : "",
+    fixed ? styles.fixed : "",
+  ].filter(Boolean).join(" ");
 
   const updatePosition = () => {
     const wrapper = wrapperRef.current;
@@ -130,6 +137,51 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     });
   };
 
+  const updateFixedPosition = () => {
+    const wrapper = wrapperRef.current;
+    const menu = dropdownRef.current;
+    if (!wrapper || !menu) return;
+
+    const getFixedContainingRect = () => {
+      let node: HTMLElement | null = wrapper;
+      while (node) {
+        const parent = node.parentElement;
+        if (!parent) break;
+        if (parent === document.body) break;
+        const style = window.getComputedStyle(parent);
+        if (style.transform !== "none" || style.perspective !== "none" || style.filter !== "none") {
+          return parent.getBoundingClientRect();
+        }
+        node = parent;
+      }
+      return { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+    };
+
+    const wrapperRect = wrapper.getBoundingClientRect();
+    const menuWidth = menu.offsetWidth;
+    const menuHeight = menu.offsetHeight;
+    const cb = getFixedContainingRect();
+    const margin = 8;
+
+    let leftPx = wrapperRect.right - menuWidth;
+    if (left) leftPx = wrapperRect.left;
+    if (middle) leftPx = wrapperRect.left + wrapperRect.width / 2 - menuWidth / 2;
+    leftPx = Math.min(Math.max(leftPx, cb.left + margin), cb.left + cb.width - menuWidth - margin);
+
+    const belowTop = wrapperRect.bottom + 15;
+    const aboveTop = wrapperRect.top - 15 - menuHeight;
+    let topPx = belowTop;
+    if (belowTop + menuHeight + margin > cb.top + cb.height) topPx = aboveTop;
+    topPx = Math.min(Math.max(topPx, cb.top + margin), cb.top + cb.height - menuHeight - margin);
+
+    setMenuStyle({
+      left: `${Math.round(leftPx - cb.left)}px`,
+      top: `${Math.round(topPx - cb.top)}px`,
+      right: "auto",
+      transform: "none"
+    });
+  };
+
   const handleClickOutside = (event: MouseEvent) => {
     const wrapper = wrapperRef.current;
     const menu = dropdownRef.current;
@@ -145,18 +197,27 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   };
 
   useLayoutEffect(() => {
-    if (open) updatePosition();
-  }, [left, right, middle, middleleft, profile, noti, up, upDel, open]);
+    if (!open) return;
+    if (fixed) updateFixedPosition();
+    else updatePosition();
+  }, [left, right, middle, middleleft, profile, noti, up, upDel, fixed, open]);
 
   useEffect(() => {
-    updatePosition();
-    window.addEventListener("resize", updatePosition);
+    if (fixed) updateFixedPosition();
+    else updatePosition();
+
+    const handleResize = () => {
+      if (fixed) updateFixedPosition();
+      else updatePosition();
+    };
+
+    window.addEventListener("resize", handleResize);
     document.addEventListener("pointerdown", handleClickOutside, true);
     return () => {
-      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("resize", handleResize);
       document.removeEventListener("pointerdown", handleClickOutside, true);
     };
-  }, [left, right, middle, middleleft, profile, noti, up, upDel, open]);
+  }, [left, right, middle, middleleft, profile, noti, up, upDel, fixed, open]);
 
   return (
     <div ref={wrapperRef} className={`${styles.wrapper} ${__PLATFORM__ === 'desktop' ? styles.wrapper_desktop : styles.wrapper_mobile}`.trim()}>
@@ -167,7 +228,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
         <div
           ref={dropdownRef}
           className={`${styles.menu} ${positionClass} ${menuClassName || ""}`.trim()}
-          style={menuStyle}
+          style={minWidthPx ? { ...menuStyle, minWidth: `${minWidthPx}px` } : menuStyle}
           onClick={handleDropdownClick}
         >
           {React.isValidElement(dropdown) &&

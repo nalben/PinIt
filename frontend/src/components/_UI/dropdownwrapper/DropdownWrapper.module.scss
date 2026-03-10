@@ -41,6 +41,14 @@
     &.menu.middleleft{
         min-width: 120px;
     }
+    &.menu.middleleftTop{
+        min-width: 120px;
+    }
+}
+.menu.fixed{
+    position: fixed;
+    top: 0;
+    left: 0;
 }
 .menu.up{
     top: auto;
@@ -49,6 +57,11 @@
 .menu.middleleft{
     top: auto;
     bottom: -60%;
+    right: calc(100% + 5px);
+}
+.menu.middleleftTop{
+    top: 0;
+    bottom: auto;
     right: calc(100% + 5px);
 }
 .menu.upDel{

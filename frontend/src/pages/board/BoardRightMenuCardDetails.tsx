@@ -82,8 +82,11 @@ const IMAGE_BLOCK_TOO_LARGE_MESSAGE = 'Вес слишком большой — 
 const normalizeSingleLine = (value: string) => value.replace(/[\r\n]+/g, ' ');
 const autosizeTextarea = (node: HTMLTextAreaElement | null) => {
   if (!node) return;
+  const computed = window.getComputedStyle(node);
+  const borderTop = Number.parseFloat(computed.borderTopWidth) || 0;
+  const borderBottom = Number.parseFloat(computed.borderBottomWidth) || 0;
   node.style.height = 'auto';
-  node.style.height = `${node.scrollHeight}px`;
+  node.style.height = `${node.scrollHeight + borderTop + borderBottom +30}px`;
 };
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   const maybeError = error as { response?: { data?: { message?: unknown } } } | null;
@@ -255,7 +258,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     }
   };
 
-  const deleteImageBlock = async (blockId: number) => {
+  const deleteDetailsBlock = async (blockId: number) => {
     if (!canEditCards || !isLoggedIn) return;
     const { data } = await axiosInstance.delete<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}`);
     setConfirmDeleteBlockId(null);
@@ -364,7 +367,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   <>
                     <div className={`${classes.image_block_media} ${isDeleteConfirmOpen ? classes.image_block_media_actions_open : ''}`.trim()}>
                       <div className={`${classes.image_block_actions_top} ${__PLATFORM__ === 'desktop' ? classes.image_block_actions_top_desktop : classes.image_block_actions_top_mobile} ${isDeleteConfirmOpen ? classes.image_block_actions_top_open : ''}`.trim()}>
-                        <DropdownWrapper right middleleft closeOnClick={false} isOpen={isDeleteConfirmOpen} onClose={() => setConfirmDeleteBlockId(null)}>
+                        <DropdownWrapper right middleleftTop closeOnClick={false} isOpen={isDeleteConfirmOpen} onClose={() => setConfirmDeleteBlockId(null)}>
                           {[
                             <button
                               key="trigger"
@@ -376,7 +379,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                               <DeleteIcon />
                             </button>,
                             <div key="menu">
-                              <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteImageBlock(block.id)}>
+                              <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteDetailsBlock(block.id)}>
                                 Да, удалить
                               </button>
                               <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setConfirmDeleteBlockId(null)}>
@@ -475,16 +478,29 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
 
           if (block.block_type === 'text') {
             const isTextEditing = editingTextBlockId === block.id;
+            const isDeleteConfirmOpen = confirmDeleteBlockId === block.id;
             return (
               <div key={block.id} className={classes.text_block}>
                 {isTextEditing ? (
                   <textarea
                     ref={(node) => {
                       textBlockRefs.current[block.id] = node;
+                      autosizeTextarea(node);
                     }}
                     className={classes.text_block_textarea}
                     defaultValue={block.content}
                     autoFocus
+                    onInput={(event) => autosizeTextarea(event.currentTarget)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setEditingTextBlockId(null);
+                      }
+                    }}
                     onBlur={(event) => {
                       const node = event.currentTarget;
                       window.requestAnimationFrame(() => {
@@ -497,23 +513,46 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   <>
                     <span>{block.content}</span>
                     {canEditCards && isLoggedIn ? (
-                      <button
-                        type="button"
-                        className={classes.text_block_edit_btn}
-                        aria-label="Изменить текстовый блок"
-                        onClick={() => {
-                          setEditingTextBlockId(block.id);
-                          window.requestAnimationFrame(() => {
-                            const node = textBlockRefs.current[block.id];
-                            if (!node) return;
-                            node.focus();
-                            const length = node.value.length;
-                            node.setSelectionRange(length, length);
-                          });
-                        }}
-                      >
-                        <Edit />
-                      </button>
+                      <span className={classes.text_block_actions}>
+                        <button
+                          type="button"
+                          className={classes.text_block_edit_btn}
+                          aria-label="Изменить текстовый блок"
+                          onClick={() => {
+                            setEditingTextBlockId(block.id);
+                            window.requestAnimationFrame(() => {
+                              const node = textBlockRefs.current[block.id];
+                              if (!node) return;
+                              node.focus();
+                              const length = node.value.length;
+                              node.setSelectionRange(length, length);
+                            });
+                          }}
+                        >
+                          <Edit />
+                        </button>
+                        <DropdownWrapper right fixed minWidthPx={140} closeOnClick={false} isOpen={isDeleteConfirmOpen} onClose={() => setConfirmDeleteBlockId(null)}>
+                          {[
+                            <button
+                              key="trigger"
+                              type="button"
+                              className={classes.text_block_edit_btn}
+                              aria-label="Удалить текстовый блок"
+                              onClick={() => setConfirmDeleteBlockId((prev) => (prev === block.id ? null : block.id))}
+                            >
+                              <DeleteIcon />
+                            </button>,
+                            <div key="menu">
+                              <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteDetailsBlock(block.id)}>
+                                Да, удалить
+                              </button>
+                              <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setConfirmDeleteBlockId(null)}>
+                                Отмена
+                              </button>
+                            </div>,
+                          ]}
+                        </DropdownWrapper>
+                      </span>
                     ) : null}
                   </>
                 )}
@@ -554,6 +593,16 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   value={draft.value}
                   autoFocus
                   placeholder=""
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    }
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      removeDraftBlock(draft.id);
+                    }
+                  }}
                   onChange={(event) => {
                     const nextValue = event.currentTarget.value;
                     updateDraftBlock(draft.id, () => ({ ...draft, value: nextValue }));
