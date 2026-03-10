@@ -130,6 +130,7 @@
     gap: 12px;
     margin-top: 80px;
     height: 100%;
+    min-height: 0;
 }
 .link_inspector_header{
     display: flex;
@@ -930,6 +931,21 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    &::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: transparent;
+        border-top: 22px solid transparent;
+        background-clip: padding-box;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        cursor: pointer;
+        background: var(--pink);
+        border-radius: 5px;
+    }
 }
 .details_editor_block{
     display: flex;
@@ -1116,18 +1132,36 @@
     &:has(.image_block_caption_editing){
         border: 1px solid rgba(255, 255, 255, 0.2);
     }
+    &:has(span){
+        padding-top: 1px;
+    }
 }
 .image_block_caption_row_editing{
     cursor: text;
 }
 .image_block_caption{
     color: var(--pink);
+    background: transparent;
+    border: 0;
+    font: inherit;
     outline: none;
-    word-break: break-word;
+    box-sizing: border-box;
     padding-block: 1px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    &::placeholder{
+        color: var(--pink);
+        opacity: 1;
+    }
 }
 .image_block_caption_editing{
     width: 100%;
+    resize: none;
+    overflow: hidden;
+    display: block;
+    &::placeholder {
+        opacity: 0.5;
+    }
 }
 .image_block_caption_edit_btn{
     width: 24px;
@@ -1151,6 +1185,36 @@
 }
 .text_block{
     color: var(--pink);
+    & > span{
+        white-space: pre-wrap;
+    }
+}
+.text_block_edit_btn{
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin-left: 0.3rem;
+    vertical-align: text-bottom;
+    & svg{
+        width: 24px;
+        height: 24px;
+    }
+}
+.text_block_textarea{
+    width: 100%;
+    min-height: 88px;
+    resize: vertical;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.2);
+    color: var(--pink);
+    padding: 0.6rem 0.8rem;
+}
+.text_block_textarea:focus{
+    outline: none;
+    border-color: var(--pink);
 }
 .facts_block{
     display: flex;
@@ -1265,6 +1329,17 @@
             transition: all var(--board-menu-transition);
         }
     }
+}
+
+.link_inspector_root .menu_details{
+    overflow: hidden;
+    min-height: 0;
+}
+
+.link_inspector_root .details_blocks{
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .details_editor_block{

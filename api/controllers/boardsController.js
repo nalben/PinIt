@@ -52,7 +52,6 @@ const safeUnlinkUpload = async uploadPath => {
 
 const generateInviteToken = () => crypto.randomBytes(24).toString('hex');
 const CARD_DETAIL_BLOCK_TYPES = new Set(['text', 'image', 'facts', 'checklist']);
-const CARD_DETAIL_IMAGE_CAPTION_DEFAULT = 'Описание';
 
 const trimNullableString = value => {
   if (value === null || value === undefined) return null;
@@ -2527,7 +2526,7 @@ exports.createCardDetailsBlock = async (req, res) => {
         await connection.execute(
           `INSERT INTO carddetail_image_blocks (block_id, image_path, caption)
            VALUES (?, ?, ?)`,
-          [blockId, newImage, CARD_DETAIL_IMAGE_CAPTION_DEFAULT]
+          [blockId, newImage, null]
         );
       } else if (blockType === 'text') {
         await connection.execute(

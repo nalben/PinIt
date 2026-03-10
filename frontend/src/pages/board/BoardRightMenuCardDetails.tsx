@@ -79,6 +79,12 @@ const trimValue = (value: string | null | undefined) => String(value ?? '').repl
 const createDraftId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random()}`;
 const IMAGE_CAPTION_MAX_LENGTH = 70;
 const IMAGE_BLOCK_TOO_LARGE_MESSAGE = 'Вес слишком большой — выберите изображение весом до 5 МБ.';
+const normalizeSingleLine = (value: string) => value.replace(/[\r\n]+/g, ' ');
+const autosizeTextarea = (node: HTMLTextAreaElement | null) => {
+  if (!node) return;
+  node.style.height = 'auto';
+  node.style.height = `${node.scrollHeight}px`;
+};
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   const maybeError = error as { response?: { data?: { message?: unknown } } } | null;
   const message = maybeError?.response?.data?.message;
@@ -94,9 +100,18 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const [draftBlocks, setDraftBlocks] = useState<DraftBlock[]>([]);
   const [confirmDeleteBlockId, setConfirmDeleteBlockId] = useState<number | null>(null);
   const [editingCaptionBlockId, setEditingCaptionBlockId] = useState<number | null>(null);
+  const [editingCaptionValue, setEditingCaptionValue] = useState('');
+  const [editingTextBlockId, setEditingTextBlockId] = useState<number | null>(null);
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const imageBlockInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
-  const imageCaptionRefs = useRef<Record<number, HTMLSpanElement | null>>({});
+  const imageCaptionTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const captionCaretInitializedBlockIdRef = useRef<number | null>(null);
+  const textBlockRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+
+  useEffect(() => {
+    if (editingCaptionBlockId !== null) return;
+    captionCaretInitializedBlockIdRef.current = null;
+  }, [editingCaptionBlockId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,6 +119,8 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     setDetails(null);
     setConfirmDeleteBlockId(null);
     setEditingCaptionBlockId(null);
+    setEditingTextBlockId(null);
+    setEditingCaptionValue('');
     setDraftBlocks((prev) => {
       prev.forEach((draft) => {
         if (draft.type === 'image' && draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
@@ -140,6 +157,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const reloadFromResponse = (next: CardDetailsResponse) => {
     setConfirmDeleteBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
     setEditingCaptionBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
+    setEditingTextBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
     setDetails(next);
   };
 
@@ -169,6 +187,28 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     });
     removeDraftBlock(draftId);
     reloadFromResponse(data);
+  };
+
+  const saveTextBlock = async (blockId: number, rawValue: string, currentContent: string) => {
+    if (!canEditCards || !isLoggedIn) return;
+    const content = trimValue(rawValue);
+    const normalizedCurrentContent = trimValue(currentContent);
+
+    if (!content || content === normalizedCurrentContent) {
+      setEditingTextBlockId(null);
+      return;
+    }
+
+    try {
+      const { data } = await axiosInstance.patch<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}`, {
+        content,
+      });
+      reloadFromResponse(data);
+    } catch (error) {
+      showTopAlarm(getApiErrorMessage(error, 'Не удалось сохранить текстовый блок'));
+    } finally {
+      setEditingTextBlockId(null);
+    }
   };
 
   const saveImageDraft = async (draftId: string, file: File | null) => {
@@ -224,11 +264,12 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
 
   const saveImageCaption = async (blockId: number, rawValue: string, currentCaption: string | null) => {
     if (!canEditCards || !isLoggedIn) return;
-    const caption = trimValue(rawValue).slice(0, IMAGE_CAPTION_MAX_LENGTH);
+    const caption = trimValue(normalizeSingleLine(rawValue)).slice(0, IMAGE_CAPTION_MAX_LENGTH);
     const normalizedCurrentCaption = trimValue(currentCaption).slice(0, IMAGE_CAPTION_MAX_LENGTH);
 
     if (caption === normalizedCurrentCaption) {
       setEditingCaptionBlockId(null);
+      setEditingCaptionValue('');
       return;
     }
 
@@ -241,6 +282,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       showTopAlarm(getApiErrorMessage(error, 'Не удалось сохранить описание картинки'));
     } finally {
       setEditingCaptionBlockId(null);
+      setEditingCaptionValue('');
     }
   };
 
@@ -302,8 +344,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
             const src = resolveImageSrc(block.image_path ?? null);
             const isDeleteConfirmOpen = confirmDeleteBlockId === block.id;
             const isCaptionEditing = editingCaptionBlockId === block.id;
-            const savedCaption = (block.caption ?? '').slice(0, IMAGE_CAPTION_MAX_LENGTH);
-            const captionText = isCaptionEditing ? savedCaption : savedCaption || 'Описание';
+            const savedCaption = trimValue(block.caption).slice(0, IMAGE_CAPTION_MAX_LENGTH);
             return (
               <div key={block.id} className={classes.image_block}>
                 <input
@@ -367,62 +408,53 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                 {!canEditCards || !isLoggedIn ? (src ? <img src={src} alt={block.caption ?? heading} /> : <Default />) : null}
                 <div
                   className={`${classes.image_block_caption_row} ${isCaptionEditing ? classes.image_block_caption_row_editing : ''}`.trim()}
-                  onMouseDown={(event) => {
-                    if (!isCaptionEditing) return;
-                    event.preventDefault();
-                  }}
-                  onClick={() => {
-                    if (!isCaptionEditing) return;
-                    const node = imageCaptionRefs.current[block.id];
-                    if (!node) return;
-                    node.focus();
-                    const selection = window.getSelection();
-                    if (!selection) return;
-                    const range = document.createRange();
-                    range.selectNodeContents(node);
-                    range.collapse(false);
-                    selection.removeAllRanges();
-                    selection.addRange(range);
-                  }}
                 >
-                  <span
-                    ref={(node) => {
-                      imageCaptionRefs.current[block.id] = node;
-                    }}
-                    className={`${classes.image_block_caption} ${isCaptionEditing ? classes.image_block_caption_editing : ''}`.trim()}
-                    contentEditable={isCaptionEditing}
-                    suppressContentEditableWarning
-                    onInput={(event) => {
-                      const node = event.currentTarget;
-                      const nextValue = String(node.textContent ?? '').slice(0, IMAGE_CAPTION_MAX_LENGTH);
-                      if (nextValue !== node.textContent) {
-                        node.textContent = nextValue;
-                        const selection = window.getSelection();
-                        if (selection) {
-                          const range = document.createRange();
-                          range.selectNodeContents(node);
-                          range.collapse(false);
-                          selection.removeAllRanges();
-                          selection.addRange(range);
+                  {isCaptionEditing ? (
+                    <textarea
+                      className={`${classes.image_block_caption} ${classes.image_block_caption_editing}`.trim()}
+                      value={editingCaptionValue}
+                      placeholder="Описание"
+                      rows={1}
+                      autoFocus
+                      ref={(node) => {
+                        imageCaptionTextareaRefs.current[block.id] = node;
+                        autosizeTextarea(node);
+                      }}
+                      onFocus={(event) => {
+                        if (captionCaretInitializedBlockIdRef.current === block.id) return;
+                        captionCaretInitializedBlockIdRef.current = block.id;
+                        const node = event.currentTarget;
+                        window.requestAnimationFrame(() => {
+                          const len = node.value.length;
+                          try {
+                            node.setSelectionRange(len, len);
+                          } catch {
+                            // ignore
+                          }
+                        });
+                      }}
+                      onChange={(event) => {
+                        const normalized = normalizeSingleLine(event.currentTarget.value).slice(0, IMAGE_CAPTION_MAX_LENGTH);
+                        setEditingCaptionValue(normalized);
+                        autosizeTextarea(event.currentTarget);
+                      }}
+                      onInput={(event) => autosizeTextarea(event.currentTarget)}
+                      onBlur={() => void saveImageCaption(block.id, editingCaptionValue, block.caption ?? null)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          event.currentTarget.blur();
                         }
-                      }
-                    }}
-                    onBlur={(event) => {
-                      const node = event.currentTarget;
-                      window.requestAnimationFrame(() => {
-                        if (document.activeElement === node) return;
-                        void saveImageCaption(block.id, node.textContent ?? '', block.caption ?? null);
-                      });
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault();
-                        event.currentTarget.blur();
-                      }
-                    }}
-                  >
-                    {captionText}
-                  </span>
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setEditingCaptionBlockId(null);
+                          setEditingCaptionValue('');
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className={classes.image_block_caption}>{savedCaption || 'Описание'}</span>
+                  )}
                   {canEditCards && isLoggedIn && !isCaptionEditing ? (
                     <button
                       type="button"
@@ -430,18 +462,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                       aria-label="Изменить описание картинки"
                       onClick={() => {
                         setEditingCaptionBlockId(block.id);
-                        window.requestAnimationFrame(() => {
-                          const node = imageCaptionRefs.current[block.id];
-                          if (!node) return;
-                          node.focus();
-                          const selection = window.getSelection();
-                          if (!selection) return;
-                          const range = document.createRange();
-                          range.selectNodeContents(node);
-                          range.collapse(false);
-                          selection.removeAllRanges();
-                          selection.addRange(range);
-                        });
+                        setEditingCaptionValue(savedCaption);
                       }}
                     >
                       <Edit />
@@ -453,9 +474,49 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
           }
 
           if (block.block_type === 'text') {
+            const isTextEditing = editingTextBlockId === block.id;
             return (
               <div key={block.id} className={classes.text_block}>
-                {block.content}
+                {isTextEditing ? (
+                  <textarea
+                    ref={(node) => {
+                      textBlockRefs.current[block.id] = node;
+                    }}
+                    className={classes.text_block_textarea}
+                    defaultValue={block.content}
+                    autoFocus
+                    onBlur={(event) => {
+                      const node = event.currentTarget;
+                      window.requestAnimationFrame(() => {
+                        if (document.activeElement === node) return;
+                        void saveTextBlock(block.id, node.value, block.content);
+                      });
+                    }}
+                  />
+                ) : (
+                  <>
+                    <span>{block.content}</span>
+                    {canEditCards && isLoggedIn ? (
+                      <button
+                        type="button"
+                        className={classes.text_block_edit_btn}
+                        aria-label="Изменить текстовый блок"
+                        onClick={() => {
+                          setEditingTextBlockId(block.id);
+                          window.requestAnimationFrame(() => {
+                            const node = textBlockRefs.current[block.id];
+                            if (!node) return;
+                            node.focus();
+                            const length = node.value.length;
+                            node.setSelectionRange(length, length);
+                          });
+                        }}
+                      >
+                        <Edit />
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
             );
           }
@@ -492,18 +553,15 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   className={classes.details_textarea}
                   value={draft.value}
                   autoFocus
-                  placeholder="Новый текстовый блок"
+                  placeholder=""
                   onChange={(event) => {
                     const nextValue = event.currentTarget.value;
                     updateDraftBlock(draft.id, () => ({ ...draft, value: nextValue }));
                   }}
                   onBlur={(event) => {
-                    if (!trimValue(event.currentTarget.value)) removeDraftBlock(draft.id);
+                    void saveTextDraft(draft.id, event.currentTarget.value);
                   }}
                 />
-                <button type="button" className={classes.details_inline_btn} onClick={() => void saveTextDraft(draft.id, draft.value)}>
-                  Сохранить
-                </button>
               </div>
             );
           }
