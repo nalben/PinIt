@@ -146,6 +146,8 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     setEditingChecklistValue('');
   }, [editingChecklistItemId]);
 
+  const detailsPath = buildDetailsPath(selectedCardDetails, isLoggedIn);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -174,7 +176,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
 
     (async () => {
       try {
-        const { data } = await axiosInstance.get<CardDetailsResponse>(buildDetailsPath(selectedCardDetails, isLoggedIn));
+        const { data } = await axiosInstance.get<CardDetailsResponse>(detailsPath);
         if (cancelled) return;
         setDetails(data);
       } catch {
@@ -188,7 +190,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     return () => {
       cancelled = true;
     };
-  }, [isLoggedIn, selectedCardDetails]);
+  }, [detailsPath]);
 
   useEffect(() => {
     return () => {
