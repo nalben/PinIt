@@ -122,6 +122,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const [editingChecklistValue, setEditingChecklistValue] = useState('');
   const [checklistDraftValues, setChecklistDraftValues] = useState<Record<number, string>>({});
   const [pendingChecklistFocusBlockId, setPendingChecklistFocusBlockId] = useState<number | null>(null);
+  const [imageLoadedByKey, setImageLoadedByKey] = useState<Record<string, boolean>>({});
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const imageBlockInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const imageCaptionTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
@@ -163,6 +164,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     setPendingFactFocusBlockId(null);
     setChecklistDraftValues({});
     setPendingChecklistFocusBlockId(null);
+    setImageLoadedByKey({});
     setDraftBlocks((prev) => {
       prev.forEach((draft) => {
         if (draft.type === 'image' && draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
@@ -576,9 +578,39 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       <h1>{heading}</h1>
 
       <div className={classes.details_blocks}>
+        {loading ? (
+          <div className={classes.details_skeleton} aria-hidden="true">
+            <div className={classes.details_skeleton_image_block}>
+              <div className={classes.details_skeleton_image} />
+              <div className={`${classes.skeleton} ${classes.details_skeleton_caption}`} />
+            </div>
+            <div className={classes.details_skeleton_text_lines}>
+              <span className={`${classes.skeleton} ${classes.details_skeleton_text_line}`} />
+              <span className={`${classes.skeleton} ${classes.details_skeleton_text_line} ${classes.details_skeleton_text_line_md}`} />
+              <span className={`${classes.skeleton} ${classes.details_skeleton_text_line} ${classes.details_skeleton_text_line_lg}`} />
+              <span className={`${classes.skeleton} ${classes.details_skeleton_text_line} ${classes.details_skeleton_text_line_sm}`} />
+            </div>
+            <div className={classes.details_skeleton_list}>
+              <div className={classes.details_skeleton_list_item}>
+                <span className={`${classes.skeleton} ${classes.details_skeleton_bullet}`} />
+                <span className={`${classes.skeleton} ${classes.details_skeleton_list_line}`} />
+              </div>
+              <div className={classes.details_skeleton_list_item}>
+                <span className={`${classes.skeleton} ${classes.details_skeleton_bullet}`} />
+                <span className={`${classes.skeleton} ${classes.details_skeleton_list_line}`} />
+              </div>
+              <div className={classes.details_skeleton_list_item}>
+                <span className={`${classes.skeleton} ${classes.details_skeleton_bullet}`} />
+                <span className={`${classes.skeleton} ${classes.details_skeleton_list_line} ${classes.details_skeleton_list_line_short}`} />
+              </div>
+            </div>
+          </div>
+        ) : null}
         {blocks.map((block) => {
           if (block.block_type === 'image') {
             const src = resolveImageSrc(block.image_path ?? null);
+            const imageKey = src ? `${block.id}:${src}` : '';
+            const isImageLoaded = !src || Boolean(imageLoadedByKey[imageKey]);
             const isDeleteConfirmOpen = confirmDeleteBlockId === block.id;
             const isCaptionEditing = editingCaptionBlockId === block.id;
             const savedCaption = trimValue(block.caption).slice(0, IMAGE_CAPTION_MAX_LENGTH);
@@ -600,6 +632,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                 {canEditCards && isLoggedIn ? (
                   <>
                     <div className={`${classes.image_block_media} ${isDeleteConfirmOpen ? classes.image_block_media_actions_open : ''}`.trim()}>
+                      {!isImageLoaded ? <div className={classes.image_block_skeleton} aria-hidden="true" /> : null}
                       <div className={`${classes.image_block_actions_top} ${__PLATFORM__ === 'desktop' ? classes.image_block_actions_top_desktop : classes.image_block_actions_top_mobile} ${isDeleteConfirmOpen ? classes.image_block_actions_top_open : ''}`.trim()}>
                         <DropdownWrapper right middleleftTop closeOnClick={false} isOpen={isDeleteConfirmOpen} onClose={() => setConfirmDeleteBlockId(null)}>
                           {[
@@ -638,11 +671,40 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                           <Edit />
                         </button>
                       ) : null}
-                      {src ? <img src={src} alt={block.caption ?? heading} /> : <Default />}
+                      {src ? (
+                        <img
+                          src={src}
+                          alt={block.caption ?? heading}
+                          className={!isImageLoaded ? classes.image_block_img_hidden : undefined}
+                          onLoad={() => {
+                            if (!imageKey) return;
+                            setImageLoadedByKey((prev) => (prev[imageKey] ? prev : { ...prev, [imageKey]: true }));
+                          }}
+                        />
+                      ) : (
+                        <Default />
+                      )}
                     </div>
                   </>
                 ) : null}
-                {!canEditCards || !isLoggedIn ? (src ? <img src={src} alt={block.caption ?? heading} /> : <Default />) : null}
+                {!canEditCards || !isLoggedIn ? (
+                  <div className={classes.image_block_media}>
+                    {!isImageLoaded ? <div className={classes.image_block_skeleton} aria-hidden="true" /> : null}
+                    {src ? (
+                      <img
+                        src={src}
+                        alt={block.caption ?? heading}
+                        className={!isImageLoaded ? classes.image_block_img_hidden : undefined}
+                        onLoad={() => {
+                          if (!imageKey) return;
+                          setImageLoadedByKey((prev) => (prev[imageKey] ? prev : { ...prev, [imageKey]: true }));
+                        }}
+                      />
+                    ) : (
+                      <Default />
+                    )}
+                  </div>
+                ) : null}
                 <div
                   className={`${classes.image_block_caption_row} ${isCaptionEditing ? classes.image_block_caption_row_editing : ''}`.trim()}
                 >

@@ -948,6 +948,80 @@
         border-radius: 5px;
     }
 }
+.details_skeleton{
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+.details_skeleton_image_block{
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.details_skeleton_image{
+    width: 100%;
+    height: 100px;
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.18);
+}
+.details_skeleton_image::after{
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: var(--skeleton-shimmer);
+    animation: boardmenu-shimmer 1.2s infinite;
+}
+.details_skeleton_caption{
+    width: 60%;
+    height: 16px;
+    border-radius: 999px;
+}
+.details_skeleton_text_lines{
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.details_skeleton_text_line{
+    height: 16px;
+    width: 100%;
+    border-radius: 999px;
+}
+.details_skeleton_text_line_md{
+    width: 78%;
+}
+.details_skeleton_text_line_lg{
+    width: 92%;
+}
+.details_skeleton_text_line_sm{
+    width: 64%;
+}
+.details_skeleton_list{
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.details_skeleton_list_item{
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.details_skeleton_bullet{
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    flex: 0 0 auto;
+}
+.details_skeleton_list_line{
+    height: 16px;
+    width: 75%;
+    border-radius: 999px;
+}
+.details_skeleton_list_line_short{
+    width: 55%;
+}
 .details_editor_block{
     display: flex;
     flex-direction: column;
@@ -1009,6 +1083,26 @@
 }
 .image_block_media{
     position: relative;
+}
+.image_block_skeleton{
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+    z-index: 1;
+}
+.image_block_skeleton::after{
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-150%);
+    background: var(--skeleton-shimmer);
+    animation: boardmenu-shimmer 1.2s infinite;
+}
+.image_block_img_hidden{
+    opacity: 0;
 }
 .image_block_media_actions_open{
 }
