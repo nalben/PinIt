@@ -91,6 +91,7 @@ const createDraftId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random
 const IMAGE_CAPTION_MAX_LENGTH = 70;
 const FACT_ITEM_MAX_LENGTH = 200;
 const IMAGE_BLOCK_TOO_LARGE_MESSAGE = 'Вес слишком большой — выберите изображение весом до 5 МБ.';
+const DETAILS_POLL_INTERVAL_MS = 10_000;
 const normalizeSingleLine = (value: string) => value.replace(/[\r\n]+/g, ' ');
 const shouldAddExtraSpacer = (node: HTMLTextAreaElement | null) => {
   if (!node) return false;
@@ -142,6 +143,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const factInputRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const checklistInputRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const socketReloadInFlightRef = useRef(false);
+  const pollInFlightRef = useRef(false);
 
   useEffect(() => {
     if (editingCaptionBlockId !== null) return;
@@ -318,6 +320,37 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       cancelled = true;
       socketReloadInFlightRef.current = false;
       unsubscribe?.();
+    };
+  }, [detailsPath, isLoggedIn, selectedCardDetails.boardId, selectedCardDetails.cardId]);
+
+  useEffect(() => {
+    if (isLoggedIn) return;
+
+    const boardId = Number(selectedCardDetails.boardId);
+    const cardId = Number(selectedCardDetails.cardId);
+    if (!Number.isFinite(boardId) || !Number.isFinite(cardId)) return;
+
+    let cancelled = false;
+
+    const poll = async () => {
+      if (pollInFlightRef.current) return;
+      pollInFlightRef.current = true;
+      try {
+        const { data: next } = await axiosInstance.get<CardDetailsResponse>(detailsPath);
+        if (cancelled) return;
+        reloadFromResponse(next);
+      } catch {
+        // ignore
+      } finally {
+        if (!cancelled) pollInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(poll, DETAILS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      pollInFlightRef.current = false;
+      window.clearInterval(intervalId);
     };
   }, [detailsPath, isLoggedIn, selectedCardDetails.boardId, selectedCardDetails.cardId]);
 
@@ -1340,20 +1373,22 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
         {!loading && !blocks.length && !draftBlocks.length ? <div className={classes.details_empty}>Добавьте заметки в меню снизу экрана</div> : null}
       </div>
 
-      <div className={classes.details_btn}>
-        <button type="button" onClick={() => addDraftBlock('image')} disabled={!canEditCards || !isLoggedIn}>
-          <Image />
-        </button>
-        <button type="button" onClick={() => addDraftBlock('text')} disabled={!canEditCards || !isLoggedIn}>
-          <Text />
-        </button>
-        <button type="button" onClick={() => addDraftBlock('facts')} disabled={!canEditCards || !isLoggedIn}>
-          <Fact />
-        </button>
-        <button type="button" onClick={() => addDraftBlock('checklist')} disabled={!canEditCards || !isLoggedIn}>
-          <Check />
-        </button>
-      </div>
+      {canEditCards && isLoggedIn ? (
+        <div className={classes.details_btn}>
+          <button type="button" onClick={() => addDraftBlock('image')}>
+            <Image />
+          </button>
+          <button type="button" onClick={() => addDraftBlock('text')}>
+            <Text />
+          </button>
+          <button type="button" onClick={() => addDraftBlock('facts')}>
+            <Fact />
+          </button>
+          <button type="button" onClick={() => addDraftBlock('checklist')}>
+            <Check />
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 };
