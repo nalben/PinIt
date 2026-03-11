@@ -178,7 +178,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
           </button>
         ) : null}
       </div>
-      <div className={classes.board_menu_}>
+      <div className={`${classes.board_menu_} ${boardMenuView === 'card' ? classes.board_menu_details : ''}`.trim()}>
         {boardMenuView === 'link' && selectedLink && canEditCards ? (
           <div className={classes.link_inspector_root}>
             <div className={classes.link_inspector_header}>

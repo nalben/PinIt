@@ -103,6 +103,9 @@
         border-radius: 5px;
     }
 }
+.board_menu_details{
+    padding: 0;
+}
 .board_info{
     display: flex;
     flex-direction: column;
@@ -916,6 +919,13 @@
     flex-direction: column;
     gap: 1rem;
     height: 100%;
+    & > h1{
+        padding-top: fluid-prop(20, 10, 1920, 320);
+        padding-inline: fluid-prop(20,10,1920,320);
+    }
+    .details_blocks{
+        padding-inline: fluid-prop(20,10,1920,320);
+    }
 }
 .details_heading_row{
     display: flex;
@@ -1644,7 +1654,7 @@
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 0.5rem;
+    padding-right: calc(fluid-prop(20,10,1920,320) + 0.5rem);
 }
 
 .details_editor_block{

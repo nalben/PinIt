@@ -4,6 +4,10 @@ import { resolveImageSrc } from '@/components/flow/flowBoardUtils';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import { useUIStore } from '@/store/uiStore';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
+import Image from '@/assets/icons/monochrome/image.svg';
+import Text from '@/assets/icons/monochrome/text.svg';
+import Fact from '@/assets/icons/monochrome/fact.svg';
+import Check from '@/assets/icons/monochrome/check.svg';
 import Edit from '@/assets/icons/monochrome/edit.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
 import classes from './Board.module.scss';
@@ -1284,16 +1288,16 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
 
       <div className={classes.details_btn}>
         <button type="button" onClick={() => addDraftBlock('image')} disabled={!canEditCards || !isLoggedIn}>
-          <Default />
+          <Image />
         </button>
         <button type="button" onClick={() => addDraftBlock('text')} disabled={!canEditCards || !isLoggedIn}>
-          <Default />
+          <Text />
         </button>
         <button type="button" onClick={() => addDraftBlock('facts')} disabled={!canEditCards || !isLoggedIn}>
-          <Default />
+          <Fact />
         </button>
         <button type="button" onClick={() => addDraftBlock('checklist')} disabled={!canEditCards || !isLoggedIn}>
-          <Default />
+          <Check />
         </button>
       </div>
     </div>
