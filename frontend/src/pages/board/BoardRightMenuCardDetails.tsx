@@ -110,6 +110,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const [draftBlocks, setDraftBlocks] = useState<DraftBlock[]>([]);
   const [confirmDeleteBlockId, setConfirmDeleteBlockId] = useState<number | null>(null);
   const [confirmDeleteFactItemId, setConfirmDeleteFactItemId] = useState<number | null>(null);
+  const [confirmDeleteChecklistItemId, setConfirmDeleteChecklistItemId] = useState<number | null>(null);
   const [editingCaptionBlockId, setEditingCaptionBlockId] = useState<number | null>(null);
   const [editingCaptionValue, setEditingCaptionValue] = useState('');
   const [editingTextBlockId, setEditingTextBlockId] = useState<number | null>(null);
@@ -117,12 +118,17 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const [editingFactValue, setEditingFactValue] = useState('');
   const [factDraftValues, setFactDraftValues] = useState<Record<number, string>>({});
   const [pendingFactFocusBlockId, setPendingFactFocusBlockId] = useState<number | null>(null);
+  const [editingChecklistItemId, setEditingChecklistItemId] = useState<number | null>(null);
+  const [editingChecklistValue, setEditingChecklistValue] = useState('');
+  const [checklistDraftValues, setChecklistDraftValues] = useState<Record<number, string>>({});
+  const [pendingChecklistFocusBlockId, setPendingChecklistFocusBlockId] = useState<number | null>(null);
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const imageBlockInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const imageCaptionTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const captionCaretInitializedBlockIdRef = useRef<number | null>(null);
   const textBlockRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
-  const factInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  const factInputRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const checklistInputRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
 
   useEffect(() => {
     if (editingCaptionBlockId !== null) return;
@@ -135,18 +141,28 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   }, [editingFactItemId]);
 
   useEffect(() => {
+    if (editingChecklistItemId !== null) return;
+    setEditingChecklistValue('');
+  }, [editingChecklistItemId]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setDetails(null);
     setConfirmDeleteBlockId(null);
     setConfirmDeleteFactItemId(null);
+    setConfirmDeleteChecklistItemId(null);
     setEditingCaptionBlockId(null);
     setEditingTextBlockId(null);
     setEditingFactItemId(null);
     setEditingFactValue('');
+    setEditingChecklistItemId(null);
+    setEditingChecklistValue('');
     setEditingCaptionValue('');
     setFactDraftValues({});
     setPendingFactFocusBlockId(null);
+    setChecklistDraftValues({});
+    setPendingChecklistFocusBlockId(null);
     setDraftBlocks((prev) => {
       prev.forEach((draft) => {
         if (draft.type === 'image' && draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
@@ -194,6 +210,20 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     setPendingFactFocusBlockId(null);
   }, [pendingFactFocusBlockId, details]);
 
+  useEffect(() => {
+    if (pendingChecklistFocusBlockId === null) return;
+    const node = checklistInputRefs.current[pendingChecklistFocusBlockId];
+    if (!node) return;
+    node.focus();
+    const length = node.value.length;
+    try {
+      node.setSelectionRange(length, length);
+    } catch {
+      // ignore
+    }
+    setPendingChecklistFocusBlockId(null);
+  }, [pendingChecklistFocusBlockId, details]);
+
   const reloadFromResponse = (next: CardDetailsResponse) => {
     setConfirmDeleteBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
     setConfirmDeleteFactItemId((prev) => {
@@ -203,12 +233,26 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       );
       return hasItem ? prev : null;
     });
+    setConfirmDeleteChecklistItemId((prev) => {
+      if (prev === null) return prev;
+      const hasItem = next.blocks.some(
+        (block) => block.block_type === 'checklist' && block.items.some((item) => item.id === prev)
+      );
+      return hasItem ? prev : null;
+    });
     setEditingCaptionBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
     setEditingTextBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
     setEditingFactItemId((prev) => {
       if (prev === null) return prev;
       const hasItem = next.blocks.some(
         (block) => block.block_type === 'facts' && block.items.some((item) => item.id === prev)
+      );
+      return hasItem ? prev : null;
+    });
+    setEditingChecklistItemId((prev) => {
+      if (prev === null) return prev;
+      const hasItem = next.blocks.some(
+        (block) => block.block_type === 'checklist' && block.items.some((item) => item.id === prev)
       );
       return hasItem ? prev : null;
     });
@@ -340,34 +384,6 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     }
   };
 
-  const saveListDraft = async (draftId: string, type: 'facts' | 'checklist', items: string[]) => {
-    if (!canEditCards || !isLoggedIn) return;
-    const normalizedItems = items.map((item) => trimValue(item)).filter(Boolean);
-    if (!normalizedItems.length) {
-      removeDraftBlock(draftId);
-      return;
-    }
-
-    const { data: createdBlock } = await axiosInstance.post<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks`, { type });
-    const created = createdBlock.blocks[createdBlock.blocks.length - 1];
-    if (!created || created.block_type !== type) {
-      reloadFromResponse(createdBlock);
-      removeDraftBlock(draftId);
-      return;
-    }
-
-    let latest = createdBlock;
-    for (const item of normalizedItems) {
-      const response = await axiosInstance.post<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks/${created.id}/items`, {
-        content: item,
-      });
-      latest = response.data;
-    }
-
-    removeDraftBlock(draftId);
-    reloadFromResponse(latest);
-  };
-
   const saveFactsDraft = async (draftId: string, rawValue: string) => {
     if (!canEditCards || !isLoggedIn) return;
     const content = trimValue(rawValue).slice(0, FACT_ITEM_MAX_LENGTH);
@@ -441,6 +457,97 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       reloadFromResponse(data);
     } catch (error) {
       showTopAlarm(getApiErrorMessage(error, 'Не удалось удалить факт'));
+    }
+  };
+
+  const saveChecklistDraft = async (draftId: string, rawValue: string) => {
+    if (!canEditCards || !isLoggedIn) return;
+    const content = trimValue(rawValue).slice(0, FACT_ITEM_MAX_LENGTH);
+    if (!content) {
+      removeDraftBlock(draftId);
+      return;
+    }
+
+    const { data: createdBlock } = await axiosInstance.post<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks`, {
+      type: 'checklist',
+    });
+    const created = createdBlock.blocks[createdBlock.blocks.length - 1];
+    if (!created || created.block_type !== 'checklist') {
+      reloadFromResponse(createdBlock);
+      removeDraftBlock(draftId);
+      return;
+    }
+
+    const response = await axiosInstance.post<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks/${created.id}/items`, {
+      content,
+    });
+    removeDraftBlock(draftId);
+    reloadFromResponse(response.data);
+    setPendingChecklistFocusBlockId(created.id);
+  };
+
+  const saveChecklistItem = async (blockId: number, itemId: number, rawValue: string, currentContent: string) => {
+    if (!canEditCards || !isLoggedIn) return;
+    const content = trimValue(rawValue).slice(0, FACT_ITEM_MAX_LENGTH);
+    const normalizedCurrentContent = trimValue(currentContent).slice(0, FACT_ITEM_MAX_LENGTH);
+
+    if (!content || content === normalizedCurrentContent) {
+      setEditingChecklistItemId(null);
+      return;
+    }
+
+    try {
+      const { data } = await axiosInstance.patch<CardDetailsResponse>(
+        `${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/items/${itemId}`,
+        { content }
+      );
+      reloadFromResponse(data);
+    } catch (error) {
+      showTopAlarm(getApiErrorMessage(error, 'Не удалось сохранить задачу'));
+    } finally {
+      setEditingChecklistItemId(null);
+    }
+  };
+
+  const saveNewChecklistItem = async (blockId: number, rawValue: string) => {
+    if (!canEditCards || !isLoggedIn) return;
+    const content = trimValue(rawValue).slice(0, FACT_ITEM_MAX_LENGTH);
+    if (!content) {
+      setChecklistDraftValues((prev) => ({ ...prev, [blockId]: '' }));
+      return;
+    }
+
+    const { data } = await axiosInstance.post<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/items`, {
+      content,
+    });
+    reloadFromResponse(data);
+    setChecklistDraftValues((prev) => ({ ...prev, [blockId]: '' }));
+    setPendingChecklistFocusBlockId(blockId);
+  };
+
+  const toggleChecklistItem = async (blockId: number, itemId: number, isChecked: boolean) => {
+    if (!canEditCards || !isLoggedIn) return;
+    try {
+      const { data } = await axiosInstance.patch<CardDetailsResponse>(
+        `${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/items/${itemId}`,
+        { is_checked: isChecked }
+      );
+      reloadFromResponse(data);
+    } catch (error) {
+      showTopAlarm(getApiErrorMessage(error, 'Не удалось обновить задачу'));
+    }
+  };
+
+  const deleteChecklistItem = async (blockId: number, itemId: number) => {
+    if (!canEditCards || !isLoggedIn) return;
+    try {
+      const { data } = await axiosInstance.delete<CardDetailsResponse>(
+        `${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/items/${itemId}`
+      );
+      setConfirmDeleteChecklistItemId(null);
+      reloadFromResponse(data);
+    } catch (error) {
+      showTopAlarm(getApiErrorMessage(error, 'Не удалось удалить задачу'));
     }
   };
 
@@ -701,12 +808,14 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   return (
                     <div key={item.id} className={classes.facts_item}>
                       {isFactEditing ? (
-                        <input
-                          className={`${classes.details_item_input} ${classes.facts_item_input}`.trim()}
+                        <textarea
+                          className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                           value={editingFactValue}
                           autoFocus
                           placeholder="Факт"
+                          rows={1}
                           maxLength={FACT_ITEM_MAX_LENGTH}
+                          ref={(node) => autosizeTextarea(node)}
                           onFocus={(event) => {
                             const node = event.currentTarget;
                             const length = node.value.length;
@@ -717,10 +826,16 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                             }
                           }}
                           onChange={(event) => {
-                            const nextValue = event.currentTarget.value.slice(0, FACT_ITEM_MAX_LENGTH);
-                            setEditingFactValue(nextValue);
+                            const normalized = normalizeSingleLine(event.currentTarget.value).slice(0, FACT_ITEM_MAX_LENGTH);
+                            setEditingFactValue(normalized);
+                            autosizeTextarea(event.currentTarget);
                           }}
+                          onInput={(event) => autosizeTextarea(event.currentTarget)}
                           onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
                             if (event.key === 'Escape') {
                               event.preventDefault();
                               setEditingFactItemId(null);
@@ -774,19 +889,27 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                 })}
                 {canEditCards && isLoggedIn ? (
                   <div className={classes.facts_item}>
-                    <input
+                    <textarea
                       ref={(node) => {
                         factInputRefs.current[block.id] = node;
+                        autosizeTextarea(node);
                       }}
-                      className={`${classes.details_item_input} ${classes.facts_item_input}`.trim()}
+                      className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                       value={draftValue}
                       placeholder="Новый факт"
+                      rows={1}
                       maxLength={FACT_ITEM_MAX_LENGTH}
                       onChange={(event) => {
-                        const nextValue = event.currentTarget.value.slice(0, FACT_ITEM_MAX_LENGTH);
+                        const nextValue = normalizeSingleLine(event.currentTarget.value).slice(0, FACT_ITEM_MAX_LENGTH);
                         setFactDraftValues((prev) => ({ ...prev, [block.id]: nextValue }));
+                        autosizeTextarea(event.currentTarget);
                       }}
+                      onInput={(event) => autosizeTextarea(event.currentTarget)}
                       onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
                         if (event.key === 'Escape') {
                           event.preventDefault();
                           setFactDraftValues((prev) => ({ ...prev, [block.id]: '' }));
@@ -805,14 +928,146 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
 
           return (
             <div key={block.id} className={classes.checklist_block}>
-              {block.items.map((item) => (
-                <div key={item.id} className={classes.checklist_row}>
+              {block.items.map((item) => {
+                const isChecklistEditing = editingChecklistItemId === item.id;
+                const isDeleteConfirmOpen = confirmDeleteChecklistItemId === item.id;
+                return (
+                  <div key={item.id} className={classes.checklist_row}>
+                    <span className={classes.checklist_box}>
+                      <input
+                        type="checkbox"
+                        className={classes.checklist_checkbox}
+                        checked={Boolean(item.is_checked)}
+                        disabled={!canEditCards || !isLoggedIn}
+                        onChange={(event) => void toggleChecklistItem(block.id, item.id, event.currentTarget.checked)}
+                      />
+                      <span className={classes.checklist_indicator} />
+                    </span>
+                    <span className={classes.checklist_text_wrap}>
+                      {isChecklistEditing ? (
+                        <textarea
+                          className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
+                          value={editingChecklistValue}
+                          autoFocus
+                          placeholder="Задача"
+                          rows={1}
+                          maxLength={FACT_ITEM_MAX_LENGTH}
+                          ref={(node) => autosizeTextarea(node)}
+                          onFocus={(event) => {
+                            const node = event.currentTarget;
+                            const length = node.value.length;
+                            try {
+                              node.setSelectionRange(length, length);
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          onChange={(event) => {
+                            const normalized = normalizeSingleLine(event.currentTarget.value).slice(0, FACT_ITEM_MAX_LENGTH);
+                            setEditingChecklistValue(normalized);
+                            autosizeTextarea(event.currentTarget);
+                          }}
+                          onInput={(event) => autosizeTextarea(event.currentTarget)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              setEditingChecklistItemId(null);
+                            }
+                          }}
+                          onBlur={(event) => {
+                            void saveChecklistItem(block.id, item.id, event.currentTarget.value, item.content);
+                          }}
+                        />
+                      ) : (
+                        <span
+                          className={`${classes.checklist_text} ${Boolean(item.is_checked) ? classes.checklist_text_checked : ''}`.trim()}
+                        >
+                          {item.content}
+                        </span>
+                      )}
+                      {canEditCards && isLoggedIn && !isChecklistEditing ? (
+                        <span className={classes.checklist_item_actions}>
+                          <button
+                            type="button"
+                            className={classes.text_block_edit_btn}
+                            aria-label="Изменить задачу"
+                            onClick={() => {
+                              setEditingChecklistItemId(item.id);
+                              setEditingChecklistValue(item.content.slice(0, FACT_ITEM_MAX_LENGTH));
+                            }}
+                          >
+                            <Edit />
+                          </button>
+                          <DropdownWrapper right fixed minWidthPx={140} closeOnClick={false} isOpen={isDeleteConfirmOpen} onClose={() => setConfirmDeleteChecklistItemId(null)}>
+                            {[
+                              <button
+                                key="trigger"
+                                type="button"
+                                className={classes.text_block_edit_btn}
+                                aria-label="Удалить задачу"
+                                onClick={() => setConfirmDeleteChecklistItemId((prev) => (prev === item.id ? null : item.id))}
+                              >
+                                <DeleteIcon />
+                              </button>,
+                              <div key="menu">
+                                <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteChecklistItem(block.id, item.id)}>
+                                  Да, удалить
+                                </button>
+                                <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setConfirmDeleteChecklistItemId(null)}>
+                                  Отмена
+                                </button>
+                              </div>,
+                            ]}
+                          </DropdownWrapper>
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                );
+              })}
+              {canEditCards && isLoggedIn ? (
+                <div className={classes.checklist_row}>
                   <span className={classes.checklist_box}>
-                    <span className={`${classes.checklist_indicator} ${Boolean(item.is_checked) ? classes.checklist_indicator_checked : ''}`.trim()} />
+                    <input type="checkbox" className={classes.checklist_checkbox} checked={false} disabled />
+                    <span className={classes.checklist_indicator} />
                   </span>
-                  <span className={classes.checklist_text}>{item.content}</span>
+                  <textarea
+                    ref={(node) => {
+                      checklistInputRefs.current[block.id] = node;
+                      autosizeTextarea(node);
+                    }}
+                    className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
+                    value={checklistDraftValues[block.id] ?? ''}
+                    placeholder="Новая задача"
+                    rows={1}
+                    maxLength={FACT_ITEM_MAX_LENGTH}
+                    onChange={(event) => {
+                      const nextValue = normalizeSingleLine(event.currentTarget.value).slice(0, FACT_ITEM_MAX_LENGTH);
+                      setChecklistDraftValues((prev) => ({ ...prev, [block.id]: nextValue }));
+                      autosizeTextarea(event.currentTarget);
+                    }}
+                    onInput={(event) => autosizeTextarea(event.currentTarget)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setChecklistDraftValues((prev) => ({ ...prev, [block.id]: '' }));
+                        event.currentTarget.blur();
+                      }
+                    }}
+                    onBlur={(event) => {
+                      void saveNewChecklistItem(block.id, event.currentTarget.value);
+                    }}
+                  />
                 </div>
-              ))}
+              ) : null}
             </div>
           );
         })}
@@ -885,22 +1140,29 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
             const value = draft.items[0] ?? '';
             return (
               <div key={draft.id} className={classes.details_editor_block}>
-                <input
-                  className={`${classes.details_item_input} ${classes.facts_item_input}`.trim()}
+                <textarea
+                  className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                   value={value}
                   autoFocus
                   placeholder="Новый факт"
+                  rows={1}
                   maxLength={FACT_ITEM_MAX_LENGTH}
                   onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      event.currentTarget.blur();
+                    }
                     if (event.key === 'Escape') {
                       event.preventDefault();
                       removeDraftBlock(draft.id);
                     }
                   }}
                   onChange={(event) => {
-                    const nextValue = event.currentTarget.value.slice(0, FACT_ITEM_MAX_LENGTH);
+                    const nextValue = normalizeSingleLine(event.currentTarget.value).slice(0, FACT_ITEM_MAX_LENGTH);
                     updateDraftBlock(draft.id, () => ({ ...draft, items: [nextValue] }));
+                    autosizeTextarea(event.currentTarget);
                   }}
+                  onInput={(event) => autosizeTextarea(event.currentTarget)}
                   onBlur={(event) => {
                     void saveFactsDraft(draft.id, event.currentTarget.value);
                   }}
@@ -909,63 +1171,48 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
             );
           }
 
-          return (
-            <div key={draft.id} className={classes.details_editor_block}>
-              <div className={classes.details_list_draft}>
-                {draft.items.map((item, index) => (
-                  <div key={`${draft.id}-${index}`} className={classes.details_list_row}>
-                    <span className={classes.checklist_box}>
-                      <span className={classes.checklist_indicator} />
-                    </span>
-                    <input
-                      className={classes.checklist_text_input}
-                      value={item}
-                      autoFocus={index === draft.items.length - 1}
-                      placeholder="Новый пункт"
-                      onChange={(event) => {
-                        const nextValue = event.currentTarget.value;
-                        updateDraftBlock(draft.id, (current) => {
-                          if (current.type !== draft.type) return current;
-                          const nextItems = [...current.items];
-                          nextItems[index] = nextValue;
-                          return { ...current, items: nextItems };
-                        });
-                      }}
-                      onBlur={(event) => {
-                        if (trimValue(event.currentTarget.value)) return;
-                        updateDraftBlock(draft.id, (current) => {
-                          if (current.type !== draft.type) return current;
-                          const nextItems = current.items.filter((_, itemIndex) => itemIndex !== index);
-                          if (!nextItems.length) {
-                            window.setTimeout(() => removeDraftBlock(draft.id), 0);
-                            return current;
-                          }
-                          return { ...current, items: nextItems };
-                        });
-                      }}
-                    />
-                  </div>
-                ))}
+          if (draft.type === 'checklist') {
+            const value = draft.items[0] ?? '';
+            return (
+              <div key={draft.id} className={classes.details_editor_block}>
+                <div className={classes.checklist_row}>
+                  <span className={classes.checklist_box}>
+                    <input type="checkbox" className={classes.checklist_checkbox} checked={false} disabled />
+                    <span className={classes.checklist_indicator} />
+                  </span>
+                  <textarea
+                    className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
+                    value={value}
+                    autoFocus
+                    placeholder="Новая задача"
+                    rows={1}
+                    maxLength={FACT_ITEM_MAX_LENGTH}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        removeDraftBlock(draft.id);
+                      }
+                    }}
+                    onChange={(event) => {
+                      const nextValue = normalizeSingleLine(event.currentTarget.value).slice(0, FACT_ITEM_MAX_LENGTH);
+                      updateDraftBlock(draft.id, () => ({ ...draft, items: [nextValue] }));
+                      autosizeTextarea(event.currentTarget);
+                    }}
+                    onInput={(event) => autosizeTextarea(event.currentTarget)}
+                    onBlur={(event) => {
+                      void saveChecklistDraft(draft.id, event.currentTarget.value);
+                    }}
+                  />
+                </div>
               </div>
-              <div className={classes.details_editor_actions}>
-                <button
-                  type="button"
-                  className={classes.details_inline_btn}
-                  onClick={() =>
-                    updateDraftBlock(draft.id, (current) => {
-                      if (current.type !== draft.type) return current;
-                      return { ...current, items: [...current.items, ''] };
-                    })
-                  }
-                >
-                  Еще пункт
-                </button>
-                <button type="button" className={classes.details_inline_btn} onClick={() => void saveListDraft(draft.id, draft.type, draft.items)}>
-                  Сохранить
-                </button>
-              </div>
-            </div>
-          );
+            );
+          }
+
+          return null;
         })}
 
         {!loading && !blocks.length && !draftBlocks.length ? <div className={classes.details_empty}>Добавьте заметки в меню снизу экрана</div> : null}
