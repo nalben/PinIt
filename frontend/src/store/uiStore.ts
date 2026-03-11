@@ -106,7 +106,7 @@ interface UIState {
   patchSelectedLinkDraft: (patch: Partial<SelectedLinkDraft>) => void;
   openCardDetails: (snapshot: SelectedCardDetailsSnapshot, options?: { openMenu?: boolean }) => void;
   closeCardDetails: () => void;
-  openCardDetailsFromNode: (snapshot: SelectedCardDetailsSnapshot) => void;
+  openCardDetailsFromNode: (snapshot: SelectedCardDetailsSnapshot, options?: { openMenu?: boolean }) => void;
   patchSelectedCardDetails: (patch: Partial<SelectedCardDetailsSnapshot>) => void;
   openFlowCardSettingsFromNode: (snapshot: FlowCardSettingsSnapshot) => void;
   handleBoardMenuBlur: () => void;
@@ -330,8 +330,8 @@ export const useUIStore = create<UIState>((set, get) => {
         resetState: () => buildCardDetailsResetState(),
       });
     }),
-  openCardDetailsFromNode: (snapshot) => {
-    if (!isWideBoardMenu()) {
+  openCardDetailsFromNode: (snapshot, options) => {
+    if (!isWideBoardMenu() && !options?.openMenu) {
       clearBoardMenuCloseTimer();
       set(() => ({
         boardMenuView: 'board',

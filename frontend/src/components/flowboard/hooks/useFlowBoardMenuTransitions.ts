@@ -19,7 +19,7 @@ type UseFlowBoardMenuTransitionsParams = {
   nodeRectangleClassName: string;
   nodes: RFNode<FlowNodeData>[];
   numericBoardId: number;
-  openCardDetailsFromNode: (snapshot: { cardId: number; boardId: number; title: string }) => void;
+  openCardDetailsFromNode: (snapshot: { cardId: number; boardId: number; title: string }, options?: { openMenu?: boolean }) => void;
   openLinkInspector: (snapshot: SelectedLinkSnapshot) => void;
   openSettingsForNode: (node: RFNode<FlowNodeData>) => void;
   selectedLink: SelectedLinkSnapshot | null;
@@ -153,9 +153,10 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
           title: node.data.title,
         };
       })();
+      const shouldOpenDetailsMenu = !canEditCards;
 
       if (flowCardSettingsOpen && activeNodeId && clickedId === String(activeNodeId)) {
-        if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot);
+        if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot, { openMenu: shouldOpenDetailsMenu });
         closeContextMenu();
         return;
       }
@@ -165,7 +166,7 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
       }
 
       openSettingsForNode(node);
-      if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot);
+      if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot, { openMenu: shouldOpenDetailsMenu });
 
       if (wideBoardMenu && typeof window !== 'undefined') {
         window.requestAnimationFrame(() => {
@@ -178,6 +179,7 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
     [
       activeNodeId,
       boardMenuView,
+      canEditCards,
       cancelCardSettings,
       clearSelectedEdges,
       closeCardDetails,
