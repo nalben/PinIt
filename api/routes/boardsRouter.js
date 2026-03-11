@@ -88,6 +88,7 @@ router.patch('/:board_id/cards/:card_id/details/blocks/:block_id', maybeUploadSi
 router.delete('/:board_id/cards/:card_id/details/blocks/:block_id', boardsController.deleteCardDetailsBlock);
 router.post('/:board_id/cards/:card_id/details/blocks/:block_id/items', boardsController.createCardDetailsBlockItem);
 router.patch('/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id', boardsController.updateCardDetailsBlockItem);
+router.delete('/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id', boardsController.deleteCardDetailsBlockItem);
 router.patch('/:board_id/cards/:card_id', boardsController.updateCard);
 router.patch('/:board_id/cards/:card_id/lock', boardsController.updateCardLock);
 router.patch('/:board_id/cards/:card_id/image', maybeUploadSingleImage, boardsController.updateCardImage);

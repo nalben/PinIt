@@ -9,6 +9,7 @@
     background-color: var(--grey20);
     border: var(--border);
     border-color: var(--pink);
+    z-index: 50;
     width: fit-content;
     display: flex;
     flex-direction: column;
@@ -49,6 +50,7 @@
     position: fixed;
     top: 0;
     left: 0;
+    z-index: 200;
 }
 .menu.up{
     top: auto;

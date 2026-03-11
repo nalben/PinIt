@@ -1150,6 +1150,12 @@ Update (2026-03-06)
   - empty draft blocks are removed on blur/cancel and are not persisted.
   - saved blocks render as static content in the menu; drafts use temporary inputs/textareas before save.
 
+Update (2026-03-11)
+
+- Added card-details item deletion endpoint:
+  - `DELETE /api/boards/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id` (owner/`editer` only).
+- Deleting the last item inside a `facts` / `checklist` details block now removes the block itself server-side.
+
 Update (2026-03-08)
 
 - Right-menu card details title is now taken directly from the selected node title snapshot (`selectedCardDetails.title`) and no longer depends on `carddetails.heading`.

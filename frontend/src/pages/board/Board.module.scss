@@ -32,6 +32,7 @@
     background-color: var(--grey20);
     width: var(--board-menu-width);
     border-left: var(--border);
+    z-index: 3;
     transition:
         transform var(--board-menu-transition) ease;
     overflow: visible;
@@ -1010,7 +1011,6 @@
     position: relative;
 }
 .image_block_media_actions_open{
-    z-index: 3;
 }
 .image_block_actions_top{
     position: absolute;
@@ -1105,7 +1105,6 @@
 .image_block_edit_center{
     position: absolute;
     inset: 0;
-    z-index: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1201,11 +1200,15 @@
     margin-left: 0.3rem;
     vertical-align: text-bottom;
     position: relative;
-    z-index: 1;
     .text_block_edit_btn{
         margin-left: 0;
     }
     & button{
+        transition: all var(--board-menu-transition);
+        &:hover {
+            opacity: 0.6;
+            transition: all var(--board-menu-transition);
+        }
         & svg {
             width: 26px;
             height: 26px;
@@ -1256,6 +1259,79 @@
     flex-direction: column;
     gap: 0.5rem;
 }
+.facts_item{
+    display: block;
+    &:has(span){
+        padding: 1px;
+    }
+}
+.facts_item_text{
+    display: inline;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.details_item_input.facts_item_input{
+    background: transparent;
+    // border: 0;
+    padding: 0;
+    color: var(--cyan);
+    font: inherit;
+    line-height: inherit;
+    outline: none;
+    &::placeholder{
+        color: var(--cyan);
+        opacity: 0.5;
+    }
+}
+.facts_item_actions{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0.35rem;
+    vertical-align: text-bottom;
+    & svg{
+        width: 24px;
+        height: 24px;
+    }
+    & .text_block_edit_btn{
+        margin-left: 0;
+    }
+    & button {
+        transition: all var(--board-menu-transition);
+
+        &:hover {
+            opacity: 0.6;
+            transition: all var(--board-menu-transition);
+        }
+
+        & svg {
+            width: 26px;
+            height: 26px;
+        }
+    }
+
+    & div {
+        & button {
+            & svg {
+                width: 20px;
+                height: 20px;
+                min-height: 20px;
+            }
+        }
+    }
+
+    & div:nth-child(2) {
+        & div:nth-child(1) {
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+    }
+}
+.facts_item .details_item_input{
+    width: 100%;
+    display: block;
+}
 .details_list_row{
     display: flex;
     gap: 0.5rem;
@@ -1271,7 +1347,6 @@
     background: transparent;
     border: solid 1px rgba(255,255,255,0.2);
     color: var(--pink);
-    padding: 0.6rem 0.8rem;
 }
 .checklist_block{
     display: flex;
@@ -1387,4 +1462,5 @@
     font-size: inherit;
     border-color: var(--pink);
     padding: 0px;
+    height: auto;
 }

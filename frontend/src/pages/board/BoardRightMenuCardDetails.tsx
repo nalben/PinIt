@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import axiosInstance from '@/api/axiosInstance';
 import { resolveImageSrc } from '@/components/flow/flowBoardUtils';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
@@ -78,6 +78,7 @@ const buildDetailsPath = (snapshot: CardDetailsSnapshot, isLoggedIn: boolean) =>
 const trimValue = (value: string | null | undefined) => String(value ?? '').replace(/\u00a0/g, ' ').trim();
 const createDraftId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random()}`;
 const IMAGE_CAPTION_MAX_LENGTH = 70;
+const FACT_ITEM_MAX_LENGTH = 200;
 const IMAGE_BLOCK_TOO_LARGE_MESSAGE = 'Вес слишком большой — выберите изображение весом до 5 МБ.';
 const normalizeSingleLine = (value: string) => value.replace(/[\r\n]+/g, ' ');
 const shouldAddExtraSpacer = (node: HTMLTextAreaElement | null) => {
@@ -108,14 +109,20 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const [loading, setLoading] = useState(false);
   const [draftBlocks, setDraftBlocks] = useState<DraftBlock[]>([]);
   const [confirmDeleteBlockId, setConfirmDeleteBlockId] = useState<number | null>(null);
+  const [confirmDeleteFactItemId, setConfirmDeleteFactItemId] = useState<number | null>(null);
   const [editingCaptionBlockId, setEditingCaptionBlockId] = useState<number | null>(null);
   const [editingCaptionValue, setEditingCaptionValue] = useState('');
   const [editingTextBlockId, setEditingTextBlockId] = useState<number | null>(null);
+  const [editingFactItemId, setEditingFactItemId] = useState<number | null>(null);
+  const [editingFactValue, setEditingFactValue] = useState('');
+  const [factDraftValues, setFactDraftValues] = useState<Record<number, string>>({});
+  const [pendingFactFocusBlockId, setPendingFactFocusBlockId] = useState<number | null>(null);
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const imageBlockInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const imageCaptionTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const captionCaretInitializedBlockIdRef = useRef<number | null>(null);
   const textBlockRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const factInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
   useEffect(() => {
     if (editingCaptionBlockId !== null) return;
@@ -123,13 +130,23 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   }, [editingCaptionBlockId]);
 
   useEffect(() => {
+    if (editingFactItemId !== null) return;
+    setEditingFactValue('');
+  }, [editingFactItemId]);
+
+  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setDetails(null);
     setConfirmDeleteBlockId(null);
+    setConfirmDeleteFactItemId(null);
     setEditingCaptionBlockId(null);
     setEditingTextBlockId(null);
+    setEditingFactItemId(null);
+    setEditingFactValue('');
     setEditingCaptionValue('');
+    setFactDraftValues({});
+    setPendingFactFocusBlockId(null);
     setDraftBlocks((prev) => {
       prev.forEach((draft) => {
         if (draft.type === 'image' && draft.previewUrl) URL.revokeObjectURL(draft.previewUrl);
@@ -163,10 +180,38 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     };
   }, [draftBlocks]);
 
+  useEffect(() => {
+    if (pendingFactFocusBlockId === null) return;
+    const node = factInputRefs.current[pendingFactFocusBlockId];
+    if (!node) return;
+    node.focus();
+    const length = node.value.length;
+    try {
+      node.setSelectionRange(length, length);
+    } catch {
+      // ignore
+    }
+    setPendingFactFocusBlockId(null);
+  }, [pendingFactFocusBlockId, details]);
+
   const reloadFromResponse = (next: CardDetailsResponse) => {
     setConfirmDeleteBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
+    setConfirmDeleteFactItemId((prev) => {
+      if (prev === null) return prev;
+      const hasItem = next.blocks.some(
+        (block) => block.block_type === 'facts' && block.items.some((item) => item.id === prev)
+      );
+      return hasItem ? prev : null;
+    });
     setEditingCaptionBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
     setEditingTextBlockId((prev) => (prev !== null && !next.blocks.some((block) => block.id === prev) ? null : prev));
+    setEditingFactItemId((prev) => {
+      if (prev === null) return prev;
+      const hasItem = next.blocks.some(
+        (block) => block.block_type === 'facts' && block.items.some((item) => item.id === prev)
+      );
+      return hasItem ? prev : null;
+    });
     setDetails(next);
   };
 
@@ -321,6 +366,82 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
 
     removeDraftBlock(draftId);
     reloadFromResponse(latest);
+  };
+
+  const saveFactsDraft = async (draftId: string, rawValue: string) => {
+    if (!canEditCards || !isLoggedIn) return;
+    const content = trimValue(rawValue).slice(0, FACT_ITEM_MAX_LENGTH);
+    if (!content) {
+      removeDraftBlock(draftId);
+      return;
+    }
+
+    const { data: createdBlock } = await axiosInstance.post<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks`, { type: 'facts' });
+    const created = createdBlock.blocks[createdBlock.blocks.length - 1];
+    if (!created || created.block_type !== 'facts') {
+      reloadFromResponse(createdBlock);
+      removeDraftBlock(draftId);
+      return;
+    }
+
+    const response = await axiosInstance.post<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks/${created.id}/items`, {
+      content,
+    });
+    removeDraftBlock(draftId);
+    reloadFromResponse(response.data);
+    setPendingFactFocusBlockId(created.id);
+  };
+
+  const saveFactItem = async (blockId: number, itemId: number, rawValue: string, currentContent: string) => {
+    if (!canEditCards || !isLoggedIn) return;
+    const content = trimValue(rawValue).slice(0, FACT_ITEM_MAX_LENGTH);
+    const normalizedCurrentContent = trimValue(currentContent).slice(0, FACT_ITEM_MAX_LENGTH);
+
+    if (!content || content === normalizedCurrentContent) {
+      setEditingFactItemId(null);
+      return;
+    }
+
+    try {
+      const { data } = await axiosInstance.patch<CardDetailsResponse>(
+        `${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/items/${itemId}`,
+        { content }
+      );
+      reloadFromResponse(data);
+    } catch (error) {
+      showTopAlarm(getApiErrorMessage(error, 'Не удалось сохранить факт'));
+    } finally {
+      setEditingFactItemId(null);
+    }
+  };
+
+  const saveNewFactItem = async (blockId: number, rawValue: string) => {
+    if (!canEditCards || !isLoggedIn) return;
+    const content = trimValue(rawValue).slice(0, FACT_ITEM_MAX_LENGTH);
+    if (!content) {
+      setFactDraftValues((prev) => ({ ...prev, [blockId]: '' }));
+      return;
+    }
+
+    const { data } = await axiosInstance.post<CardDetailsResponse>(`${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/items`, {
+      content,
+    });
+    reloadFromResponse(data);
+    setFactDraftValues((prev) => ({ ...prev, [blockId]: '' }));
+    setPendingFactFocusBlockId(blockId);
+  };
+
+  const deleteFactItem = async (blockId: number, itemId: number) => {
+    if (!canEditCards || !isLoggedIn) return;
+    try {
+      const { data } = await axiosInstance.delete<CardDetailsResponse>(
+        `${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/items/${itemId}`
+      );
+      setConfirmDeleteFactItemId(null);
+      reloadFromResponse(data);
+    } catch (error) {
+      showTopAlarm(getApiErrorMessage(error, 'Не удалось удалить факт'));
+    }
   };
 
   const addDraftBlock = (type: DraftBlock['type']) => {
@@ -496,12 +617,13 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                     className={classes.text_block_textarea}
                     defaultValue={block.content}
                     autoFocus
+                    placeholder="Текст"
                     onInput={(event) => {
                       const target = event.currentTarget;
                       autosizeTextarea(target, shouldAddExtraSpacer(target));
                     }}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
+                      if (__PLATFORM__ === 'desktop' && event.key === 'Enter' && !event.shiftKey) {
                         event.preventDefault();
                         event.currentTarget.blur();
                       }
@@ -570,12 +692,114 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
           }
 
           if (block.block_type === 'facts') {
+            const draftValue = factDraftValues[block.id] ?? '';
             return (
-              <ul key={block.id} className={classes.facts_block}>
-                {block.items.map((item) => (
-                  <li key={item.id}>{item.content}</li>
-                ))}
-              </ul>
+              <div key={block.id} className={classes.facts_block}>
+                {block.items.map((item) => {
+                  const isFactEditing = editingFactItemId === item.id;
+                  const isDeleteConfirmOpen = confirmDeleteFactItemId === item.id;
+                  return (
+                    <div key={item.id} className={classes.facts_item}>
+                      {isFactEditing ? (
+                        <input
+                          className={`${classes.details_item_input} ${classes.facts_item_input}`.trim()}
+                          value={editingFactValue}
+                          autoFocus
+                          placeholder="Факт"
+                          maxLength={FACT_ITEM_MAX_LENGTH}
+                          onFocus={(event) => {
+                            const node = event.currentTarget;
+                            const length = node.value.length;
+                            try {
+                              node.setSelectionRange(length, length);
+                            } catch {
+                              // ignore
+                            }
+                          }}
+                          onChange={(event) => {
+                            const nextValue = event.currentTarget.value.slice(0, FACT_ITEM_MAX_LENGTH);
+                            setEditingFactValue(nextValue);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              setEditingFactItemId(null);
+                            }
+                          }}
+                          onBlur={(event) => {
+                            void saveFactItem(block.id, item.id, event.currentTarget.value, item.content);
+                          }}
+                        />
+                      ) : (
+                        <span className={classes.facts_item_text}>{item.content}</span>
+                      )}
+                      {canEditCards && isLoggedIn && !isFactEditing ? (
+                        <span className={classes.facts_item_actions}>
+                          <button
+                            type="button"
+                            className={classes.text_block_edit_btn}
+                            aria-label="Изменить факт"
+                            onClick={() => {
+                              setEditingFactItemId(item.id);
+                              setEditingFactValue(item.content.slice(0, FACT_ITEM_MAX_LENGTH));
+                            }}
+                          >
+                            <Edit />
+                          </button>
+                          <DropdownWrapper right fixed minWidthPx={140} closeOnClick={false} isOpen={isDeleteConfirmOpen} onClose={() => setConfirmDeleteFactItemId(null)}>
+                            {[
+                              <button
+                                key="trigger"
+                                type="button"
+                                className={classes.text_block_edit_btn}
+                                aria-label="Удалить факт"
+                                onClick={() => setConfirmDeleteFactItemId((prev) => (prev === item.id ? null : item.id))}
+                              >
+                                <DeleteIcon />
+                              </button>,
+                              <div key="menu">
+                                <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteFactItem(block.id, item.id)}>
+                                  Да, удалить
+                                </button>
+                                <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setConfirmDeleteFactItemId(null)}>
+                                  Отмена
+                                </button>
+                              </div>,
+                            ]}
+                          </DropdownWrapper>
+                        </span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {canEditCards && isLoggedIn ? (
+                  <div className={classes.facts_item}>
+                    <input
+                      ref={(node) => {
+                        factInputRefs.current[block.id] = node;
+                      }}
+                      className={`${classes.details_item_input} ${classes.facts_item_input}`.trim()}
+                      value={draftValue}
+                      placeholder="Новый факт"
+                      maxLength={FACT_ITEM_MAX_LENGTH}
+                      onChange={(event) => {
+                        const nextValue = event.currentTarget.value.slice(0, FACT_ITEM_MAX_LENGTH);
+                        setFactDraftValues((prev) => ({ ...prev, [block.id]: nextValue }));
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          event.preventDefault();
+                          setFactDraftValues((prev) => ({ ...prev, [block.id]: '' }));
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      onBlur={(event) => {
+                        void saveNewFactItem(block.id, event.currentTarget.value);
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
             );
           }
 
@@ -601,9 +825,9 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   className={classes.details_textarea}
                   value={draft.value}
                   autoFocus
-                  placeholder=""
+                  placeholder="Текст"
                   onKeyDown={(event) => {
-                    if (event.key === 'Enter' && !event.shiftKey) {
+                    if (__PLATFORM__ === 'desktop' && event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault();
                       event.currentTarget.blur();
                     }
@@ -657,21 +881,47 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
             );
           }
 
+          if (draft.type === 'facts') {
+            const value = draft.items[0] ?? '';
+            return (
+              <div key={draft.id} className={classes.details_editor_block}>
+                <input
+                  className={`${classes.details_item_input} ${classes.facts_item_input}`.trim()}
+                  value={value}
+                  autoFocus
+                  placeholder="Новый факт"
+                  maxLength={FACT_ITEM_MAX_LENGTH}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      event.preventDefault();
+                      removeDraftBlock(draft.id);
+                    }
+                  }}
+                  onChange={(event) => {
+                    const nextValue = event.currentTarget.value.slice(0, FACT_ITEM_MAX_LENGTH);
+                    updateDraftBlock(draft.id, () => ({ ...draft, items: [nextValue] }));
+                  }}
+                  onBlur={(event) => {
+                    void saveFactsDraft(draft.id, event.currentTarget.value);
+                  }}
+                />
+              </div>
+            );
+          }
+
           return (
             <div key={draft.id} className={classes.details_editor_block}>
               <div className={classes.details_list_draft}>
                 {draft.items.map((item, index) => (
                   <div key={`${draft.id}-${index}`} className={classes.details_list_row}>
-                    {draft.type === 'checklist' ? (
-                      <span className={classes.checklist_box}>
-                        <span className={classes.checklist_indicator} />
-                      </span>
-                    ) : null}
+                    <span className={classes.checklist_box}>
+                      <span className={classes.checklist_indicator} />
+                    </span>
                     <input
-                      className={draft.type === 'checklist' ? classes.checklist_text_input : classes.details_item_input}
+                      className={classes.checklist_text_input}
                       value={item}
                       autoFocus={index === draft.items.length - 1}
-                      placeholder={draft.type === 'facts' ? 'Новый факт' : 'Новый пункт'}
+                      placeholder="Новый пункт"
                       onChange={(event) => {
                         const nextValue = event.currentTarget.value;
                         updateDraftBlock(draft.id, (current) => {
@@ -708,7 +958,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                     })
                   }
                 >
-                  {draft.type === 'facts' ? 'Еще факт' : 'Еще пункт'}
+                  Еще пункт
                 </button>
                 <button type="button" className={classes.details_inline_btn} onClick={() => void saveListDraft(draft.id, draft.type, draft.items)}>
                   Сохранить

@@ -2983,6 +2983,100 @@ exports.updateCardDetailsBlockItem = async (req, res) => {
     return res.status(500).json({ message: 'Ошибка обновления элемента' });
   }
 };
+exports.deleteCardDetailsBlockItem = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const cardId = Number(req.params?.card_id);
+    const blockId = Number(req.params?.block_id);
+    const itemId = Number(req.params?.item_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(cardId) ||
+      cardId <= 0 ||
+      !Number.isFinite(blockId) ||
+      blockId <= 0 ||
+      !Number.isFinite(itemId) ||
+      itemId <= 0
+    ) {
+      return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹' });
+    }
+
+    const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
+    if (!boardRows.length) {
+      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+    }
+
+    const owner_id = Number(boardRows[0]?.owner_id);
+    let canEdit = owner_id === user_id;
+    if (!canEdit) {
+      const [guestRows] = await db.execute(
+        `SELECT role FROM boardguests WHERE board_id = ? AND user_id = ? AND role = 'editer' LIMIT 1`,
+        [boardId, user_id]
+      );
+      canEdit = Boolean(guestRows.length);
+    }
+
+    if (!canEdit) {
+      return res.status(403).json({ message: 'РќРµС‚ РґРѕСЃС‚СѓРїР°' });
+    }
+
+    const connection = await db.getConnection();
+    try {
+      const [blockRows] = await connection.execute(
+        `SELECT block_type
+         FROM carddetail_blocks b
+         JOIN cards c ON c.id = b.card_id
+         WHERE b.id = ? AND b.card_id = ? AND c.board_id = ?
+         LIMIT 1`,
+        [blockId, cardId, boardId]
+      );
+
+      if (!blockRows.length) {
+        return res.status(404).json({ message: 'Р‘Р»РѕРє РЅРµ РЅР°Р№РґРµРЅ' });
+      }
+
+      const blockType = String(blockRows[0]?.block_type || '');
+      if (blockType !== 'facts' && blockType !== 'checklist') {
+        return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РёРї Р±Р»РѕРєР° РґР»СЏ СЌР»РµРјРµРЅС‚Р°' });
+      }
+
+      const tableName = blockType === 'facts' ? 'carddetail_fact_items' : 'carddetail_checklist_items';
+      await connection.execute(
+        `DELETE FROM ${tableName}
+         WHERE id = ? AND block_id = ?`,
+        [itemId, blockId]
+      );
+
+      const [countRows] = await connection.execute(
+        `SELECT COUNT(*) AS total
+         FROM ${tableName}
+         WHERE block_id = ?`,
+        [blockId]
+      );
+      const remaining = Number(countRows[0]?.total) || 0;
+      if (!remaining) {
+        await connection.execute(
+          `DELETE FROM carddetail_blocks
+           WHERE id = ? AND card_id = ?`,
+          [blockId, cardId]
+        );
+      }
+
+      const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      return res.status(200).json(payload);
+    } finally {
+      connection.release();
+    }
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ СЌР»РµРјРµРЅС‚Р°' });
+  }
+};
 exports.getBoardLinks = async (req, res) => {
   try {
     const user_id = Number(req.user?.id);
