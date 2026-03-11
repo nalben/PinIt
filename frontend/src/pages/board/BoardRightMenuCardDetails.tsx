@@ -3,6 +3,7 @@ import axiosInstance from '@/api/axiosInstance';
 import { resolveImageSrc } from '@/components/flow/flowBoardUtils';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import { useUIStore } from '@/store/uiStore';
+import { connectSocket } from '@/services/socketManager';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Image from '@/assets/icons/monochrome/image.svg';
 import Text from '@/assets/icons/monochrome/text.svg';
@@ -48,6 +49,12 @@ type CardDetailsResponse = {
   board_id: number;
   title: string | null;
   blocks: CardDetailsBlock[];
+};
+
+type BoardsUpdatedCmd = {
+  reason?: unknown;
+  board_id?: unknown;
+  card_id?: unknown;
 };
 
 type BoardRightMenuCardDetailsProps = {
@@ -134,6 +141,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const textBlockRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const factInputRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const checklistInputRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
+  const socketReloadInFlightRef = useRef(false);
 
   useEffect(() => {
     if (editingCaptionBlockId !== null) return;
@@ -266,6 +274,52 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     });
     setDetails(next);
   };
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const boardId = Number(selectedCardDetails.boardId);
+    const cardId = Number(selectedCardDetails.cardId);
+    if (!Number.isFinite(boardId) || !Number.isFinite(cardId)) return;
+
+    let cancelled = false;
+
+    const unsubscribe = connectSocket({
+      onBoardsUpdate: (data) => {
+        const cmd = data as BoardsUpdatedCmd;
+        const reason = typeof cmd?.reason === 'string' ? cmd.reason : '';
+        if (reason !== 'card_details_updated') return;
+
+        const boardIdRaw = cmd?.board_id;
+        const cardIdRaw = cmd?.card_id;
+        const boardIdParsed = typeof boardIdRaw === 'number' ? boardIdRaw : Number(boardIdRaw);
+        const cardIdParsed = typeof cardIdRaw === 'number' ? cardIdRaw : Number(cardIdRaw);
+        if (!Number.isFinite(boardIdParsed) || !Number.isFinite(cardIdParsed)) return;
+        if (boardIdParsed !== boardId || cardIdParsed !== cardId) return;
+
+        if (socketReloadInFlightRef.current) return;
+        socketReloadInFlightRef.current = true;
+
+        (async () => {
+          try {
+            const { data: next } = await axiosInstance.get<CardDetailsResponse>(detailsPath);
+            if (cancelled) return;
+            reloadFromResponse(next);
+          } catch {
+            // ignore
+          } finally {
+            if (!cancelled) socketReloadInFlightRef.current = false;
+          }
+        })();
+      },
+    });
+
+    return () => {
+      cancelled = true;
+      socketReloadInFlightRef.current = false;
+      unsubscribe?.();
+    };
+  }, [detailsPath, isLoggedIn, selectedCardDetails.boardId, selectedCardDetails.cardId]);
 
   const removeDraftBlock = (draftId: string) => {
     setDraftBlocks((prev) => {

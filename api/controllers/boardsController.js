@@ -2539,6 +2539,7 @@ exports.createCardDetailsBlock = async (req, res) => {
       await connection.commit();
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_details_updated', card_id: cardId }, [user_id]);
       return res.status(201).json(payload);
     } catch (e) {
       try {
@@ -2685,6 +2686,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
       }
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_details_updated', card_id: cardId }, [user_id]);
       return res.status(200).json(payload);
     } finally {
       connection.release();
@@ -2758,6 +2760,7 @@ exports.deleteCardDetailsBlock = async (req, res) => {
       }
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_details_updated', card_id: cardId }, [user_id]);
       return res.status(200).json(payload);
     } finally {
       connection.release();
@@ -2855,6 +2858,7 @@ exports.createCardDetailsBlockItem = async (req, res) => {
       }
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_details_updated', card_id: cardId }, [user_id]);
       return res.status(201).json(payload);
     } finally {
       connection.release();
@@ -2974,6 +2978,7 @@ exports.updateCardDetailsBlockItem = async (req, res) => {
       }
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_details_updated', card_id: cardId }, [user_id]);
       return res.status(200).json(payload);
     } finally {
       connection.release();
@@ -3068,6 +3073,7 @@ exports.deleteCardDetailsBlockItem = async (req, res) => {
       }
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
+      emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_details_updated', card_id: cardId }, [user_id]);
       return res.status(200).json(payload);
     } finally {
       connection.release();

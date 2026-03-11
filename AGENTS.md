@@ -1155,6 +1155,8 @@ Update (2026-03-11)
 - Added card-details item deletion endpoint:
   - `DELETE /api/boards/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id` (owner/`editer` only).
 - Deleting the last item inside a `facts` / `checklist` details block now removes the block itself server-side.
+- `boards:updated` now emits `reason: 'card_details_updated'` with `card_id` after any card-details block/item create/update/delete.
+- `frontend/src/pages/board/BoardRightMenuCardDetails.tsx` listens to `boards:updated` and reloads details when `card_details_updated` arrives for the current card.
 
 Update (2026-03-08)
 
