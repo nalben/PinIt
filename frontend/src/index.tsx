@@ -5,7 +5,6 @@ import { useEffect } from "react";
 import Home from "@/pages/home/Home";
 import Welcome from "./pages/welcome/Welcome";
 import PublicRoute from "./components/__general/publicroute/PublicRoute";
-import ProtectedRoute from "./components/__general/protectedroute/ProtectedRoute";
 import Profile from "./pages/profile/Profile";
 import ProfileRedirect from "./components/__general/profileredirect/ProfileRedirect";
 import Todo from "./pages/todo/Todo";
@@ -123,11 +122,7 @@ const router = createBrowserRouter([
       },
       {
         path: "/converter",
-        element: (
-          <ProtectedRoute>
-            <Converter />
-          </ProtectedRoute>
-        )
+        element: <Converter />
       },
       {
         path: "*",

@@ -30,6 +30,7 @@ type AuthView = 'login' | 'register' | 'reset';
 const GlobalAuthModals = () => {
   const authModalOpen = useUIStore((s) => s.authModalOpen);
   const closeAuthModal = useUIStore((s) => s.closeAuthModal);
+  const isAuth = useAuthStore((s) => s.isAuth);
   const [view, setView] = useState<AuthView>('login');
 
   useEffect(() => {
@@ -37,17 +38,33 @@ const GlobalAuthModals = () => {
     setView('login');
   }, [authModalOpen]);
 
+  useEffect(() => {
+    if (!isAuth) return;
+    if (!authModalOpen) return;
+    closeAuthModal();
+  }, [authModalOpen, closeAuthModal, isAuth]);
+
   const close = () => {
     closeAuthModal();
   };
 
   return (
     <>
-      <AuthModal isOpen={authModalOpen && view === 'login'} onClose={close}>
+      <AuthModal
+        isOpen={authModalOpen && view === 'login'}
+        onClose={close}
+        closeOnOverlayClick
+        showCloseButton
+      >
         <LoginForm onOpenReset={() => setView('reset')} onOpenRegister={() => setView('register')} onClose={close} />
       </AuthModal>
 
-      <AuthModal isOpen={authModalOpen && view === 'register'} onClose={close} closeOnOverlayClick={false}>
+      <AuthModal
+        isOpen={authModalOpen && view === 'register'}
+        onClose={close}
+        closeOnOverlayClick={false}
+        showCloseButton
+      >
         <RegisterForm onClose={close} />
       </AuthModal>
 
@@ -55,6 +72,7 @@ const GlobalAuthModals = () => {
         isOpen={authModalOpen && view === 'reset'}
         onClose={close}
         closeOnOverlayClick={false}
+        showCloseButton
         onBack={() => setView('login')}
       >
         <ResetPasswordForm onClose={close} />

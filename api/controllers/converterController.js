@@ -27,8 +27,36 @@ const VIDEO_EXTENSIONS = new Set([
   '.wmv',
 ]);
 
+const PREVIEW_EXTENSION = '.jpg';
+const PREVIEW_MIME_TYPE = 'image/jpeg';
+const PREVIEW_MAX_SIZE = 320;
+const PREVIEW_QUALITY = 20;
+
+const MOJIBAKE_PATTERN = /[\u00C3\u00D0\u00D1]/;
+const MOJIBAKE_PATTERN_GLOBAL = /[\u00C3\u00D0\u00D1]/g;
+
+const decodePossiblyMojibakeName = (value) => {
+  const raw = String(value || '');
+  if (!raw) return '';
+  if (!MOJIBAKE_PATTERN.test(raw)) return raw;
+
+  try {
+    const decoded = Buffer.from(raw, 'latin1').toString('utf8');
+    if (!decoded || decoded.includes('\uFFFD')) return raw;
+
+    const rawScore = (raw.match(MOJIBAKE_PATTERN_GLOBAL) || []).length;
+    const decodedScore = (decoded.match(MOJIBAKE_PATTERN_GLOBAL) || []).length;
+    if (decodedScore > rawScore) return raw;
+
+    return decoded;
+  } catch {
+    return raw;
+  }
+};
+
 const sanitizeFileName = (value) => {
-  const baseName = path.basename(String(value || '').trim() || 'file');
+  const decodedName = decodePossiblyMojibakeName(value);
+  const baseName = path.basename(String(decodedName || '').trim() || 'file');
   const sanitized = baseName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim();
   return sanitized || 'file';
 };
@@ -63,27 +91,28 @@ const toPublicEntry = (entry) => ({
 });
 
 const encodeDownloadName = (value) => encodeURIComponent(value).replace(/['()*]/g, (ch) => `%${ch.charCodeAt(0).toString(16).toUpperCase()}`);
+const isPreviewableEntry = (entry) => entry?.kind === 'image' || entry?.kind === 'video';
+const buildPreviewName = (entryId) => `${entryId}-preview${PREVIEW_EXTENSION}`;
 
-const convertVideoToMp4 = (inputPath, outputPath) => new Promise((resolve, reject) => {
+const emitConverterUpdatedToUser = (req, userId, payload) => {
+  try {
+    const io = req.app.get('io');
+    if (!io) return;
+
+    const safeUserId = Number(userId);
+    if (!Number.isFinite(safeUserId) || safeUserId <= 0) return;
+
+    io.to(`user:${safeUserId}`).emit('converter:updated', payload);
+  } catch {
+    // ignore
+  }
+};
+
+const runFfmpeg = (args) => new Promise((resolve, reject) => {
   if (!ffmpegPath) {
     reject(new Error('ffmpeg-static is not available'));
     return;
   }
-
-  const args = [
-    '-y',
-    '-i', inputPath,
-    '-map', '0:v:0',
-    '-map', '0:a?',
-    '-c:v', 'libx264',
-    '-preset', 'veryfast',
-    '-crf', '18',
-    '-pix_fmt', 'yuv420p',
-    '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
-    '-c:a', 'aac',
-    '-movflags', '+faststart',
-    outputPath,
-  ];
 
   const child = spawn(ffmpegPath, args, { windowsHide: true });
   let errorOutput = '';
@@ -104,6 +133,61 @@ const convertVideoToMp4 = (inputPath, outputPath) => new Promise((resolve, rejec
     reject(new Error(errorOutput.trim() || `ffmpeg exited with code ${code}`));
   });
 });
+
+const convertVideoToMp4 = (inputPath, outputPath) => runFfmpeg([
+  '-y',
+  '-i', inputPath,
+  '-map', '0:v:0',
+  '-map', '0:a?',
+  '-c:v', 'libx264',
+  '-preset', 'veryfast',
+  '-crf', '18',
+  '-pix_fmt', 'yuv420p',
+  '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+  '-c:a', 'aac',
+  '-movflags', '+faststart',
+  outputPath,
+]);
+
+const generatePreviewImage = (inputPath, outputPath) => runFfmpeg([
+  '-y',
+  '-i', inputPath,
+  '-frames:v', '1',
+  '-vf', `scale=${PREVIEW_MAX_SIZE}:${PREVIEW_MAX_SIZE}:force_original_aspect_ratio=decrease`,
+  '-q:v', String(PREVIEW_QUALITY),
+  outputPath,
+]);
+
+const writeUpdatedEntry = async (userId, entries, updatedEntry) => {
+  await writeManifest(
+    userId,
+    entries.map((item) => (item.id === updatedEntry.id ? updatedEntry : item))
+  );
+};
+
+const createPreviewForEntry = async (userId, entry) => {
+  if (!isPreviewableEntry(entry)) return entry;
+
+  const previewName = buildPreviewName(entry.id);
+  const sourcePath = getUserFilePath(userId, entry.stored_name);
+  const previewPath = getUserFilePath(userId, previewName);
+
+  try {
+    await removeFileIfExists(previewPath);
+    await generatePreviewImage(sourcePath, previewPath);
+    const previewStats = await fs.promises.stat(previewPath);
+
+    return {
+      ...entry,
+      preview_name: previewName,
+      preview_mime_type: PREVIEW_MIME_TYPE,
+      preview_size_bytes: previewStats.size,
+    };
+  } catch (err) {
+    await removeFileIfExists(previewPath);
+    throw err;
+  }
+};
 
 const persistUploadedFile = async (userId, file) => {
   const entryId = makeId();
@@ -139,7 +223,7 @@ const persistUploadedFile = async (userId, file) => {
 
     const stats = await fs.promises.stat(targetPath);
 
-    return {
+    const savedEntry = {
       id: entryId,
       stored_name: storedName,
       original_name: safeOriginalName,
@@ -150,6 +234,17 @@ const persistUploadedFile = async (userId, file) => {
       kind,
       was_converted: wasConverted,
     };
+
+    if (!isPreviewableEntry(savedEntry)) {
+      return savedEntry;
+    }
+
+    try {
+      return await createPreviewForEntry(userId, savedEntry);
+    } catch (previewErr) {
+      console.error('converter:generatePreview', previewErr);
+      return savedEntry;
+    }
   } catch (err) {
     await removeFileIfExists(targetPath);
     await removeFileIfExists(file.path);
@@ -163,9 +258,21 @@ const loadEntries = async (userId) => {
   let hasChanges = false;
 
   for (const entry of manifest) {
+    const normalizedOriginalName = sanitizeFileName(entry?.original_name || 'file');
+    const normalizedDownloadName = sanitizeFileName(entry?.download_name || normalizedOriginalName);
+    const normalizedEntry =
+      normalizedOriginalName !== entry?.original_name || normalizedDownloadName !== entry?.download_name
+        ? {
+            ...entry,
+            original_name: normalizedOriginalName,
+            download_name: normalizedDownloadName,
+          }
+        : entry;
+
     try {
-      await fs.promises.access(getUserFilePath(userId, entry.stored_name));
-      validEntries.push(entry);
+      await fs.promises.access(getUserFilePath(userId, normalizedEntry.stored_name));
+      validEntries.push(normalizedEntry);
+      if (normalizedEntry !== entry) hasChanges = true;
     } catch {
       hasChanges = true;
     }
@@ -195,6 +302,7 @@ exports.uploadFiles = async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    const clientId = String(req.headers['x-converter-client-id'] || '').trim() || null;
 
     const files = Array.isArray(req.files) ? req.files : [];
     if (!files.length) {
@@ -220,6 +328,11 @@ exports.uploadFiles = async (req, res) => {
 
     if (uploadedEntries.length) {
       await writeManifest(userId, [...uploadedEntries, ...existingEntries]);
+      emitConverterUpdatedToUser(req, userId, {
+        action: 'files_added',
+        items: uploadedEntries.map(toPublicEntry),
+        client_id: clientId,
+      });
     }
 
     if (!uploadedEntries.length) {
@@ -268,7 +381,7 @@ exports.downloadFile = async (req, res) => {
   }
 };
 
-exports.deleteFile = async (req, res) => {
+exports.previewFile = async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId) return res.status(401).json({ message: 'Unauthorized' });
@@ -281,8 +394,83 @@ exports.deleteFile = async (req, res) => {
       return res.status(404).json({ message: 'File not found' });
     }
 
+    if (!isPreviewableEntry(entry)) {
+      return res.status(404).json({ message: 'Preview unavailable' });
+    }
+
+    let previewEntry = entry;
+    let previewPath = null;
+
+    if (entry.preview_name) {
+      try {
+        const storedPreviewPath = getUserFilePath(userId, entry.preview_name);
+        const previewStats = await fs.promises.stat(storedPreviewPath);
+        previewPath = storedPreviewPath;
+
+        if (entry.preview_mime_type !== PREVIEW_MIME_TYPE || entry.preview_size_bytes !== previewStats.size) {
+          previewEntry = {
+            ...entry,
+            preview_mime_type: PREVIEW_MIME_TYPE,
+            preview_size_bytes: previewStats.size,
+          };
+          await writeUpdatedEntry(userId, entries, previewEntry);
+        }
+      } catch {
+        previewPath = null;
+      }
+    }
+
+    if (!previewPath) {
+      try {
+        previewEntry = await createPreviewForEntry(userId, entry);
+        previewPath = getUserFilePath(userId, previewEntry.preview_name);
+        await writeUpdatedEntry(userId, entries, previewEntry);
+      } catch (previewErr) {
+        console.error('converter:previewGenerate', previewErr);
+        return res.status(404).json({ message: 'Preview unavailable' });
+      }
+    }
+
+    res.setHeader('Content-Type', previewEntry.preview_mime_type || PREVIEW_MIME_TYPE);
+    res.setHeader('Content-Length', String(previewEntry.preview_size_bytes || 0));
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename*=UTF-8''${encodeDownloadName(previewEntry.preview_name || buildPreviewName(entry.id))}`
+    );
+
+    return res.sendFile(previewPath);
+  } catch (err) {
+    console.error('converter:previewFile', err);
+    return res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.deleteFile = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    const clientId = String(req.headers['x-converter-client-id'] || '').trim() || null;
+
+    const fileId = String(req.params.file_id || '').trim();
+    const entries = await loadEntries(userId);
+    const entry = entries.find((item) => item.id === fileId);
+
+    if (!entry) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
     await removeFileIfExists(getUserFilePath(userId, entry.stored_name));
+    if (entry.preview_name) {
+      await removeFileIfExists(getUserFilePath(userId, entry.preview_name));
+    } else if (isPreviewableEntry(entry)) {
+      await removeFileIfExists(getUserFilePath(userId, buildPreviewName(entry.id)));
+    }
     await writeManifest(userId, entries.filter((item) => item.id !== fileId));
+    emitConverterUpdatedToUser(req, userId, {
+      action: 'file_deleted',
+      file_id: fileId,
+      client_id: clientId,
+    });
 
     return res.json({ success: true });
   } catch (err) {

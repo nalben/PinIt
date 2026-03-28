@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import axiosInstance from '@/api/axiosInstance';
+import axiosInstance, { API_URL } from '@/api/axiosInstance';
+import { connectSocket } from '@/services/socketManager';
+import { useAuthStore } from '@/store/authStore';
+import { useUIStore } from '@/store/uiStore';
 
 import classes from './Converter.module.scss';
 
@@ -27,6 +30,18 @@ interface UploadResponse {
   errors?: UploadError[];
 }
 
+interface ConverterSocketPayload {
+  action?: 'files_added' | 'file_deleted';
+  items?: ConverterItem[];
+  file_id?: string;
+  client_id?: string | null;
+}
+
+interface ConverterToast {
+  id: number;
+  message: string;
+}
+
 const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -44,7 +59,7 @@ const formatDate = (value: string) => {
     month: 'short',
     hour: '2-digit',
     minute: '2-digit',
-  }).format(new Date(value));
+  }).format(new Date(value)).replace(/,\s+/u, ' ');
 };
 
 const getKindLabel = (kind: ConverterItemKind) => {
@@ -53,8 +68,146 @@ const getKindLabel = (kind: ConverterItemKind) => {
   return 'Файл';
 };
 
+const createConverterClientId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const isPreviewableKind = (kind: ConverterItemKind) => kind === 'image' || kind === 'video';
+const getPreviewUrl = (fileId: string) => `${API_URL}/api/converter/files/${encodeURIComponent(fileId)}/preview`;
+const getDownloadedStorageKey = (userId: number) => `pinit_converter_downloaded:${userId}`;
+
+const readDownloadedIds = (storageKey: string | null) => {
+  if (!storageKey) return new Set<string>();
+
+  try {
+    const rawValue = window.localStorage.getItem(storageKey);
+    const parsed = rawValue ? JSON.parse(rawValue) : [];
+
+    if (!Array.isArray(parsed)) return new Set<string>();
+
+    return new Set(parsed.filter((value): value is string => typeof value === 'string' && value.trim().length > 0));
+  } catch {
+    return new Set<string>();
+  }
+};
+
+const ConverterPreviewMedia = ({ item }: { item: ConverterItem }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const [hasPreviewError, setHasPreviewError] = useState(false);
+  const isPreviewable = isPreviewableKind(item.kind);
+  const previewUrl = getPreviewUrl(item.id);
+
+  useEffect(() => {
+    if (!isPreviewable || shouldLoad) return;
+
+    const element = containerRef.current;
+    if (!element) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setShouldLoad(true);
+        observer.disconnect();
+      },
+      { rootMargin: '180px 0px' }
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isPreviewable, shouldLoad]);
+
+  return (
+    <div ref={containerRef} className={classes.filePreview}>
+      {shouldLoad && !hasPreviewError ? (
+        <img
+          src={previewUrl}
+          alt={item.kind === 'video' ? `Миниатюра видео ${item.original_name}` : item.original_name}
+          className={classes.filePreviewMedia}
+          loading="lazy"
+          onError={() => setHasPreviewError(true)}
+        />
+      ) : (
+        <div className={classes.filePreviewPlaceholder}>
+          <span className={classes.filePreviewIcon}>{item.kind === 'video' ? 'VID' : 'IMG'}</span>
+          <strong>{item.kind === 'video' ? 'Превью видео' : 'Превью изображения'}</strong>
+          <span>
+            {hasPreviewError
+              ? 'Не удалось загрузить'
+              : shouldLoad
+                ? 'Загружаем...'
+                : 'Подготавливаем...'}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ConverterPreviewThumbnail = ({ item }: { item: ConverterItem }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const [hasPreviewError, setHasPreviewError] = useState(false);
+  const previewUrl = getPreviewUrl(item.id);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element || shouldLoad) return;
+
+    if (typeof IntersectionObserver === 'undefined') {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setShouldLoad(true);
+        observer.disconnect();
+      },
+      { rootMargin: '180px 0px' }
+    );
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [shouldLoad]);
+
+  return (
+    <div ref={containerRef} className={classes.filePreview}>
+      {shouldLoad && !hasPreviewError ? (
+        <img
+          src={previewUrl}
+          alt={item.kind === 'video' ? `Миниатюра видео ${item.original_name}` : item.original_name}
+          className={classes.filePreviewMedia}
+          loading="lazy"
+          onError={() => setHasPreviewError(true)}
+        />
+      ) : (
+        <div className={classes.filePreviewPlaceholder}>
+          <span className={classes.filePreviewIcon}>{item.kind === 'video' ? 'VID' : 'IMG'}</span>
+          <strong>{item.kind === 'video' ? 'Миниатюра видео' : 'Миниатюра изображения'}</strong>
+          <span>
+            {hasPreviewError
+              ? 'Не удалось загрузить'
+              : shouldLoad
+                ? 'Загружаем...'
+                : 'Подготавливаем...'}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Converter = () => {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const clientIdRef = useRef<string>(createConverterClientId());
+  const isAuth = useAuthStore((state) => state.isAuth);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
+  const userId = useAuthStore((state) => state.user?.id);
+  const openAuthModal = useUIStore((state) => state.openAuthModal);
   const [items, setItems] = useState<ConverterItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -63,9 +216,87 @@ const Converter = () => {
   const [statusTone, setStatusTone] = useState<'neutral' | 'success' | 'error'>('neutral');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [isDragActive, setIsDragActive] = useState(false);
+  const [toast, setToast] = useState<ConverterToast | null>(null);
+  const downloadedStorageKey = useMemo(
+    () => (typeof userId === 'number' && userId > 0 ? getDownloadedStorageKey(userId) : null),
+    [userId]
+  );
+  const openPickerOrAuth = useCallback(() => {
+    if (!isAuth) {
+      openAuthModal();
+      return;
+    }
+
+    inputRef.current?.click();
+  }, [isAuth, openAuthModal]);
+
+  const persistDownloadedIds = useCallback((nextIds: Set<string>) => {
+    setDownloadedIds(nextIds);
+
+    if (!downloadedStorageKey) return;
+
+    try {
+      window.localStorage.setItem(downloadedStorageKey, JSON.stringify(Array.from(nextIds)));
+    } catch {
+      // ignore storage write errors
+    }
+  }, [downloadedStorageKey]);
+
+  const showToast = useCallback((message: string) => {
+    setToast({
+      id: Date.now(),
+      message,
+    });
+  }, []);
+
+  useEffect(() => {
+    setDownloadedIds(readDownloadedIds(downloadedStorageKey));
+  }, [downloadedStorageKey]);
+
+  useEffect(() => {
+    if (!toast) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setToast((currentToast) => (currentToast?.id === toast.id ? null : currentToast));
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
+
+  useEffect(() => {
+    if (statusTone !== 'success' || !statusText) return;
+
+    const shouldShowToast =
+      statusText === 'Файл удалён.'
+      || statusText === 'Файл сохранён.'
+      || /^Сохранено \d+ файлов\.$/u.test(statusText);
+
+    if (!shouldShowToast) return;
+
+    showToast(statusText);
+    setStatusTone('neutral');
+    setStatusText('');
+  }, [showToast, statusText, statusTone]);
+
+  useEffect(() => {
+    if (!toast) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setToast((currentToast) => (currentToast?.id === toast.id ? null : currentToast));
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
 
   const loadItems = useCallback(async () => {
+    if (!isAuth) {
+      setItems([]);
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       const { data } = await axiosInstance.get<ConverterItem[]>('/api/converter/files');
@@ -77,11 +308,42 @@ const Converter = () => {
     } finally {
       setIsLoading(false);
     }
+  }, [isAuth]);
+
+  useEffect(() => {
+    if (!isInitialized) return;
+    void loadItems();
+  }, [isInitialized, loadItems]);
+
+  const handleConverterSocketUpdate = useCallback((payload: ConverterSocketPayload) => {
+    if (!payload || payload.client_id === clientIdRef.current) return;
+
+    if (payload.action === 'files_added') {
+      const newItems = Array.isArray(payload.items) ? payload.items : [];
+      if (!newItems.length) return;
+
+      setItems((prev) => {
+        const seenIds = new Set(newItems.map((item) => item.id));
+        return [...newItems, ...prev.filter((item) => !seenIds.has(item.id))];
+      });
+      return;
+    }
+
+    if (payload.action === 'file_deleted' && payload.file_id) {
+      setItems((prev) => prev.filter((item) => item.id !== payload.file_id));
+    }
   }, []);
 
   useEffect(() => {
-    void loadItems();
-  }, [loadItems]);
+    if (!isAuth) return () => {};
+    const unsubscribe = connectSocket({
+      onConverterUpdate: handleConverterSocketUpdate,
+    });
+
+    return () => {
+      unsubscribe?.();
+    };
+  }, [handleConverterSocketUpdate, isAuth]);
 
   const stats = useMemo(() => {
     const totalSize = items.reduce((sum, item) => sum + item.size_bytes, 0);
@@ -97,6 +359,11 @@ const Converter = () => {
   }, [items]);
 
   const handleFilesSelected = useCallback(async (fileList: FileList | File[] | null) => {
+    if (!isAuth) {
+      openAuthModal();
+      return;
+    }
+
     const files = fileList ? Array.from(fileList) : [];
     if (!files.length || isUploading) return;
 
@@ -115,6 +382,7 @@ const Converter = () => {
         {
           headers: {
             'Content-Type': 'multipart/form-data',
+            'X-Converter-Client-Id': clientIdRef.current,
           },
           onUploadProgress: (event: ProgressEvent) => {
             const total = event.total || 0;
@@ -153,7 +421,7 @@ const Converter = () => {
         inputRef.current.value = '';
       }
     }
-  }, [isUploading]);
+  }, [isAuth, isUploading, openAuthModal]);
 
   const handleDownload = useCallback(async (item: ConverterItem) => {
     try {
@@ -170,6 +438,9 @@ const Converter = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
+      const nextDownloadedIds = new Set(Array.from(downloadedIds));
+      nextDownloadedIds.add(item.id);
+      persistDownloadedIds(nextDownloadedIds);
     } catch (err) {
       console.error(err);
       setStatusTone('error');
@@ -177,7 +448,7 @@ const Converter = () => {
     } finally {
       setDownloadingId(null);
     }
-  }, []);
+  }, [downloadedIds, persistDownloadedIds]);
 
   const handleDelete = useCallback(async (item: ConverterItem) => {
     const confirmed = window.confirm(`Удалить "${item.original_name}" из хранилища?`);
@@ -185,8 +456,17 @@ const Converter = () => {
 
     try {
       setDeletingId(item.id);
-      await axiosInstance.delete(`/api/converter/files/${item.id}`);
+      await axiosInstance.delete(`/api/converter/files/${item.id}`, {
+        headers: {
+          'X-Converter-Client-Id': clientIdRef.current,
+        },
+      });
       setItems((prev) => prev.filter((current) => current.id !== item.id));
+      if (downloadedIds.has(item.id)) {
+        const nextDownloadedIds = new Set(Array.from(downloadedIds));
+        nextDownloadedIds.delete(item.id);
+        persistDownloadedIds(nextDownloadedIds);
+      }
       setStatusTone('success');
       setStatusText('Файл удалён.');
     } catch (err) {
@@ -196,7 +476,7 @@ const Converter = () => {
     } finally {
       setDeletingId(null);
     }
-  }, []);
+  }, [downloadedIds, persistDownloadedIds]);
 
   return (
     <section className={classes.converter}>
@@ -208,22 +488,86 @@ const Converter = () => {
             Загружайте файлы здесь и скачивайте их на другом устройстве без лишних шагов.
           </p>
         </div>
-
-        <div className={classes.heroNotes}>
-          <div className={classes.noteCard}>
-            <span>Оригиналы</span>
-            <strong>Изображения сохраняются как есть</strong>
-          </div>
-          <div className={classes.noteCard}>
-            <span>Видео</span>
-            <strong>Все форматы кроме MP4 автоматически конвертируются в MP4</strong>
-          </div>
-          <div className={classes.noteCard}>
-            <span>Доступ</span>
-            <strong>Только для залогиненного пользователя</strong>
-          </div>
-        </div>
       </div>
+
+      <article className={classes.uploadCard}>
+        <div className={classes.cardHead}>
+          <div>
+            <span className={classes.cardEyebrow}>Upload</span>
+            <h2>Загрузить файлы</h2>
+          </div>
+          <button
+            type="button"
+            className={classes.secondaryButton}
+            onClick={openPickerOrAuth}
+            disabled={isUploading}
+          >
+            Выбрать файлы
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className={`${classes.dropzone} ${isDragActive ? classes.dropzoneActive : ''}`}
+          onClick={openPickerOrAuth}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setIsDragActive(true);
+          }}
+          onDragLeave={(event) => {
+            event.preventDefault();
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+            setIsDragActive(false);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            setIsDragActive(false);
+            void handleFilesSelected(event.dataTransfer.files);
+          }}
+          disabled={isUploading}
+        >
+          <span className={classes.dropzoneIcon}>↑</span>
+          <strong>Перетащите сюда фото, видео или любые файлы</strong>
+          <span>Можно выбрать сразу несколько. Поддерживаются и большие файлы.</span>
+        </button>
+
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className={classes.hiddenInput}
+          onChange={(event) => {
+            void handleFilesSelected(event.target.files);
+          }}
+        />
+
+        <div className={classes.uploadHints}>
+          <span>PNG / JPG / HEIC / MOV / MP4 / ZIP и другое</span>
+          <span>Видео не в MP4 будут сохранены в MP4</span>
+        </div>
+
+        {(isUploading || (statusText && statusTone !== 'success')) && (
+          <div
+            className={`${classes.statusBox} ${
+              statusTone === 'success'
+                ? classes.statusSuccess
+                : statusTone === 'error'
+                  ? classes.statusError
+                  : ''
+            }`}
+          >
+            <div className={classes.statusLine}>
+              <span>{statusText || 'Готово к загрузке'}</span>
+              {isUploading && <strong>{uploadProgress}%</strong>}
+            </div>
+            {isUploading && (
+              <div className={classes.progressTrack} aria-hidden="true">
+                <div className={classes.progressBar} style={{ width: `${uploadProgress}%` }} />
+              </div>
+            )}
+          </div>
+        )}
+      </article>
 
       <div className={classes.stats}>
         <article className={classes.statCard}>
@@ -244,154 +588,82 @@ const Converter = () => {
         </article>
       </div>
 
-      <div className={classes.workspace}>
-        <article className={classes.uploadCard}>
-          <div className={classes.cardHead}>
-            <div>
-              <span className={classes.cardEyebrow}>Upload</span>
-              <h2>Загрузить файлы</h2>
-            </div>
-            <button
-              type="button"
-              className={classes.secondaryButton}
-              onClick={() => inputRef.current?.click()}
-              disabled={isUploading}
-            >
-              Выбрать файлы
-            </button>
+      <article className={classes.libraryCard}>
+        <div className={classes.cardHead}>
+          <div>
+            <span className={classes.cardEyebrow}>Library</span>
+            <h2>Ваше хранилище</h2>
           </div>
-
           <button
             type="button"
-            className={`${classes.dropzone} ${isDragActive ? classes.dropzoneActive : ''}`}
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragActive(true);
-            }}
-            onDragLeave={(event) => {
-              event.preventDefault();
-              if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-              setIsDragActive(false);
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              setIsDragActive(false);
-              void handleFilesSelected(event.dataTransfer.files);
-            }}
-            disabled={isUploading}
+            className={classes.ghostButton}
+            onClick={() => void loadItems()}
+            disabled={isLoading}
           >
-            <span className={classes.dropzoneIcon}>↑</span>
-            <strong>Перетащите сюда фото, видео или любые файлы</strong>
-            <span>Можно выбрать сразу несколько. Ограничение по размеру намеренно не задаём в интерфейсе.</span>
+            Обновить
           </button>
+        </div>
 
-          <input
-            ref={inputRef}
-            type="file"
-            multiple
-            className={classes.hiddenInput}
-            onChange={(event) => {
-              void handleFilesSelected(event.target.files);
-            }}
-          />
-
-          <div className={classes.uploadHints}>
-            <span>PNG / JPG / HEIC / MOV / MP4 / ZIP и другое</span>
-            <span>Видео не в MP4 будут сохранены в MP4</span>
+        {isLoading ? (
+          <div className={classes.emptyState}>
+            <strong>Загружаем список файлов...</strong>
           </div>
-
-          {(isUploading || statusText) && (
-            <div
-              className={`${classes.statusBox} ${
-                statusTone === 'success'
-                  ? classes.statusSuccess
-                  : statusTone === 'error'
-                    ? classes.statusError
-                    : ''
-              }`}
-            >
-              <div className={classes.statusLine}>
-                <span>{statusText || 'Готово к загрузке'}</span>
-                {isUploading && <strong>{uploadProgress}%</strong>}
-              </div>
-              {isUploading && (
-                <div className={classes.progressTrack} aria-hidden="true">
-                  <div className={classes.progressBar} style={{ width: `${uploadProgress}%` }} />
+        ) : items.length === 0 ? (
+          <div className={classes.emptyState}>
+            <strong>Пока пусто</strong>
+            <span>Загрузите файл здесь, а потом скачайте его на другом устройстве под тем же аккаунтом.</span>
+          </div>
+        ) : (
+          <div className={classes.fileGrid}>
+            {items.map((item) => (
+              <article key={item.id} className={classes.fileCard}>
+                <div className={classes.fileTop}>
+                  <span className={classes.fileBadge}>{getKindLabel(item.kind)}</span>
+                  {item.was_converted && <span className={classes.fileBadgeAccent}>MP4</span>}
+                  {downloadedIds.has(item.id) && <span className={classes.fileBadgeSuccess}>Скачано</span>}
                 </div>
-              )}
-            </div>
-          )}
-        </article>
 
-        <article className={classes.libraryCard}>
-          <div className={classes.cardHead}>
-            <div>
-              <span className={classes.cardEyebrow}>Library</span>
-              <h2>Ваше хранилище</h2>
-            </div>
-            <button
-              type="button"
-              className={classes.ghostButton}
-              onClick={() => void loadItems()}
-              disabled={isLoading}
-            >
-              Обновить
-            </button>
+                {isPreviewableKind(item.kind) && <ConverterPreviewThumbnail item={item} />}
+
+                <div className={classes.fileMain}>
+                  <strong title={item.original_name}>{item.original_name}</strong>
+                  <span>{formatBytes(item.size_bytes)}</span>
+                </div>
+
+                <div className={classes.fileMeta}>
+                  <span>{formatDate(item.created_at)}</span>
+                  <span>{item.mime_type || 'application/octet-stream'}</span>
+                </div>
+
+                <div className={classes.fileActions}>
+                  <button
+                    type="button"
+                    className={classes.primaryButton}
+                    onClick={() => void handleDownload(item)}
+                    disabled={downloadingId === item.id}
+                  >
+                    {downloadingId === item.id ? 'Скачиваем...' : 'Скачать'}
+                  </button>
+                  <button
+                    type="button"
+                    className={classes.dangerButton}
+                    onClick={() => void handleDelete(item)}
+                    disabled={deletingId === item.id}
+                  >
+                    {deletingId === item.id ? 'Удаляем...' : 'Удалить'}
+                  </button>
+                </div>
+              </article>
+            ))}
           </div>
+        )}
+      </article>
 
-          {isLoading ? (
-            <div className={classes.emptyState}>
-              <strong>Загружаем список файлов...</strong>
-            </div>
-          ) : items.length === 0 ? (
-            <div className={classes.emptyState}>
-              <strong>Пока пусто</strong>
-              <span>Загрузите файл здесь, а потом скачайте его на другом устройстве под тем же аккаунтом.</span>
-            </div>
-          ) : (
-            <div className={classes.fileGrid}>
-              {items.map((item) => (
-                <article key={item.id} className={classes.fileCard}>
-                  <div className={classes.fileTop}>
-                    <span className={classes.fileBadge}>{getKindLabel(item.kind)}</span>
-                    {item.was_converted && <span className={classes.fileBadgeAccent}>MP4</span>}
-                  </div>
-
-                  <div className={classes.fileMain}>
-                    <strong title={item.original_name}>{item.original_name}</strong>
-                    <span>{formatBytes(item.size_bytes)}</span>
-                  </div>
-
-                  <div className={classes.fileMeta}>
-                    <span>{formatDate(item.created_at)}</span>
-                    <span>{item.mime_type || 'application/octet-stream'}</span>
-                  </div>
-
-                  <div className={classes.fileActions}>
-                    <button
-                      type="button"
-                      className={classes.primaryButton}
-                      onClick={() => void handleDownload(item)}
-                      disabled={downloadingId === item.id}
-                    >
-                      {downloadingId === item.id ? 'Скачиваем...' : 'Скачать'}
-                    </button>
-                    <button
-                      type="button"
-                      className={classes.dangerButton}
-                      onClick={() => void handleDelete(item)}
-                      disabled={deletingId === item.id}
-                    >
-                      {deletingId === item.id ? 'Удаляем...' : 'Удалить'}
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          )}
-        </article>
-      </div>
+      {toast && (
+        <div key={toast.id} className={classes.toast} role="status" aria-live="polite">
+          {toast.message}
+        </div>
+      )}
     </section>
   );
 };

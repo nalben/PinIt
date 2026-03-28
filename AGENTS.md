@@ -461,6 +461,8 @@ base URL depends on env
 
 automatically attaches Bearer token
 
+uses `withCredentials: true` so browser requests can receive/send the `pinit_token` auth cookie
+
 Never manually attach tokens elsewhere.
 
 SOCKET CLIENT
@@ -1175,6 +1177,7 @@ Update (2026-03-04)
 
 - Added admin-only guard endpoint `GET /api/admin/check` (JWT required; verifies `users.role = 'admin'`) via `api/middleware/adminOnly.js` + `api/routes/adminRouter.js`.
 - `authMiddleware` now accepts JWT from `pinit_token` cookie in addition to the `Authorization` header.
+- When a request is authorized via `Authorization: Bearer <token>`, `authMiddleware` also refreshes/synchronizes the `pinit_token` cookie on the response.
 - Auth endpoints now manage the `pinit_token` cookie:
   - `POST /api/auth/login` and `POST /api/auth/set-new-password` set it (httpOnly, 7d).
   - `POST /api/auth/logout` clears it.
@@ -1449,13 +1452,24 @@ Update (2026-03-28)
 - Added auth-only converter API routes under `api/routes/converterRouter.js`:
   - `GET /api/converter/files` - list current user's stored files.
   - `POST /api/converter/files` - upload one or more files for the current user.
+  - `GET /api/converter/files/:file_id/preview` - return an inline low-res thumbnail for the current user's stored image/video.
   - `GET /api/converter/files/:file_id/download` - download a stored file for the current user.
   - `DELETE /api/converter/files/:file_id` - delete a stored file for the current user.
 - Converter files are stored outside the main site uploads directory:
   - root folder: `api/converter_uploads/`
   - per-user storage: `api/converter_uploads/<userId>/`
   - temp upload folder: `api/converter_uploads/_tmp/`
-  - metadata is tracked in per-user `manifest.json` files (filesystem-backed; no DB table added).
+  - metadata is tracked in per-user `manifest.json` files (filesystem-backed; no DB table added), including low-res preview jpg metadata for image/video entries.
 - `api/controllers/converterController.js` preserves non-video files as uploaded and converts non-`mp4` videos (including `.mov`) to `.mp4` via `ffmpeg-static` before saving.
-- Added protected frontend route `/converter` in `frontend/src/index.tsx`; it is wrapped with `frontend/src/components/__general/protectedroute/ProtectedRoute.tsx`.
+- Added frontend route `/converter` in `frontend/src/index.tsx`.
 - Added converter UI page `frontend/src/pages/converter/Converter.tsx` + `frontend/src/pages/converter/Converter.module.scss` and a header navigation link in `frontend/src/components/_UI/header/Header.tsx`.
+- Converter uploads now generate separate low-res jpg thumbnails for image/video entries; the preview endpoint backfills a thumbnail on first request for older entries that do not have one yet.
+- Converter library cards render those thumbnails as static image miniatures (videos no longer mount an inline `<video>` player in the grid).
+- Added converter realtime sync via socket event `converter:updated` to room `user:<id>`:
+  - backend emits `action: 'files_added'` with `items[]` after successful converter uploads;
+  - backend emits `action: 'file_deleted'` with `file_id` after successful converter deletion;
+  - payload may include `client_id`, and `frontend/src/pages/converter/Converter.tsx` ignores same-tab events by comparing that id.
+- Route `/converter` no longer redirects anonymous users away:
+  - `frontend/src/index.tsx` renders `frontend/src/pages/converter/Converter.tsx` directly (without `ProtectedRoute`);
+  - `frontend/src/pages/converter/Converter.tsx` skips converter API/socket work until login, and anonymous upload actions open the auth modal instead of the file picker;
+  - `frontend/src/components/app/App.tsx` no longer auto-opens or locks the auth modal on `/converter`.

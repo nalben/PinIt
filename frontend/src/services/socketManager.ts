@@ -11,6 +11,7 @@ type Callbacks = {
   onNewBoardInvite?: (data: any) => void;
   onRemoveBoardInvite?: (data: any) => void;
   onBoardsUpdate?: (data: { reason?: string; board_id?: number }) => void;
+  onConverterUpdate?: (data: { action?: string; items?: any[]; file_id?: string; client_id?: string | null }) => void;
 };
 
 export const connectSocket = (callbacks?: Callbacks) => {
@@ -62,6 +63,11 @@ export const connectSocket = (callbacks?: Callbacks) => {
     socket.on('boards:updated', callbacks.onBoardsUpdate);
   if (callbacks.onBoardsUpdate)
     listeners.push(['boards:updated', callbacks.onBoardsUpdate]);
+
+  if (callbacks.onConverterUpdate)
+    socket.on('converter:updated', callbacks.onConverterUpdate);
+  if (callbacks.onConverterUpdate)
+    listeners.push(['converter:updated', callbacks.onConverterUpdate]);
 
   return () => {
     if (!socket) return;

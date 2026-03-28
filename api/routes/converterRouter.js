@@ -35,6 +35,7 @@ router.use(authMiddleware);
 
 router.get('/files', converterController.listFiles);
 router.post('/files', uploadFiles, converterController.uploadFiles);
+router.get('/files/:file_id/preview', converterController.previewFile);
 router.get('/files/:file_id/download', converterController.downloadFile);
 router.delete('/files/:file_id', converterController.deleteFile);
 

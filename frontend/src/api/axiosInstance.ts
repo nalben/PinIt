@@ -7,6 +7,7 @@ export const API_URL: string = isLocal
 
 const axiosInstance = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
 });
 
 axiosInstance.interceptors.request.use(

@@ -9,6 +9,7 @@ interface AuthModalProps {
   onBack?: () => void;
   children: React.ReactNode;
   closeOnOverlayClick?: boolean;
+  showCloseButton?: boolean;
 }
 
 const AuthModal: React.FC<AuthModalProps> = ({
@@ -17,6 +18,7 @@ const AuthModal: React.FC<AuthModalProps> = ({
   onBack,
   children,
   closeOnOverlayClick = true,
+  showCloseButton = true,
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -49,9 +51,11 @@ const AuthModal: React.FC<AuthModalProps> = ({
   const modalContent = (
     <div className={classes.overlay} onClick={handleOverlayClick}>
       <div className={classes.modal} onClick={(e) => e.stopPropagation()}>
-        <button type="button" className={classes.close} onClick={onClose}>
-          +
-        </button>
+        {showCloseButton && (
+          <button type="button" className={classes.close} onClick={onClose}>
+            +
+          </button>
+        )}
         {onBack && (
           <button type="button" className={classes.back} onClick={onBack}>
             <Back />
