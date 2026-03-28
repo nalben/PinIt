@@ -31,7 +31,8 @@ const PREVIEW_EXTENSION = '.jpg';
 const PREVIEW_MIME_TYPE = 'image/jpeg';
 const PREVIEW_MAX_SIZE = 320;
 const PREVIEW_QUALITY = 20;
-const CONVERTER_VIDEO_VERSION = 3;
+const CONVERTER_VIDEO_VERSION = 4;
+const CONVERTER_VIDEO_MAX_SIDE = 2160;
 const CONVERTER_VIDEO_MAXRATE = '20M';
 const CONVERTER_VIDEO_BUFSIZE = '40M';
 
@@ -181,7 +182,11 @@ const replaceFile = async (fromPath, toPath) => {
   await fs.promises.rename(fromPath, toPath);
 };
 
-const buildCompatibleVideoFilter = () => 'scale=trunc(iw/2)*2:trunc(ih/2)*2';
+const buildCompatibleVideoFilter = () =>
+  [
+    `scale=w='if(gte(iw,ih),min(iw,${CONVERTER_VIDEO_MAX_SIDE}),-2)':h='if(gte(iw,ih),-2,min(ih,${CONVERTER_VIDEO_MAX_SIDE}))'`,
+    'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+  ].join(',');
 
 const writeUpdatedEntry = async (userId, entries, updatedEntry) => {
   await writeManifest(
