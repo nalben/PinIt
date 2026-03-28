@@ -31,10 +31,11 @@ const PREVIEW_EXTENSION = '.jpg';
 const PREVIEW_MIME_TYPE = 'image/jpeg';
 const PREVIEW_MAX_SIZE = 320;
 const PREVIEW_QUALITY = 20;
-const CONVERTER_VIDEO_VERSION = 4;
-const CONVERTER_VIDEO_MAX_SIDE = 2160;
-const CONVERTER_VIDEO_MAXRATE = '20M';
-const CONVERTER_VIDEO_BUFSIZE = '40M';
+const CONVERTER_VIDEO_VERSION = 5;
+const CONVERTER_VIDEO_MAX_SIDE = 1920;
+const CONVERTER_VIDEO_LEVEL = '4.1';
+const CONVERTER_VIDEO_MAXRATE = '12M';
+const CONVERTER_VIDEO_BUFSIZE = '24M';
 
 const MOJIBAKE_PATTERN = /[\u00C3\u00D0\u00D1]/;
 const MOJIBAKE_PATTERN_GLOBAL = /[\u00C3\u00D0\u00D1]/g;
@@ -147,6 +148,7 @@ const convertVideoToMp4 = (inputPath, outputPath) => runFfmpeg([
   '-preset', 'veryfast',
   '-crf', '18',
   '-profile:v', 'high',
+  '-level:v', CONVERTER_VIDEO_LEVEL,
   '-tag:v', 'avc1',
   '-pix_fmt', 'yuv420p',
   '-vf', buildCompatibleVideoFilter(),

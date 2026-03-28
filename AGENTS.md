@@ -1461,9 +1461,9 @@ Update (2026-03-28)
   - temp upload folder: `api/converter_uploads/_tmp/`
   - metadata is tracked in per-user `manifest.json` files (filesystem-backed; no DB table added), including low-res preview jpg metadata for image/video entries.
 - `api/controllers/converterController.js` preserves non-video files as uploaded and converts non-`mp4` videos (including `.mov`) to Android-compatible `.mp4` via `ffmpeg-static` before saving:
-  - H.264 / `avc1`, `yuv420p`, AAC stereo 48kHz, `+faststart`
-  - converted video keeps aspect ratio, caps the long side at `2160`, and normalizes dimensions to even values required by H.264
-  - converted video bitrate peaks are capped with ffmpeg VBV settings (`maxrate 20M`, `bufsize 40M`) for better Android playback compatibility
+  - H.264 / `avc1` High@4.1, `yuv420p`, AAC stereo 48kHz, `+faststart`
+  - converted video keeps aspect ratio, caps the long side at `1920`, and normalizes dimensions to even values required by H.264
+  - converted video bitrate peaks are capped with ffmpeg VBV settings (`maxrate 12M`, `bufsize 24M`) for better Android playback compatibility
   - legacy converted entries with older converter settings are auto-upgraded on the next file download
 - Added frontend route `/converter` in `frontend/src/index.tsx`.
 - Added converter UI page `frontend/src/pages/converter/Converter.tsx` + `frontend/src/pages/converter/Converter.module.scss` and a header navigation link in `frontend/src/components/_UI/header/Header.tsx`.
