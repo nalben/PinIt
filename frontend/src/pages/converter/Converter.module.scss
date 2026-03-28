@@ -456,6 +456,61 @@
     line-height: 1.2;
 }
 
+.downloadStatus {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.downloadStatusLine,
+.downloadSpinnerRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    color: var(--cyan);
+    font-size: fluid-prop(14, 12, 1920, 320);
+}
+
+.downloadStatusLine {
+    & strong {
+        color: var(--pink);
+    }
+}
+
+.downloadSpinnerRow {
+    justify-content: flex-start;
+}
+
+.downloadProgressTrack {
+    height: 7px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.downloadProgressBar {
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--pink), var(--cyan));
+}
+
+.downloadSpinner {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    border: 2px solid rgba(228, 198, 251, 0.2);
+    border-top-color: var(--pink);
+    border-radius: 50%;
+    animation: converterSpinnerRotate 0.8s linear infinite;
+}
+
+@keyframes converterSpinnerRotate {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 @media (max-width: 1200px) {
     .stats {
         grid-template-columns: 1fr 1fr;

@@ -215,6 +215,7 @@ const Converter = () => {
   const [statusText, setStatusText] = useState('');
   const [statusTone, setStatusTone] = useState<'neutral' | 'success' | 'error'>('neutral');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadedIds, setDownloadedIds] = useState<Set<string>>(new Set());
   const [isDragActive, setIsDragActive] = useState(false);
@@ -279,16 +280,6 @@ const Converter = () => {
     setStatusTone('neutral');
     setStatusText('');
   }, [showToast, statusText, statusTone]);
-
-  useEffect(() => {
-    if (!toast) return;
-
-    const timeoutId = window.setTimeout(() => {
-      setToast((currentToast) => (currentToast?.id === toast.id ? null : currentToast));
-    }, 3200);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [toast]);
 
   const loadItems = useCallback(async () => {
     if (!isAuth) {
@@ -426,11 +417,50 @@ const Converter = () => {
   const handleDownload = useCallback(async (item: ConverterItem) => {
     try {
       setDownloadingId(item.id);
-      const response = await axiosInstance.get<Blob>(`/api/converter/files/${item.id}/download`, {
-        responseType: 'blob',
+      setDownloadProgress(null);
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open('GET', `${API_URL}/api/converter/files/${encodeURIComponent(item.id)}/download`, true);
+        request.responseType = 'blob';
+        request.withCredentials = true;
+
+        const token = window.localStorage.getItem('token');
+        if (token) {
+          request.setRequestHeader('Authorization', `Bearer ${token}`);
+        }
+
+        request.onprogress = (event) => {
+          const total = typeof event.total === 'number' ? event.total : 0;
+          if (!total) {
+            setDownloadProgress(null);
+            return;
+          }
+
+          const nextProgress = Math.round((event.loaded / total) * 100);
+          setDownloadProgress(Math.max(0, Math.min(100, nextProgress)));
+        };
+
+        request.onload = () => {
+          if (request.status >= 200 && request.status < 300) {
+            resolve(request.response);
+            return;
+          }
+
+          reject(new Error(`Download failed with status ${request.status}`));
+        };
+
+        request.onerror = () => {
+          reject(new Error('Download failed'));
+        };
+
+        request.onabort = () => {
+          reject(new Error('Download aborted'));
+        };
+
+        request.send();
       });
 
-      const blobUrl = window.URL.createObjectURL(response.data);
+      const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = blobUrl;
       link.download = item.download_name || item.original_name;
@@ -447,6 +477,7 @@ const Converter = () => {
       setStatusText('Не удалось скачать файл.');
     } finally {
       setDownloadingId(null);
+      setDownloadProgress(null);
     }
   }, [downloadedIds, persistDownloadedIds]);
 
@@ -535,6 +566,7 @@ const Converter = () => {
           ref={inputRef}
           type="file"
           multiple
+          accept={__PLATFORM__ === 'mobile' ? 'image/*,video/*' : undefined}
           className={classes.hiddenInput}
           onChange={(event) => {
             void handleFilesSelected(event.target.files);
@@ -653,6 +685,25 @@ const Converter = () => {
                     {deletingId === item.id ? 'Удаляем...' : 'Удалить'}
                   </button>
                 </div>
+
+                {downloadingId === item.id && (
+                  downloadProgress !== null ? (
+                    <div className={classes.downloadStatus}>
+                      <div className={classes.downloadStatusLine}>
+                        <span>Загрузка файла</span>
+                        <strong>{downloadProgress}%</strong>
+                      </div>
+                      <div className={classes.downloadProgressTrack} aria-hidden="true">
+                        <div className={classes.downloadProgressBar} style={{ width: `${downloadProgress}%` }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={classes.downloadSpinnerRow}>
+                      <span className={classes.downloadSpinner} aria-hidden="true" />
+                      <span>Загружаем файл...</span>
+                    </div>
+                  )
+                )}
               </article>
             ))}
           </div>
