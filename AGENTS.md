@@ -1443,3 +1443,19 @@ Rules: dependency boundaries for profilepage
 - Frontend API base URL is selected by `frontend/isLocal.js`.
 - `frontend/isLocal.js` currently exports `true`, so frontend uses `http://localhost:3001`.
 - Backend DB host selection is environment-based in `api/db.js` (`IS_LOCAL` toggles localhost vs VPN host).
+
+Update (2026-03-28)
+
+- Added auth-only converter API routes under `api/routes/converterRouter.js`:
+  - `GET /api/converter/files` - list current user's stored files.
+  - `POST /api/converter/files` - upload one or more files for the current user.
+  - `GET /api/converter/files/:file_id/download` - download a stored file for the current user.
+  - `DELETE /api/converter/files/:file_id` - delete a stored file for the current user.
+- Converter files are stored outside the main site uploads directory:
+  - root folder: `api/converter_uploads/`
+  - per-user storage: `api/converter_uploads/<userId>/`
+  - temp upload folder: `api/converter_uploads/_tmp/`
+  - metadata is tracked in per-user `manifest.json` files (filesystem-backed; no DB table added).
+- `api/controllers/converterController.js` preserves non-video files as uploaded and converts non-`mp4` videos (including `.mov`) to `.mp4` via `ffmpeg-static` before saving.
+- Added protected frontend route `/converter` in `frontend/src/index.tsx`; it is wrapped with `frontend/src/components/__general/protectedroute/ProtectedRoute.tsx`.
+- Added converter UI page `frontend/src/pages/converter/Converter.tsx` + `frontend/src/pages/converter/Converter.module.scss` and a header navigation link in `frontend/src/components/_UI/header/Header.tsx`.

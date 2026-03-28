@@ -5,11 +5,13 @@ import { useEffect } from "react";
 import Home from "@/pages/home/Home";
 import Welcome from "./pages/welcome/Welcome";
 import PublicRoute from "./components/__general/publicroute/PublicRoute";
+import ProtectedRoute from "./components/__general/protectedroute/ProtectedRoute";
 import Profile from "./pages/profile/Profile";
 import ProfileRedirect from "./components/__general/profileredirect/ProfileRedirect";
 import Todo from "./pages/todo/Todo";
 import Spaces from "./pages/spaces/Spaces";
 import Board from "./pages/board/Board";
+import Converter from "./pages/converter/Converter";
 import { useBoardDetailsStore } from "@/store/boardDetailsStore";
 import { useBoardsUnifiedStore } from "@/store/boardsUnifiedStore";
 
@@ -51,6 +53,9 @@ const useDocumentTitle = (defaultTitle = "PinIt") => {
         break;
       case "/spaces":
         document.title = "Spaces | PinIt";
+        break;
+      case "/converter":
+        document.title = "Converter | PinIt";
         break;
       case "/todo":
         document.title = "Todo | PinIt";
@@ -115,6 +120,14 @@ const router = createBrowserRouter([
       {
         path: "/spaces/:boardId",
         element: <Board />
+      },
+      {
+        path: "/converter",
+        element: (
+          <ProtectedRoute>
+            <Converter />
+          </ProtectedRoute>
+        )
       },
       {
         path: "*",

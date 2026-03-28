@@ -201,6 +201,9 @@ const isProfileActive = () => {
         <NavLink to="/spaces" className={linkClass} onClick={handleMenuItemClick}>
           SPACES
         </NavLink>
+        <NavLink to="/converter" className={linkClass} onClick={handleMenuItemClick}>
+          CONVERTER
+        </NavLink>
         <NavLink to="/todo" className={linkClass} onClick={handleMenuItemClick}>
           TODO
         </NavLink>
