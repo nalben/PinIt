@@ -31,6 +31,7 @@ const PREVIEW_EXTENSION = '.jpg';
 const PREVIEW_MIME_TYPE = 'image/jpeg';
 const PREVIEW_MAX_SIZE = 320;
 const PREVIEW_QUALITY = 20;
+const CONVERTER_VIDEO_VERSION = 2;
 
 const MOJIBAKE_PATTERN = /[\u00C3\u00D0\u00D1]/;
 const MOJIBAKE_PATTERN_GLOBAL = /[\u00C3\u00D0\u00D1]/g;
@@ -142,9 +143,14 @@ const convertVideoToMp4 = (inputPath, outputPath) => runFfmpeg([
   '-c:v', 'libx264',
   '-preset', 'veryfast',
   '-crf', '18',
+  '-profile:v', 'high',
+  '-tag:v', 'avc1',
   '-pix_fmt', 'yuv420p',
-  '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+  '-vf', buildCompatibleVideoFilter(),
   '-c:a', 'aac',
+  '-b:a', '160k',
+  '-ar', '48000',
+  '-ac', '2',
   '-movflags', '+faststart',
   outputPath,
 ]);
@@ -157,6 +163,21 @@ const generatePreviewImage = (inputPath, outputPath) => runFfmpeg([
   '-q:v', String(PREVIEW_QUALITY),
   outputPath,
 ]);
+
+const ensureFileMissing = async (filePath) => {
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (err) {
+    if (err?.code !== 'ENOENT') throw err;
+  }
+};
+
+const replaceFile = async (fromPath, toPath) => {
+  await ensureFileMissing(toPath);
+  await fs.promises.rename(fromPath, toPath);
+};
+
+const buildCompatibleVideoFilter = () => 'scale=trunc(iw/2)*2:trunc(ih/2)*2';
 
 const writeUpdatedEntry = async (userId, entries, updatedEntry) => {
   await writeManifest(
@@ -185,6 +206,53 @@ const createPreviewForEntry = async (userId, entry) => {
     };
   } catch (err) {
     await removeFileIfExists(previewPath);
+    throw err;
+  }
+};
+
+const ensureConvertedEntryCompatibility = async (userId, entries, entry) => {
+  if (!entry?.was_converted || Number(entry.conversion_version) >= CONVERTER_VIDEO_VERSION) {
+    return entry;
+  }
+
+  const sourcePath = getUserFilePath(userId, entry.stored_name);
+  const tempPath = getUserFilePath(userId, `${entry.id}-reencode.tmp.mp4`);
+
+  try {
+    await removeFileIfExists(tempPath);
+    await convertVideoToMp4(sourcePath, tempPath);
+    await replaceFile(tempPath, sourcePath);
+
+    const stats = await fs.promises.stat(sourcePath);
+    let updatedEntry = {
+      ...entry,
+      mime_type: 'video/mp4',
+      kind: 'video',
+      was_converted: true,
+      size_bytes: stats.size,
+      conversion_version: CONVERTER_VIDEO_VERSION,
+    };
+
+    if (entry.preview_name) {
+      await removeFileIfExists(getUserFilePath(userId, entry.preview_name));
+      updatedEntry = {
+        ...updatedEntry,
+        preview_name: undefined,
+        preview_mime_type: undefined,
+        preview_size_bytes: undefined,
+      };
+    }
+
+    try {
+      updatedEntry = await createPreviewForEntry(userId, updatedEntry);
+    } catch (previewErr) {
+      console.error('converter:upgradePreview', previewErr);
+    }
+
+    await writeUpdatedEntry(userId, entries, updatedEntry);
+    return updatedEntry;
+  } catch (err) {
+    await removeFileIfExists(tempPath);
     throw err;
   }
 };
@@ -233,6 +301,7 @@ const persistUploadedFile = async (userId, file) => {
       created_at: new Date().toISOString(),
       kind,
       was_converted: wasConverted,
+      conversion_version: wasConverted ? CONVERTER_VIDEO_VERSION : null,
     };
 
     if (!isPreviewableEntry(savedEntry)) {
@@ -365,13 +434,14 @@ exports.downloadFile = async (req, res) => {
       return res.status(404).json({ message: 'File not found' });
     }
 
-    const absolutePath = getUserFilePath(userId, entry.stored_name);
+    const downloadEntry = await ensureConvertedEntryCompatibility(userId, entries, entry);
+    const absolutePath = getUserFilePath(userId, downloadEntry.stored_name);
 
-    res.setHeader('Content-Type', entry.mime_type || 'application/octet-stream');
-    res.setHeader('Content-Length', String(entry.size_bytes || 0));
+    res.setHeader('Content-Type', downloadEntry.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Length', String(downloadEntry.size_bytes || 0));
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename*=UTF-8''${encodeDownloadName(entry.download_name || entry.original_name || 'file')}`
+      `attachment; filename*=UTF-8''${encodeDownloadName(downloadEntry.download_name || downloadEntry.original_name || 'file')}`
     );
 
     return res.sendFile(absolutePath);
