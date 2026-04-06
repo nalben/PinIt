@@ -91,6 +91,14 @@ $board-menu-wide-min: 1700px;
     color: var(--cyan);
     font-size: 14px;
     font-weight: 700;
+    line-height: 1.2;
+    width: max-content;
+    max-width: min(220px, calc(100vw - 48px));
+    overflow: hidden;
+    max-height: calc(1.2em * 4);
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
     transition: opacity 0.5s ease;
     text-shadow:
         0 0 2px rgba(0, 0, 0, 0.9),

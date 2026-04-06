@@ -316,6 +316,19 @@
     }
 }
 
+.friend_action_skeleton{
+    width: 100%;
+    max-width: min(70%, 200px);
+
+    @media (min-width:460px) {
+        max-width: min(45%, 230px);
+    }
+
+    .skeleton_btn{
+        max-width: none;
+    }
+}
+
 .friend_item{
     display: flex;
     gap: 1rem;

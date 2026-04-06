@@ -2,6 +2,7 @@
 import axiosInstance from '@/api/axiosInstance';
 import { resolveImageSrc } from '@/components/flow/flowBoardUtils';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
+import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
 import { useUIStore } from '@/store/uiStore';
 import { connectSocket } from '@/services/socketManager';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
@@ -12,6 +13,7 @@ import Check from '@/assets/icons/monochrome/check.svg';
 import Edit from '@/assets/icons/monochrome/edit.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
 import classes from './Board.module.scss';
+import { getDetailsImageCropPreset } from '@/utils/imageCropPresets';
 
 type CardDetailsSnapshot = {
   cardId: number;
@@ -81,6 +83,11 @@ type DraftBlock =
       items: string[];
     };
 
+type PendingCropTarget =
+  | { kind: 'draft'; draftId: string }
+  | { kind: 'replace'; blockId: number }
+  | null;
+
 const buildDetailsPath = (snapshot: CardDetailsSnapshot, isLoggedIn: boolean) =>
   isLoggedIn
     ? `/api/boards/${snapshot.boardId}/cards/${snapshot.cardId}/details`
@@ -135,6 +142,8 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const [checklistDraftValues, setChecklistDraftValues] = useState<Record<number, string>>({});
   const [pendingChecklistFocusBlockId, setPendingChecklistFocusBlockId] = useState<number | null>(null);
   const [imageLoadedByKey, setImageLoadedByKey] = useState<Record<string, boolean>>({});
+  const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
+  const [pendingCropTarget, setPendingCropTarget] = useState<PendingCropTarget>(null);
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const imageBlockInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const imageCaptionTextareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
@@ -176,6 +185,8 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     setEditingChecklistItemId(null);
     setEditingChecklistValue('');
     setEditingCaptionValue('');
+    setCropSourceFile(null);
+    setPendingCropTarget(null);
     setFactDraftValues({});
     setPendingFactFocusBlockId(null);
     setChecklistDraftValues({});
@@ -446,6 +457,45 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       }
       showTopAlarm(message);
     }
+  };
+
+  const openCropModalForFile = (target: PendingCropTarget, file: File | null) => {
+    if (!file) {
+      if (target?.kind === 'draft') {
+        removeDraftBlock(target.draftId);
+      }
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      showTopAlarm('Можно загружать только изображения');
+      if (target?.kind === 'draft') {
+        removeDraftBlock(target.draftId);
+      }
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showTopAlarm(IMAGE_BLOCK_TOO_LARGE_MESSAGE);
+      if (target?.kind === 'draft') {
+        removeDraftBlock(target.draftId);
+      }
+      return;
+    }
+
+    setPendingCropTarget(target);
+    setCropSourceFile(file);
+  };
+
+  const closeCropModal = () => {
+    if (pendingCropTarget?.kind === 'draft') {
+      const draft = draftBlocks.find((item) => item.id === pendingCropTarget.draftId);
+      if (draft?.type === 'image' && !draft.previewUrl && !draft.file) {
+        removeDraftBlock(pendingCropTarget.draftId);
+      }
+    }
+    setCropSourceFile(null);
+    setPendingCropTarget(null);
   };
 
   const deleteDetailsBlock = async (blockId: number) => {
@@ -719,7 +769,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   onChange={(event) => {
                     const file = event.currentTarget.files?.[0] ?? null;
                     event.currentTarget.value = '';
-                    void replaceImageBlock(block.id, file);
+                    openCropModalForFile({ kind: 'replace', blockId: block.id }, file);
                   }}
                 />
                 {canEditCards && isLoggedIn ? (
@@ -1270,20 +1320,8 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   hidden
                   onChange={(event) => {
                     const file = event.currentTarget.files?.[0] ?? null;
-                    updateDraftBlock(draft.id, (current) => {
-                      if (current.type !== 'image') return current;
-                      if (current.previewUrl) URL.revokeObjectURL(current.previewUrl);
-                      return {
-                        ...current,
-                        file,
-                        previewUrl: file ? URL.createObjectURL(file) : null,
-                      };
-                    });
-                    if (!file) {
-                      removeDraftBlock(draft.id);
-                      return;
-                    }
-                    void saveImageDraft(draft.id, file);
+                    event.currentTarget.value = '';
+                    openCropModalForFile({ kind: 'draft', draftId: draft.id }, file);
                   }}
                 />
                 {draft.previewUrl ? <img className={classes.details_draft_image} src={draft.previewUrl} alt="preview" /> : null}
@@ -1389,6 +1427,43 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
           </button>
         </div>
       ) : null}
+
+      <ImageCropModal
+        isOpen={Boolean(cropSourceFile && pendingCropTarget)}
+        sourceFile={cropSourceFile}
+        config={getDetailsImageCropPreset()}
+        onClose={closeCropModal}
+        onApply={(file) => {
+          const target = pendingCropTarget;
+          if (!target) {
+            setCropSourceFile(null);
+            setPendingCropTarget(null);
+            return;
+          }
+
+          if (target.kind === 'draft') {
+            const draft = draftBlocks.find((item) => item.id === target.draftId);
+            if (draft?.type === 'image') {
+              const previewUrl = URL.createObjectURL(file);
+              updateDraftBlock(target.draftId, (current) => {
+                if (current.type !== 'image') return current;
+                if (current.previewUrl) URL.revokeObjectURL(current.previewUrl);
+                return {
+                  ...current,
+                  file,
+                  previewUrl,
+                };
+              });
+              void saveImageDraft(target.draftId, file);
+            }
+          } else {
+            void replaceImageBlock(target.blockId, file);
+          }
+
+          setCropSourceFile(null);
+          setPendingCropTarget(null);
+        }}
+      />
     </div>
   );
 };

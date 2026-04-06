@@ -2,6 +2,8 @@ import React, { useRef, useEffect, useLayoutEffect, useState } from "react";
 import styles from "./DropdownWrapper.module.scss";
 
 type DropdownWrapperProps = {
+  wrapperClassName?: string;
+  buttonClassName?: string;
   left?: boolean;
   right?: boolean;
   profile?: boolean;
@@ -21,6 +23,8 @@ type DropdownWrapperProps = {
 };
 
 const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
+  wrapperClassName,
+  buttonClassName,
   left,
   right,
   middle,
@@ -163,9 +167,33 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     const cb = getFixedContainingRect();
     const margin = 8;
 
+    if (middleleftTop) {
+      const desiredWidth = Math.round(wrapperRect.width) + 2;
+      const leftPx = Math.min(
+        Math.max(wrapperRect.left - 1, cb.left + margin),
+        cb.left + cb.width - desiredWidth - margin
+      );
+      let topPx = wrapperRect.bottom;
+      topPx = Math.min(Math.max(topPx, cb.top + margin), cb.top + cb.height - menuHeight - margin);
+
+      setMenuStyle({
+        left: `${Math.round(leftPx - cb.left)}px`,
+        top: `${Math.round(topPx - cb.top)}px`,
+        width: `${desiredWidth}px`,
+        minWidth: `${desiredWidth}px`,
+        right: "auto",
+        transform: "none"
+      });
+      return;
+    }
+
     let leftPx = wrapperRect.right - menuWidth;
     if (left) leftPx = wrapperRect.left;
     if (middle) leftPx = wrapperRect.left + wrapperRect.width / 2 - menuWidth / 2;
+    if (middleleft) leftPx = wrapperRect.left - 5 - menuWidth;
+    if (middleleft && leftPx < cb.left + margin) {
+      leftPx = wrapperRect.right + 5;
+    }
     leftPx = Math.min(Math.max(leftPx, cb.left + margin), cb.left + cb.width - menuWidth - margin);
 
     const belowTop = wrapperRect.bottom + 15;
@@ -200,7 +228,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     if (!open) return;
     if (fixed) updateFixedPosition();
     else updatePosition();
-  }, [left, right, middle, middleleft, profile, noti, up, upDel, fixed, open]);
+  }, [left, right, middle, middleleft, middleleftTop, profile, noti, up, upDel, fixed, open]);
 
   useEffect(() => {
     if (fixed) updateFixedPosition();
@@ -217,11 +245,14 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
       window.removeEventListener("resize", handleResize);
       document.removeEventListener("pointerdown", handleClickOutside, true);
     };
-  }, [left, right, middle, middleleft, profile, noti, up, upDel, fixed, open]);
+  }, [left, right, middle, middleleft, middleleftTop, profile, noti, up, upDel, fixed, open]);
 
   return (
-    <div ref={wrapperRef} className={`${styles.wrapper} ${__PLATFORM__ === 'desktop' ? styles.wrapper_desktop : styles.wrapper_mobile}`.trim()}>
-      <div onClick={toggleDropdown} className={styles.button}>
+    <div
+      ref={wrapperRef}
+      className={`${styles.wrapper} ${__PLATFORM__ === 'desktop' ? styles.wrapper_desktop : styles.wrapper_mobile} ${wrapperClassName || ""}`.trim()}
+    >
+      <div onClick={toggleDropdown} className={`${styles.button || ""} ${buttonClassName || ""}`.trim()}>
         {button}
       </div>
       {open && (

@@ -93,6 +93,107 @@ export const getNodeRect = (n: RFNode | undefined | null): { cx: number; cy: num
   return { cx: base.x + size.width / 2, cy: base.y + size.height / 2, hw: size.width / 2, hh: size.height / 2 };
 };
 
+type VisibleRect = {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+  cx: number;
+  cy: number;
+};
+
+const isRectFullyVisible = (rect: VisibleRect, viewport: { left: number; right: number; top: number; bottom: number }) =>
+  rect.left >= viewport.left &&
+  rect.right <= viewport.right &&
+  rect.top >= viewport.top &&
+  rect.bottom <= viewport.bottom;
+
+export const getInitialViewportForDenseArea = (
+  nodes: RFNode[],
+  container: { width: number; height: number },
+  options?: { zoom?: number; padding?: number }
+) => {
+  const zoom = options?.zoom ?? 1;
+  const padding = options?.padding ?? 48;
+
+  if (!Number.isFinite(container.width) || !Number.isFinite(container.height) || container.width <= 0 || container.height <= 0) {
+    return null;
+  }
+
+  const rects = nodes
+    .map((node) => getNodeRect(node))
+    .filter((rect): rect is NonNullable<ReturnType<typeof getNodeRect>> => Boolean(rect))
+    .map((rect) => ({
+      left: rect.cx - rect.hw,
+      right: rect.cx + rect.hw,
+      top: rect.cy - rect.hh,
+      bottom: rect.cy + rect.hh,
+      cx: rect.cx,
+      cy: rect.cy,
+    }));
+
+  if (rects.length === 0) return null;
+
+  const visibleWidth = container.width / zoom - padding * 2;
+  const visibleHeight = container.height / zoom - padding * 2;
+
+  if (visibleWidth <= 0 || visibleHeight <= 0) return null;
+
+  const evaluateCenter = (centerX: number, centerY: number) => {
+    const viewport = {
+      left: centerX - visibleWidth / 2,
+      right: centerX + visibleWidth / 2,
+      top: centerY - visibleHeight / 2,
+      bottom: centerY + visibleHeight / 2,
+    };
+
+    const visibleRects = rects.filter((rect) => isRectFullyVisible(rect, viewport));
+    if (visibleRects.length === 0) return null;
+
+    const bounds = visibleRects.reduce(
+      (acc, rect) => ({
+        left: Math.min(acc.left, rect.left),
+        right: Math.max(acc.right, rect.right),
+        top: Math.min(acc.top, rect.top),
+        bottom: Math.max(acc.bottom, rect.bottom),
+      }),
+      { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }
+    );
+
+    return {
+      count: visibleRects.length,
+      area: Math.max(1, bounds.right - bounds.left) * Math.max(1, bounds.bottom - bounds.top),
+      centerX: (bounds.left + bounds.right) / 2,
+      centerY: (bounds.top + bounds.bottom) / 2,
+    };
+  };
+
+  let best: ReturnType<typeof evaluateCenter> = null;
+
+  for (const rect of rects) {
+    const initial = evaluateCenter(rect.cx, rect.cy);
+    if (!initial) continue;
+
+    const refined = evaluateCenter(initial.centerX, initial.centerY) ?? initial;
+    const isBetter =
+      !best ||
+      refined.count > best.count ||
+      (refined.count === best.count && refined.area < best.area);
+
+    if (isBetter) {
+      best = refined;
+    }
+  }
+
+  if (!best) return null;
+
+  return {
+    x: container.width / 2 - best.centerX * zoom,
+    y: container.height / 2 - best.centerY * zoom,
+    zoom,
+  };
+};
+
 const LINK_HANDLE_OFFSETS_RB: Record<Exclude<FlowNodeType, 'rectangle'>, { right: number; bottom: number }> = {
   circle: { right: 28, bottom: 28 },
   rhombus: { right: 21, bottom: 60 },

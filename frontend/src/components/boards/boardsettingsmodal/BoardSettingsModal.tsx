@@ -6,6 +6,7 @@ import classes from './BoardSettingsModal.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
+import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Edit from '@/assets/icons/monochrome/edit.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
@@ -14,6 +15,7 @@ import { useAuthStore } from '@/store/authStore';
 import { Friend, useFriendsStore } from '@/store/friendsStore';
 import { BoardParticipant, useBoardDetailsStore } from '@/store/boardDetailsStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
+import { BOARD_IMAGE_CROP_PRESET } from '@/utils/imageCropPresets';
 
 const MAX_BOARD_IMAGE_SIZE_MB = 5;
 const MAX_BOARD_IMAGE_SIZE_BYTES = MAX_BOARD_IMAGE_SIZE_MB * 1024 * 1024;
@@ -52,65 +54,6 @@ const resolveAvatarSrc = (avatar?: string | null) => {
   return avatar;
 };
 
-const loadImageElement = (src: string) =>
-  new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-
-const cropToAspect3_8 = async (file: File) => {
-  const srcUrl = URL.createObjectURL(file);
-  try {
-    const img = await loadImageElement(srcUrl);
-
-    const targetAspect = 3.8;
-    const targetW = 1280;
-    const targetH = Math.round(targetW / targetAspect);
-
-    const srcW = img.naturalWidth || img.width;
-    const srcH = img.naturalHeight || img.height;
-    const srcAspect = srcW / srcH;
-
-    let cropW = srcW;
-    let cropH = srcH;
-    let cropX = 0;
-    let cropY = 0;
-
-    if (srcAspect > targetAspect) {
-      cropW = Math.round(srcH * targetAspect);
-      cropX = Math.round((srcW - cropW) / 2);
-    } else if (srcAspect < targetAspect) {
-      cropH = Math.round(srcW / targetAspect);
-      cropY = Math.round((srcH - cropH) / 2);
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('No canvas context');
-
-    ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
-
-    const blob: Blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (b) => {
-          if (!b) reject(new Error('toBlob failed'));
-          else resolve(b);
-        },
-        'image/jpeg',
-        0.9
-      );
-    });
-
-    return new File([blob], 'board.jpg', { type: 'image/jpeg' });
-  } finally {
-    URL.revokeObjectURL(srcUrl);
-  }
-};
-
 type BoardSettingsModalProps = {
   initialTitle?: string | null;
   initialDescription?: string | null;
@@ -145,6 +88,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const [isPublicToggleNoAnim, setIsPublicToggleNoAnim] = useState(true);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -289,6 +233,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     setImageFile(null);
     if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImagePreview(null);
+    setCropSourceFile(null);
     setError(null);
     setIsSaving(false);
     setIsDeleting(false);
@@ -600,6 +545,63 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     return () => window.removeEventListener('keydown', onKeyDownCapture, true);
   }, [deleteBoard, deleteConfirmOpen, isOpen, isOwner, view]);
 
+  const updateBoardsStore = useCallback((patch: Partial<Pick<BoardResponse, 'title' | 'description' | 'image' | 'is_public'>>) => {
+    if (!numericBoardId) return;
+
+    useBoardsUnifiedStore.setState((s) => {
+      const nextEntities = { ...s.entitiesById };
+      const prev = nextEntities[numericBoardId];
+      if (prev) {
+        nextEntities[numericBoardId] = { ...prev, ...(patch as any), id: numericBoardId };
+      }
+      return {
+        ...s,
+        entitiesById: nextEntities,
+        myBoards: s.myBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+        recentBoards: s.recentBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+        guestBoards: s.guestBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+        friendsBoards: s.friendsBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+        publicBoards: s.publicBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
+      };
+    });
+  }, [numericBoardId]);
+
+  const clearLocalImageDraft = useCallback(() => {
+    setImageFile(null);
+    if (imagePreview) URL.revokeObjectURL(imagePreview);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [imagePreview]);
+
+  const persistBoardImage = useCallback(async (file: File) => {
+    if (!numericBoardId) return false;
+    if (!isOwner) return false;
+
+    setIsSaving(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.append('image', file);
+
+      const { data } = await axiosInstance.patch<{ image: string | null }>(`/api/boards/${numericBoardId}/image`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const next = typeof data?.image === 'string' || data?.image === null ? data.image : boardMeta?.image ?? null;
+      updateBoardsStore({ image: next });
+      useBoardDetailsStore.getState().applyBoardMetaPatch(numericBoardId, { image: next });
+      clearLocalImageDraft();
+      setCropSourceFile(null);
+      return true;
+    } catch {
+      setError('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РёР·РјРµРЅРµРЅРёСЏ');
+      setError('\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u044f');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [boardMeta?.image, clearLocalImageDraft, isOwner, numericBoardId, updateBoardsStore]);
+
   const submit = async () => {
     if (!numericBoardId) return;
     if (!isOwner) return;
@@ -607,25 +609,6 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       setError('Не удалось загрузить доску');
       return;
     }
-
-    const updateBoardsStore = (patch: Partial<Pick<BoardResponse, 'title' | 'description' | 'image' | 'is_public'>>) => {
-      useBoardsUnifiedStore.setState((s) => {
-        const nextEntities = { ...s.entitiesById };
-        const prev = nextEntities[numericBoardId];
-        if (prev) {
-          nextEntities[numericBoardId] = { ...prev, ...(patch as any), id: numericBoardId };
-        }
-        return {
-          ...s,
-          entitiesById: nextEntities,
-          myBoards: s.myBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
-          recentBoards: s.recentBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
-          guestBoards: s.guestBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
-          friendsBoards: s.friendsBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
-          publicBoards: s.publicBoards.map((b) => (b.id === numericBoardId ? ({ ...b, ...(patch as any) } as typeof b) : b)),
-        };
-      });
-    };
 
     const nextTitle = title.trim();
     if (!nextTitle) {
@@ -668,19 +651,15 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       }
 
       if (imageFile) {
-        const cropped = await cropToAspect3_8(imageFile);
         const form = new FormData();
-        form.append('image', cropped);
+        form.append('image', imageFile);
         const { data } = await axiosInstance.patch<{ image: string | null }>(`/api/boards/${numericBoardId}/image`, form, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         const next = typeof data?.image === 'string' || data?.image === null ? data.image : boardMeta?.image ?? null;
         updateBoardsStore({ image: next });
         useBoardDetailsStore.getState().applyBoardMetaPatch(numericBoardId, { image: next });
-        setImageFile(null);
-        if (imagePreview) URL.revokeObjectURL(imagePreview);
-        setImagePreview(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
+        clearLocalImageDraft();
       }
 
       const nextIsPublic = Boolean(isPublic);
@@ -757,7 +736,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         if (!isOwner) e.preventDefault();
                       }}
                     >
-                      <span>Изменить</span>
+                      <span>{'\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c'}</span>
                     </label>
                     <input
                       ref={fileInputRef}
@@ -768,23 +747,20 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                       disabled={!isOwner || isSaving}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
+                        e.target.value = '';
                         if (!file) return;
 
                         if (!file.type.startsWith('image/')) {
-                          showTopAlarm('Можно загружать только изображения');
-                          e.target.value = '';
+                          showTopAlarm('\u041c\u043e\u0436\u043d\u043e \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f');
                           return;
                         }
 
                         if (file.size > MAX_BOARD_IMAGE_SIZE_BYTES) {
-                          showTopAlarm(`Вес слишком большой — выберите изображение весом до ${MAX_BOARD_IMAGE_SIZE_MB} МБ.`);
-                          e.target.value = '';
+                          showTopAlarm(`\u0412\u0435\u0441 \u0441\u043b\u0438\u0448\u043a\u043e\u043c \u0431\u043e\u043b\u044c\u0448\u043e\u0439, \u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0432\u0435\u0441\u043e\u043c \u0434\u043e ${MAX_BOARD_IMAGE_SIZE_MB} \u041c\u0411.`);
                           return;
                         }
 
-                        if (imagePreview) URL.revokeObjectURL(imagePreview);
-                        setImageFile(file);
-                        setImagePreview(URL.createObjectURL(file));
+                        setCropSourceFile(file);
                       }}
                     />
                   </div>
@@ -1221,6 +1197,15 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
           )}
         </div>
       </div>
+      <ImageCropModal
+        isOpen={isOpen && Boolean(cropSourceFile)}
+        sourceFile={cropSourceFile}
+        config={BOARD_IMAGE_CROP_PRESET}
+        onClose={() => setCropSourceFile(null)}
+        onApply={async (file) => {
+          await persistBoardImage(file);
+        }}
+      />
     </AuthModal>
   );
 };

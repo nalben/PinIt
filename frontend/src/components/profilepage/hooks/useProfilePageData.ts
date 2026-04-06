@@ -25,6 +25,7 @@ export const useProfilePageData = (params: {
   const [error, setError] = useState<ProfileError | null>(null);
   const [friendCount, setFriendCount] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isProfileFriendStatusLoading, setIsProfileFriendStatusLoading] = useState<boolean>(false);
   const [friendStatusById, setFriendStatusById] = useState<Record<number, FriendStatusEntry>>({});
   const [shareTextById, setShareTextById] = useState<Record<number, string>>({});
 
@@ -37,6 +38,7 @@ export const useProfilePageData = (params: {
   const setFriendStatusForUser = useCallback((userId: number, status: FriendStatusEntry) => {
     friendStatusCache.set(userId, status);
     setFriendStatusById((prev) => ({ ...prev, [userId]: status }));
+    setIsProfileFriendStatusLoading(false);
   }, []);
 
   const requestFriendStatus = useCallback(
@@ -45,12 +47,19 @@ export const useProfilePageData = (params: {
 
       const cached = friendStatusCache.get(userId);
       if (cached) {
-        if (!isMounted || isMounted()) setFriendStatusById((prev) => ({ ...prev, [userId]: cached }));
+        if (!isMounted || isMounted()) {
+          setFriendStatusById((prev) => ({ ...prev, [userId]: cached }));
+          setIsProfileFriendStatusLoading(false);
+        }
         return;
       }
 
-      if (friendStatusInFlight.get(userId)) return;
+      if (friendStatusInFlight.get(userId)) {
+        if (!isMounted || isMounted()) setIsProfileFriendStatusLoading(true);
+        return;
+      }
       friendStatusInFlight.set(userId, true);
+      if (!isMounted || isMounted()) setIsProfileFriendStatusLoading(true);
 
       try {
         const { data } = await axiosInstance.get<{ status: FriendStatus; requestId?: number }>(`/api/friends/status/${userId}`);
@@ -63,6 +72,7 @@ export const useProfilePageData = (params: {
         // ignore
       } finally {
         friendStatusInFlight.delete(userId);
+        if (!isMounted || isMounted()) setIsProfileFriendStatusLoading(false);
       }
     },
     []
@@ -95,6 +105,7 @@ export const useProfilePageData = (params: {
       setIsLoading(false);
 
       if (hasToken && !cached.profile.isOwner) {
+        setIsProfileFriendStatusLoading(!friendStatusCache.has(cached.profile.id));
         void requestFriendStatus(cached.profile.id);
       }
       return;
@@ -104,6 +115,7 @@ export const useProfilePageData = (params: {
     setError(null);
     setProfile(null);
     setFriendCount(null);
+    setIsProfileFriendStatusLoading(false);
     setFriendStatusById({});
     setShareTextById({});
 
@@ -151,6 +163,7 @@ export const useProfilePageData = (params: {
         setFriendCount(entry.friendCount);
 
         if (hasToken && !entry.profile.isOwner) {
+          setIsProfileFriendStatusLoading(!friendStatusCache.has(entry.profile.id));
           void requestFriendStatus(entry.profile.id, isMounted);
         }
       })
@@ -281,6 +294,7 @@ export const useProfilePageData = (params: {
     friendStatusById,
     shareTextById,
     profileFriendStatus,
+    isProfileFriendStatusLoading,
     refreshFriendCount,
     handleShare,
     handleFriendAction,

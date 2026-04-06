@@ -13,6 +13,9 @@ import Board from "./pages/board/Board";
 import Converter from "./pages/converter/Converter";
 import { useBoardDetailsStore } from "@/store/boardDetailsStore";
 import { useBoardsUnifiedStore } from "@/store/boardsUnifiedStore";
+import { applyTheme, getStoredTheme } from "@/utils/theme";
+
+applyTheme(getStoredTheme());
 
 const useDocumentTitle = (defaultTitle = "PinIt") => {
   const location = useLocation();

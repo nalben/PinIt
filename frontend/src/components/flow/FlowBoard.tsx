@@ -27,6 +27,7 @@ import classes from './FlowBoard.module.scss';
 import axiosInstance from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
+import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
 import LockClose from '@/assets/icons/monochrome/lock_close.svg';
 import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
 import Details from '@/assets/icons/monochrome/details.svg';
@@ -37,6 +38,7 @@ import type { ApiCard, ApiCardLink, ApiLinkStyle, FlowNodeData, FlowNodeType } f
 import {
   buildEdgeFromLink,
   getBoundaryPoint,
+  getInitialViewportForDenseArea,
   getLinkHandleStyle,
   getNodeRect,
   NODE_SIZES,
@@ -50,6 +52,7 @@ import { useFlowBoardLinkMode } from './useFlowBoardLinkMode';
 import { useFlowSelection } from '@/components/flowboard/hooks/useFlowSelection';
 import { useFlowBoardMenuTransitions } from '@/components/flowboard/hooks/useFlowBoardMenuTransitions';
 import { FlowLinkModeAlarm } from '@/components/flowboard/components/FlowLinkModeAlarm';
+import { getCardImageCropPreset } from '@/utils/imageCropPresets';
 
 export type FlowBoardHandle = {
   createDraftNodeAtCenter: () => void;
@@ -371,6 +374,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
   const [nodes, setNodes] = useState<RFNode<FlowNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
+  const initialViewportAppliedRef = useRef(false);
   const draggingNodeIdRef = useRef<string | null>(null);
   const draggingNodeStartPosRef = useRef<{ id: string; x: number; y: number } | null>(null);
   const dragStartSelectedPositionsRef = useRef<Map<string, { x: number; y: number }> | null>(null);
@@ -816,6 +820,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   const displayLocked = Boolean(visualDraft?.isLocked);
   const displayImagePreview = visualDraft?.imageSrc ?? null;
 
+  const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
   const pendingObjectUrlRef = useRef<string | null>(null);
   const [imageUploading, setImageUploading] = useState(false);
@@ -911,6 +916,30 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   );
 
   useEffect(() => {
+    initialViewportAppliedRef.current = false;
+  }, [numericBoardId]);
+
+  useEffect(() => {
+    if (initialViewportAppliedRef.current) return;
+    if (!reactFlow) return;
+    if (nodes.length === 0) return;
+
+    const nextViewport = getInitialViewportForDenseArea(nodes, {
+      width: containerRef.current?.clientWidth ?? 0,
+      height: containerRef.current?.clientHeight ?? 0,
+    });
+
+    if (!nextViewport) return;
+
+    initialViewportAppliedRef.current = true;
+    const frameId = window.requestAnimationFrame(() => {
+      reactFlow.setViewport(nextViewport, { duration: 0 });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [nodes, reactFlow]);
+
+  useEffect(() => {
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
 
     let cancelled = false;
@@ -961,7 +990,16 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
         if (cancelled) return;
         setEdges(nextEdges);
       } catch {
-        // ignore
+        if (!hasToken) return;
+        try {
+          const res = await axiosInstance.get<ApiCardLink[]>(`/api/boards/public/${numericBoardId}/links`);
+          const links = Array.isArray(res.data) ? res.data : [];
+          const nextEdges = links.map(buildEdgeFromLink);
+          if (cancelled) return;
+          setEdges(nextEdges);
+        } catch {
+          // ignore
+        }
       }
     };
 
@@ -1043,6 +1081,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       }
       pendingObjectUrlRef.current = null;
     }
+    setCropSourceFile(null);
     setPendingImageFile(null);
   }, []);
 
@@ -1148,6 +1187,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       const panelEl = createPanelRef.current;
       if (panelEl && target && panelEl.contains(target)) return;
       const targetEl = target instanceof HTMLElement ? target : null;
+      if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return;
       const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       const menuEl = boardMenuRef?.current;
       if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
@@ -1175,6 +1215,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       const panelEl = createPanelRef.current;
       if (panelEl && target && panelEl.contains(target)) return;
       const targetEl = target instanceof HTMLElement ? target : null;
+      if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return;
       const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       const menuEl = boardMenuRef?.current;
       if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
@@ -1308,13 +1349,15 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     }
   };
 
-  const handleImageSelected = (file: File | null) => {
+  const syncSavedImageToActiveSettings = useCallback((nextImageSrc: string | null) => {
+    useUIStore.setState((s) => ({
+      flowCardSettings: s.flowCardSettings ? { ...s.flowCardSettings, imageSrc: nextImageSrc } : s.flowCardSettings,
+      flowCardSettingsDraft: s.flowCardSettingsDraft ? { ...s.flowCardSettingsDraft, imageSrc: nextImageSrc } : s.flowCardSettingsDraft,
+    }));
+  }, []);
+
+  const applyPendingCroppedImage = useCallback((file: File) => {
     if (!activeNodeId) return;
-    if (!file) return;
-    if (file.size > MAX_CARD_IMAGE_SIZE_BYTES) {
-      showTopAlarm(`Вес слишком большой — выберите изображение весом до ${MAX_CARD_IMAGE_SIZE_MB} МБ.`);
-      return;
-    }
 
     clearPendingImage();
     const preview = URL.createObjectURL(file);
@@ -1322,6 +1365,52 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     setPendingImageFile(file);
     setFlowCardSettingsDraft({ imageSrc: preview });
     applyPreviewToNode(activeNodeId, { imageSrc: preview });
+  }, [activeNodeId, applyPreviewToNode, clearPendingImage, setFlowCardSettingsDraft]);
+
+  const persistImageForActiveNode = useCallback(async (file: File) => {
+    if (!activeNodeId) return;
+    if (!canEditCards) return;
+
+    const nodeId = String(activeNodeId);
+    if (nodeId.startsWith('draft-')) {
+      applyPendingCroppedImage(file);
+      return;
+    }
+
+    if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+    if (!hasToken) return;
+
+    setImageUploading(true);
+    try {
+      suppressSocketReloadByCardIdRef.current.set(nodeId, Date.now() + 1500);
+
+      const form = new FormData();
+      form.append('image', file);
+      const res = await axiosInstance.patch<{ image_path: string | null }>(
+        `/api/boards/${numericBoardId}/cards/${nodeId}/image`,
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+
+      const nextImageSrc = resolveImageSrc(res.data?.image_path ?? null);
+      clearPendingImage();
+      syncSavedImageToActiveSettings(nextImageSrc ?? null);
+      applyPreviewToNode(nodeId, { imageSrc: nextImageSrc ?? null });
+    } catch (e) {
+      reportError('\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438.', e);
+    } finally {
+      setImageUploading(false);
+    }
+  }, [activeNodeId, applyPendingCroppedImage, applyPreviewToNode, canEditCards, clearPendingImage, hasToken, numericBoardId, reportError, syncSavedImageToActiveSettings]);
+
+  const handleImageSelected = (file: File | null) => {
+    if (!activeNodeId) return;
+    if (!file) return;
+    if (file.size > MAX_CARD_IMAGE_SIZE_BYTES) {
+      showTopAlarm(`\u0412\u0435\u0441 \u0441\u043b\u0438\u0448\u043a\u043e\u043c \u0431\u043e\u043b\u044c\u0448\u043e\u0439, \u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0432\u0435\u0441\u043e\u043c \u0434\u043e ${MAX_CARD_IMAGE_SIZE_MB} \u041c\u0411.`);
+      return;
+    }
+    setCropSourceFile(file);
   };
 
   const removeImageLive = () => {
@@ -1518,7 +1607,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
           <ReactFlow
             nodes={nodes}
             edges={edgesForRender}
-            fitView
             zoomOnDoubleClick={false}
             deleteKeyCode={null}
             selectionKeyCode={null}
@@ -1838,26 +1926,26 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
 
           <div className={classes.create_panel_form}>
             <div className={classes.form_field}>
-              <div className={classes.form_label}>Название</div>
+              <div className={classes.form_label}>{'\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435'}</div>
               <input
                 className={classes.create_panel_input}
                 ref={titleInputRef}
                 value={displayTitle}
                 onChange={e => setDraftTitleLive(e.target.value)}
-                placeholder={visualEditing ? 'Название' : 'Выберите запись'}
+                placeholder={visualEditing ? '\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435' : '\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0437\u0430\u043f\u0438\u0441\u044c'}
                 maxLength={50}
                 disabled={!isEditing}
               />
             </div>
 
             <div className={classes.form_field}>
-              <div className={classes.form_label}>Изображение</div>
+              <div className={classes.form_label}>{'\u0418\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435'}</div>
               <div className={classes.form_row}>
                 <Mainbtn
                   variant="mini"
                   kind="button"
                   type="button"
-                  text="Выбрать"
+                  text={'\u0412\u044b\u0431\u0440\u0430\u0442\u044c'}
                   onClick={() => imageInputRef.current?.click()}
                   disabled={!isEditing || draftSaving || imageUploading}
                 />
@@ -1883,6 +1971,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
                 }}
                 disabled={!isEditing}
               />
+              <ImageCropModal
+                isOpen={Boolean(isEditing && cropSourceFile)}
+                sourceFile={cropSourceFile}
+                config={getCardImageCropPreset(displayType)}
+                onClose={() => setCropSourceFile(null)}
+                onApply={persistImageForActiveNode}
+              />
             </div>
 
             <div className={classes.form_field}>
@@ -1895,9 +1990,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
                     className={classes.danger_action_trigger}
                     onClick={() => setDeleteConfirmOpen((prev) => !prev)}
                     disabled={!isEditing || draftSaving || imageUploading}
-                    aria-label="Удалить запись"
+                    aria-label={'\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0437\u0430\u043f\u0438\u0441\u044c'}
                   >
-                    Удалить
+                    {'\u0423\u0434\u0430\u043b\u0438\u0442\u044c'}
                   </button>,
                   <div key="menu">
                     <button

@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import classes from './PublicBoards.module.scss';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
@@ -10,7 +11,6 @@ import { UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore'
 
 const PublicBoards: React.FC = () => {
   const isAuth = useAuthStore((s) => s.isAuth);
-  const isInitialized = useAuthStore((s) => s.isInitialized);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
   const boards = useBoardsUnifiedStore((s) => s.publicBoards);
   const isLoading = useBoardsUnifiedStore((s) => s.isLoadingPublic);
@@ -29,7 +29,7 @@ const PublicBoards: React.FC = () => {
     const el = boardsListRef.current;
     if (!el) return;
     const next = el.scrollHeight > el.clientHeight + 1;
-    setHasListScroll(prev => (prev === next ? prev : next));
+    setHasListScroll((prev) => (prev === next ? prev : next));
   });
 
   useEffect(() => {
@@ -39,7 +39,7 @@ const PublicBoards: React.FC = () => {
       const el = boardsListRef.current;
       if (!el) return;
       const next = el.scrollHeight > el.clientHeight + 1;
-      setHasListScroll(prev => (prev === next ? prev : next));
+      setHasListScroll((prev) => (prev === next ? prev : next));
     };
 
     window.addEventListener('resize', onResize);
@@ -94,7 +94,7 @@ const PublicBoards: React.FC = () => {
 
   const skeleton = (
     <section className={classes.boards_container} aria-busy="true">
-      <h2>Популярные доступные доски:</h2>
+      <h2>Популярные публичные доски:</h2>
       <div
         ref={boardsListRef}
         className={`${classes.boards_list} ${hasListScroll ? classes.boards_list_scroll : ''}`}
@@ -121,13 +121,13 @@ const PublicBoards: React.FC = () => {
 
   return (
     <section className={classes.boards_container}>
-      <h2>Популярные доступные доски:</h2>
+      <h2>Популярные публичные доски:</h2>
       {boardsToRender.length > 0 ? (
         <div
           ref={boardsListRef}
           className={`${classes.boards_list} ${hasListScroll ? classes.boards_list_scroll : ''}`}
         >
-          {boardsToRender.map(board => {
+          {boardsToRender.map((board) => {
             const imgSrc = board.image
               ? board.image.startsWith('/uploads/')
                 ? `${API_URL}${board.image}`
@@ -136,11 +136,22 @@ const PublicBoards: React.FC = () => {
 
             return (
               <div key={board.id} className={classes.boards_item}>
-                {imgSrc ? <img src={imgSrc} alt={board.title} /> : <Default />}
+                <Link
+                  to={`/spaces/${board.id}`}
+                  state={{ board }}
+                  className={classes.board_cover_link}
+                  aria-label={`Открыть доску ${board.title}`}
+                >
+                  {imgSrc ? <img src={imgSrc} alt={board.title} /> : <Default />}
+                </Link>
+
                 <div className={classes.board_info_con}>
-                  <h3>{board.title}</h3>
+                  <Link to={`/spaces/${board.id}`} state={{ board }} className={classes.board_title_link}>
+                    <h3>{board.title}</h3>
+                  </Link>
                   <p>{board.description || ''}</p>
                 </div>
+
                 <Mainbtn
                   variant="mini"
                   kind="navlink"

@@ -510,7 +510,8 @@ const Converter = () => {
   }, [downloadedIds, persistDownloadedIds]);
 
   return (
-    <section className={classes.converter}>
+    <div className={classes.page}>
+      <main className={classes.converter}>
       <div className={classes.hero}>
         <div className={classes.heroCopy}>
           <span className={classes.eyebrow}>Private Transfer</span>
@@ -710,12 +711,13 @@ const Converter = () => {
         )}
       </article>
 
-      {toast && (
-        <div key={toast.id} className={classes.toast} role="status" aria-live="polite">
-          {toast.message}
-        </div>
-      )}
-    </section>
+        {toast && (
+          <div key={toast.id} className={classes.toast} role="status" aria-live="polite">
+            {toast.message}
+          </div>
+        )}
+      </main>
+    </div>
   );
 };
 

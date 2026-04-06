@@ -16,6 +16,8 @@ import { useNotificationsStore } from '@/store/notificationsStore';
 import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { useUIStore } from '@/store/uiStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
+import type { AppTheme } from '@/utils/theme';
+import { applyTheme, getStoredTheme, persistTheme, THEME_OPTIONS } from '@/utils/theme';
 
 interface UserProfile {
   id: number;
@@ -36,7 +38,11 @@ type HeaderVariant = 'default' | 'board';
 
 const Header = ({ variant = 'default' }: { variant?: HeaderVariant }) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme());
+  const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+  const [logoutDropdownOpen, setLogoutDropdownOpen] = useState(false);
   const { user, login } = useAuthStore();
+  const logout = useAuthStore((state) => state.logout);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
   const menuRef = useRef<HTMLElement | null>(null);
@@ -177,6 +183,27 @@ const isProfileActive = () => {
     setMenuOpen(false);
   };
 
+  const handleThemeChange = (nextTheme: AppTheme) => {
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    persistTheme(nextTheme);
+    setThemeDropdownOpen(false);
+  };
+
+  const handleLogoutConfirm = () => {
+    setLogoutDropdownOpen(false);
+    closeHeaderDropdown();
+    logout();
+  };
+
+  const activeThemeOption = THEME_OPTIONS.find((option) => option.id === theme) ?? THEME_OPTIONS[0]!;
+
+  useEffect(() => {
+    if (isProfileOpen) return;
+    setThemeDropdownOpen(false);
+    setLogoutDropdownOpen(false);
+  }, [isProfileOpen]);
+
   return (
     <header
       className={`${classes.container} ${variant === 'board' ? classes.container_board : ''} ${__PLATFORM__ === 'desktop' ? classes.header_desktop : classes.header_mobile}`.trim()}
@@ -229,6 +256,21 @@ const isProfileActive = () => {
       </nav>
 
       <div className={classes.profile_container}>
+        <div className={classes.theme_switcher} aria-label="Выбор темы">
+          {THEME_OPTIONS.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={`${classes.theme_button} ${theme === option.id ? classes.theme_button_active : ''}`.trim()}
+              onClick={() => handleThemeChange(option.id)}
+              aria-label={`Тема ${option.label}`}
+              title={`Тема ${option.label}`}
+            >
+              <span className={`${classes.theme_button_swatch} ${classes[`theme_button_swatch_${option.id}`]}`.trim()} />
+            </button>
+          ))}
+        </div>
+
         {!isInitialized ? (
           <div className={classes.user} aria-busy="true">
             <div className={`${classes.skeleton} ${classes.skeleton_noti}`} aria-hidden="true" />
@@ -422,9 +464,116 @@ const isProfileActive = () => {
                         </div>
                       </div>
                     </NavLink>
-                    <div data-dropdown-class={classes.profile_logout_item}>
-                      <LogoutButton />
+                    <div
+                      data-dropdown-class={`${classes.profile_theme_item} ${themeDropdownOpen ? classes.profile_theme_item_open : ''}`.trim()}
+                      className={classes.profile_theme_item_content}
+                    >
+                      <div className={classes.profile_theme_panel} onClick={(event) => event.stopPropagation()}>
+                        <DropdownWrapper
+                          fixed
+                          middleleftTop
+                          isOpen={themeDropdownOpen}
+                          onClose={() => setThemeDropdownOpen(false)}
+                          menuClassName={classes.profile_theme_menu}
+                          wrapperClassName={classes.profile_theme_dropdown_wrapper}
+                          buttonClassName={classes.profile_theme_dropdown_button}
+                        >
+                          <button
+                            type="button"
+                            className={classes.profile_theme_trigger}
+                            onClick={() => {
+                              setThemeDropdownOpen((prev) => !prev);
+                            }}
+                            aria-expanded={themeDropdownOpen}
+                            aria-label={`\u0422\u0435\u043c\u0430 : ${activeThemeOption.label}`}
+                          >
+                            <span className={classes.profile_theme_copy}>{`\u0422\u0435\u043c\u0430 : ${activeThemeOption.label}`}</span>
+                            <span className={`${classes.theme_button_swatch} ${classes.theme_button_swatch_inline} ${classes[`theme_button_swatch_${activeThemeOption.id}`]}`.trim()} />
+                          </button>
+                          <div>
+                            {THEME_OPTIONS.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                data-dropdown-class={`${classes.profile_theme_option_item} ${theme === option.id ? classes.profile_theme_option_item_active : ''}`.trim()}
+                                className={classes.profile_theme_option}
+                                onClick={() => handleThemeChange(option.id)}
+                                aria-label={`\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0442\u0435\u043c\u0443 ${option.label}`}
+                              >
+                                <span className={`${classes.theme_button_swatch} ${classes.theme_button_swatch_inline} ${classes[`theme_button_swatch_${option.id}`]}`.trim()} />
+                                <span>{option.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </DropdownWrapper>
+                      </div>
                     </div>
+                    <LogoutButton
+                      data-dropdown-class={classes.profile_logout_item}
+                      className={classes.profile_logout_item_content}
+                      closeSignal={themeDropdownOpen}
+                      onOpenChange={(open) => {
+                        setLogoutDropdownOpen(open);
+                        if (open) setThemeDropdownOpen(false);
+                      }}
+                      onLogout={handleLogoutConfirm}
+                    />
+                    {false && (
+                    <div
+                      data-dropdown-class={`${classes.profile_logout_item} ${logoutDropdownOpen ? classes.profile_logout_item_open : ''}`.trim()}
+                      className={classes.profile_logout_item_content}
+                    >
+                      <div className={classes.profile_logout_panel} onClick={(event) => event.stopPropagation()}>
+                        <DropdownWrapper
+                          fixed
+                          middleleftTop
+                          isOpen={logoutDropdownOpen}
+                          onClose={() => setLogoutDropdownOpen(false)}
+                          menuClassName={classes.profile_logout_menu}
+                          wrapperClassName={classes.profile_logout_dropdown_wrapper}
+                          buttonClassName={classes.profile_logout_dropdown_button}
+                        >
+                          <button
+                            type="button"
+                            className={classes.profile_logout_trigger}
+                            onClick={() => {
+                              setThemeDropdownOpen(false);
+                              setLogoutDropdownOpen((prev) => !prev);
+                            }}
+                            aria-expanded={logoutDropdownOpen}
+                            aria-label="Выход из аккаунта"
+                          >
+                            <span className={classes.profile_logout_copy}>Выйти</span>
+                            <span className={classes.profile_logout_arrow}>
+                              <Arrow />
+                            </span>
+                          </button>
+                          <div>
+                            <button
+                              type="button"
+                              data-dropdown-class={`${classes.profile_logout_option_item} ${classes.profile_logout_option_item_danger}`.trim()}
+                              className={`${classes.profile_logout_option} ${classes.profile_logout_option_danger}`.trim()}
+                              onClick={handleLogoutConfirm}
+                              aria-label="Подтвердить выход"
+                            >
+                              <span>Да, выйти</span>
+                              <span className={classes.profile_logout_arrow}>
+                                <Arrow />
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              data-dropdown-class={classes.profile_logout_option_item}
+                              className={classes.profile_logout_option}
+                              onClick={() => setLogoutDropdownOpen(false)}
+                              aria-label="Отмена выхода"
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        </DropdownWrapper>
+                      </div>
+                    </div>)}
                   </div>
                 </DropdownWrapper>
             </div>

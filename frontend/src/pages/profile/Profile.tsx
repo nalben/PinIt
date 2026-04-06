@@ -11,6 +11,7 @@ import AuthTrigger from '@/components/auth/AuthTrigger';
 import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
 import AuthOnly from '@/components/__general/authonly/Authonly';
 import Edit from '@/assets/icons/monochrome/edit.svg';
+import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
@@ -20,6 +21,7 @@ import type { OpenModal, UpdateProfileResponse } from '@/components/profilepage/
 import { useProfilePageData } from '@/components/profilepage/hooks/useProfilePageData';
 import { getFriendButtonClassByStatus, getFriendButtonText } from '@/components/profilepage/utils/friendUi';
 import { resolveProfileAvatarPath, resolveProfileAvatarSrc } from '@/components/profilepage/utils/avatar';
+import { PROFILE_AVATAR_CROP_PRESET } from '@/utils/imageCropPresets';
 
 const MAX_AVATAR_SIZE_MB = 5;
 const MAX_AVATAR_SIZE_BYTES = MAX_AVATAR_SIZE_MB * 1024 * 1024;
@@ -31,6 +33,7 @@ const Profile = () => {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [openModal, setOpenModal] = useState<OpenModal>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
 
   const { user, isInitialized, hasToken } = useAuthStore();
   const { openHeaderDropdown, openFriendsModal, showTopAlarm } = useUIStore();
@@ -43,6 +46,7 @@ const Profile = () => {
     friendCount,
     isLoading,
     profileFriendStatus,
+    isProfileFriendStatusLoading,
     shareTextById,
     handleShare,
     handleFriendAction,
@@ -65,6 +69,7 @@ const Profile = () => {
     if (openModal !== 'edit') {
       setAvatarPreview(null);
       setAvatarFile(null);
+      setCropSourceFile(null);
     }
   }, [openModal]);
 
@@ -104,6 +109,7 @@ const Profile = () => {
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -120,11 +126,12 @@ const Profile = () => {
       return;
     }
 
-    setAvatarFile(file);
-    setAvatarPreview(URL.createObjectURL(file));
+    setCropSourceFile(file);
   };
 
-  const isOwnerSkeleton = Boolean(username && hasToken && user?.username === username);
+  const cachedUsername = typeof window !== 'undefined' ? window.localStorage.getItem('username') : null;
+  const authUsername = user?.username ?? cachedUsername;
+  const isOwnerSkeleton = Boolean(username && hasToken && authUsername === username);
   const isHeartUser = username === 'phenomenon';
 
   if (isLoading) return <ProfileSkeleton isOwner={isOwnerSkeleton} isHeart={isHeartUser} />;
@@ -235,6 +242,19 @@ const Profile = () => {
                 </form>
               </AuthModal>
 
+              <ImageCropModal
+                isOpen={openModal === 'edit' && Boolean(cropSourceFile)}
+                sourceFile={cropSourceFile}
+                config={PROFILE_AVATAR_CROP_PRESET}
+                onClose={() => setCropSourceFile(null)}
+                onApply={(file) => {
+                  if (avatarPreview) URL.revokeObjectURL(avatarPreview);
+                  setAvatarFile(file);
+                  setAvatarPreview(URL.createObjectURL(file));
+                  setCropSourceFile(null);
+                }}
+              />
+
               <AuthModal isOpen={openModal === 'reset'} onClose={() => setOpenModal(null)} closeOnOverlayClick={false}>
                 <ResetPasswordForm onClose={() => setOpenModal(null)} initialStep={2} initialUsername={profile.username} />
               </AuthModal>
@@ -258,15 +278,21 @@ const Profile = () => {
             </GuestOnly>
 
             <AuthOnly>
-              <div className={getFriendButtonClassByStatus(profileFriendStatus, classes)}>
-                <Mainbtn
-                  text={getFriendButtonText(profileFriendStatus)}
-                  variant="auth"
-                  kind="button"
-                  disabled={profileFriendStatus === 'rejected'}
-                  onClick={() => handleFriendAction(profile.id)}
-                />
-              </div>
+              {isProfileFriendStatusLoading ? (
+                <div className={classes.friend_action_skeleton}>
+                  <div className={`${classes.skeleton} ${classes.skeleton_btn}`} />
+                </div>
+              ) : (
+                <div className={getFriendButtonClassByStatus(profileFriendStatus, classes)}>
+                  <Mainbtn
+                    text={getFriendButtonText(profileFriendStatus)}
+                    variant="auth"
+                    kind="button"
+                    disabled={profileFriendStatus === 'rejected'}
+                    onClick={() => handleFriendAction(profile.id)}
+                  />
+                </div>
+              )}
             </AuthOnly>
           </div>
         )}

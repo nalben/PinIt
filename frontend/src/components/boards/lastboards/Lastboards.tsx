@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import classes from './Lastboards.module.scss';
@@ -8,7 +9,6 @@ import { useCreateBoardModalStore } from '@/store/createBoardModalStore';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import { useAuthStore } from '@/store/authStore';
 
-// Zustand store для последних досок
 const Lastboards: React.FC = () => {
   const recentBoards = useBoardsUnifiedStore((s) => s.recentBoards);
   const isLoading = useBoardsUnifiedStore((s) => s.isLoadingRecent);
@@ -16,8 +16,8 @@ const Lastboards: React.FC = () => {
   const ensureRecentLoaded = useBoardsUnifiedStore((s) => s.ensureRecentLoaded);
   const refreshRecentSilent = useBoardsUnifiedStore((s) => s.refreshRecentSilent);
   const openCreateBoardModal = useCreateBoardModalStore((s) => s.open);
-  const isAuth = useAuthStore(state => state.isAuth);
-  const isInitialized = useAuthStore(state => state.isInitialized);
+  const isAuth = useAuthStore((state) => state.isAuth);
+  const isInitialized = useAuthStore((state) => state.isInitialized);
   const prevIsAuthRef = useRef(isAuth);
   const forceSkeleton =
     __ENV__ === 'development' &&
@@ -168,7 +168,7 @@ const Lastboards: React.FC = () => {
       <h2>Последние открытые доски:</h2>
       {accessibleBoards.length > 0 ? (
         <div className={classes.boards_list}>
-          {accessibleBoards.slice(0, 3).map(board => {
+          {accessibleBoards.slice(0, 3).map((board) => {
             const imgSrc = board.image
               ? board.image.startsWith('/uploads/')
                 ? `${API_URL}${board.image}`
@@ -177,11 +177,22 @@ const Lastboards: React.FC = () => {
 
             return (
               <div key={board.id} className={classes.boards_item}>
-                {imgSrc ? <img src={imgSrc} alt={board.title} /> : <Default />}
+                <Link
+                  to={`/spaces/${board.id}`}
+                  state={{ board }}
+                  className={classes.board_cover_link}
+                  aria-label={`Открыть доску ${board.title}`}
+                >
+                  {imgSrc ? <img src={imgSrc} alt={board.title} /> : <Default />}
+                </Link>
+
                 <div className={classes.board_info_con}>
-                  <h3>{board.title}</h3>
+                  <Link to={`/spaces/${board.id}`} state={{ board }} className={classes.board_title_link}>
+                    <h3>{board.title}</h3>
+                  </Link>
                   <p>{board.description || ''}</p>
                 </div>
+
                 <Mainbtn
                   variant="mini"
                   kind="navlink"
@@ -199,7 +210,7 @@ const Lastboards: React.FC = () => {
           {isAuth ? (
             <Mainbtn variant="mini" text="Создать доску" onClick={openCreateBoardModal} />
           ) : (
-            <AuthTrigger type='login'>
+            <AuthTrigger type="login">
               <Mainbtn variant="mini" text="Создать доску" />
             </AuthTrigger>
           )}
