@@ -7,7 +7,6 @@ import Welcome from "./pages/welcome/Welcome";
 import PublicRoute from "./components/__general/publicroute/PublicRoute";
 import Profile from "./pages/profile/Profile";
 import ProfileRedirect from "./components/__general/profileredirect/ProfileRedirect";
-import Todo from "./pages/todo/Todo";
 import Spaces from "./pages/spaces/Spaces";
 import Board from "./pages/board/Board";
 import Converter from "./pages/converter/Converter";
@@ -58,9 +57,6 @@ const useDocumentTitle = (defaultTitle = "PinIt") => {
         break;
       case "/converter":
         document.title = "Converter | PinIt";
-        break;
-      case "/todo":
-        document.title = "Todo | PinIt";
         break;
       default:
         document.title = defaultTitle;

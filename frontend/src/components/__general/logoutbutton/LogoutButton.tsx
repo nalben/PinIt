@@ -28,9 +28,9 @@ const LogoutButton: React.FC<LogoutButtonProps> = ({
   };
 
   useEffect(() => {
-    setOpen(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closeSignal]);
+    setIsOpen(false);
+    onOpenChange?.(false);
+  }, [closeSignal, onOpenChange]);
 
   const handleLogout = () => {
     setOpen(false);

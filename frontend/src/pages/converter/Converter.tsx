@@ -42,6 +42,19 @@ interface ConverterToast {
   message: string;
 }
 
+const formatWordByCount = (count: number, forms: [string, string, string]) => {
+  const absCount = Math.abs(count) % 100;
+  const lastDigit = absCount % 10;
+
+  if (absCount > 10 && absCount < 20) return forms[2];
+  if (lastDigit > 1 && lastDigit < 5) return forms[1];
+  if (lastDigit === 1) return forms[0];
+  return forms[2];
+};
+
+const formatFilesCountLabel = (count: number) =>
+  `${count} ${formatWordByCount(count, ['файл', 'файла', 'файлов'])}`;
+
 const formatBytes = (bytes: number) => {
   if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -88,65 +101,7 @@ const readDownloadedIds = (storageKey: string | null) => {
   }
 };
 
-const ConverterPreviewMedia = ({ item }: { item: ConverterItem }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [shouldLoad, setShouldLoad] = useState(false);
-  const [hasPreviewError, setHasPreviewError] = useState(false);
-  const isPreviewable = isPreviewableKind(item.kind);
-  const previewUrl = getPreviewUrl(item.id);
-
-  useEffect(() => {
-    if (!isPreviewable || shouldLoad) return;
-
-    const element = containerRef.current;
-    if (!element) return;
-
-    if (typeof IntersectionObserver === 'undefined') {
-      setShouldLoad(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        setShouldLoad(true);
-        observer.disconnect();
-      },
-      { rootMargin: '180px 0px' }
-    );
-
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [isPreviewable, shouldLoad]);
-
-  return (
-    <div ref={containerRef} className={classes.filePreview}>
-      {shouldLoad && !hasPreviewError ? (
-        <img
-          src={previewUrl}
-          alt={item.kind === 'video' ? `Миниатюра видео ${item.original_name}` : item.original_name}
-          className={classes.filePreviewMedia}
-          loading="lazy"
-          onError={() => setHasPreviewError(true)}
-        />
-      ) : (
-        <div className={classes.filePreviewPlaceholder}>
-          <span className={classes.filePreviewIcon}>{item.kind === 'video' ? 'VID' : 'IMG'}</span>
-          <strong>{item.kind === 'video' ? 'Превью видео' : 'Превью изображения'}</strong>
-          <span>
-            {hasPreviewError
-              ? 'Не удалось загрузить'
-              : shouldLoad
-                ? 'Загружаем...'
-                : 'Подготавливаем...'}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ConverterPreviewThumbnail = ({ item }: { item: ConverterItem }) => {
+const ConverterPreview = ({ item }: { item: ConverterItem }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [shouldLoad, setShouldLoad] = useState(false);
   const [hasPreviewError, setHasPreviewError] = useState(false);
@@ -224,6 +179,7 @@ const Converter = () => {
     () => (typeof userId === 'number' && userId > 0 ? getDownloadedStorageKey(userId) : null),
     [userId]
   );
+
   const openPickerOrAuth = useCallback(() => {
     if (!isAuth) {
       openAuthModal();
@@ -233,16 +189,20 @@ const Converter = () => {
     inputRef.current?.click();
   }, [isAuth, openAuthModal]);
 
-  const persistDownloadedIds = useCallback((nextIds: Set<string>) => {
-    setDownloadedIds(nextIds);
+  const updateDownloadedIds = useCallback((updater: (current: Set<string>) => Set<string>) => {
+    setDownloadedIds((currentIds) => {
+      const nextIds = updater(currentIds);
 
-    if (!downloadedStorageKey) return;
+      if (!downloadedStorageKey) return nextIds;
 
-    try {
-      window.localStorage.setItem(downloadedStorageKey, JSON.stringify(Array.from(nextIds)));
-    } catch {
-      // ignore storage write errors
-    }
+      try {
+        window.localStorage.setItem(downloadedStorageKey, JSON.stringify(Array.from(nextIds)));
+      } catch {
+        // ignore storage write errors
+      }
+
+      return nextIds;
+    });
   }, [downloadedStorageKey]);
 
   const showToast = useCallback((message: string) => {
@@ -266,24 +226,11 @@ const Converter = () => {
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
-  useEffect(() => {
-    if (statusTone !== 'success' || !statusText) return;
-
-    const shouldShowToast =
-      statusText === 'Файл удалён.'
-      || statusText === 'Файл сохранён.'
-      || /^Сохранено \d+ файлов\.$/u.test(statusText);
-
-    if (!shouldShowToast) return;
-
-    showToast(statusText);
-    setStatusTone('neutral');
-    setStatusText('');
-  }, [showToast, statusText, statusTone]);
-
   const loadItems = useCallback(async () => {
     if (!isAuth) {
       setItems([]);
+      setStatusTone('neutral');
+      setStatusText('');
       setIsLoading(false);
       return;
     }
@@ -292,6 +239,8 @@ const Converter = () => {
       setIsLoading(true);
       const { data } = await axiosInstance.get<ConverterItem[]>('/api/converter/files');
       setItems(Array.isArray(data) ? data : []);
+      setStatusTone('neutral');
+      setStatusText('');
     } catch (err) {
       console.error(err);
       setStatusTone('error');
@@ -349,6 +298,8 @@ const Converter = () => {
     };
   }, [items]);
 
+  const isLibraryActionBusy = isUploading || downloadingId !== null || deletingId !== null;
+
   const handleFilesSelected = useCallback(async (fileList: FileList | File[] | null) => {
     if (!isAuth) {
       openAuthModal();
@@ -365,7 +316,7 @@ const Converter = () => {
       setIsUploading(true);
       setUploadProgress(0);
       setStatusTone('neutral');
-      setStatusText(files.length > 1 ? `Загружаем ${files.length} файлов...` : 'Загружаем файл...');
+      setStatusText(files.length > 1 ? `Загружаем ${formatFilesCountLabel(files.length)}...` : 'Загружаем файл...');
 
       const { data, status } = await axiosInstance.post<UploadResponse>(
         '/api/converter/files',
@@ -391,15 +342,16 @@ const Converter = () => {
       }
 
       if (errors.length) {
-        setStatusTone(uploadedItems.length ? 'success' : 'error');
+        setStatusTone('error');
         setStatusText(
           uploadedItems.length
-            ? `Сохранено ${uploadedItems.length}. Ещё ${errors.length} не удалось обработать.`
+            ? `Сохранено ${formatFilesCountLabel(uploadedItems.length)}. Ещё ${formatFilesCountLabel(errors.length)} не удалось обработать.`
             : 'Не удалось сохранить выбранные файлы.'
         );
       } else if (status === 201 || uploadedItems.length) {
-        setStatusTone('success');
-        setStatusText(uploadedItems.length > 1 ? `Сохранено ${uploadedItems.length} файлов.` : 'Файл сохранён.');
+        setStatusTone('neutral');
+        setStatusText('');
+        showToast(uploadedItems.length > 1 ? `Сохранено ${formatFilesCountLabel(uploadedItems.length)}.` : 'Файл сохранён.');
       }
     } catch (err) {
       console.error(err);
@@ -412,53 +364,30 @@ const Converter = () => {
         inputRef.current.value = '';
       }
     }
-  }, [isAuth, isUploading, openAuthModal]);
+  }, [isAuth, isUploading, openAuthModal, showToast]);
 
   const handleDownload = useCallback(async (item: ConverterItem) => {
+    if (isLibraryActionBusy) return;
+
     try {
       setDownloadingId(item.id);
       setDownloadProgress(null);
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        const request = new XMLHttpRequest();
-        request.open('GET', `${API_URL}/api/converter/files/${encodeURIComponent(item.id)}/download`, true);
-        request.responseType = 'blob';
-        request.withCredentials = true;
+      const { data: blob } = await axiosInstance.get<Blob>(
+        `/api/converter/files/${encodeURIComponent(item.id)}/download`,
+        {
+          responseType: 'blob',
+          onDownloadProgress: (event: ProgressEvent) => {
+            const total = typeof event.total === 'number' ? event.total : 0;
+            if (!total) {
+              setDownloadProgress(null);
+              return;
+            }
 
-        const token = window.localStorage.getItem('token');
-        if (token) {
-          request.setRequestHeader('Authorization', `Bearer ${token}`);
+            const nextProgress = Math.round((event.loaded / total) * 100);
+            setDownloadProgress(Math.max(0, Math.min(100, nextProgress)));
+          },
         }
-
-        request.onprogress = (event) => {
-          const total = typeof event.total === 'number' ? event.total : 0;
-          if (!total) {
-            setDownloadProgress(null);
-            return;
-          }
-
-          const nextProgress = Math.round((event.loaded / total) * 100);
-          setDownloadProgress(Math.max(0, Math.min(100, nextProgress)));
-        };
-
-        request.onload = () => {
-          if (request.status >= 200 && request.status < 300) {
-            resolve(request.response);
-            return;
-          }
-
-          reject(new Error(`Download failed with status ${request.status}`));
-        };
-
-        request.onerror = () => {
-          reject(new Error('Download failed'));
-        };
-
-        request.onabort = () => {
-          reject(new Error('Download aborted'));
-        };
-
-        request.send();
-      });
+      );
 
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -468,9 +397,11 @@ const Converter = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
-      const nextDownloadedIds = new Set(Array.from(downloadedIds));
-      nextDownloadedIds.add(item.id);
-      persistDownloadedIds(nextDownloadedIds);
+      updateDownloadedIds((currentIds) => {
+        const nextIds = new Set(currentIds);
+        nextIds.add(item.id);
+        return nextIds;
+      });
     } catch (err) {
       console.error(err);
       setStatusTone('error');
@@ -479,9 +410,11 @@ const Converter = () => {
       setDownloadingId(null);
       setDownloadProgress(null);
     }
-  }, [downloadedIds, persistDownloadedIds]);
+  }, [isLibraryActionBusy, updateDownloadedIds]);
 
   const handleDelete = useCallback(async (item: ConverterItem) => {
+    if (isLibraryActionBusy) return;
+
     const confirmed = window.confirm(`Удалить "${item.original_name}" из хранилища?`);
     if (!confirmed) return;
 
@@ -493,13 +426,15 @@ const Converter = () => {
         },
       });
       setItems((prev) => prev.filter((current) => current.id !== item.id));
-      if (downloadedIds.has(item.id)) {
-        const nextDownloadedIds = new Set(Array.from(downloadedIds));
-        nextDownloadedIds.delete(item.id);
-        persistDownloadedIds(nextDownloadedIds);
-      }
-      setStatusTone('success');
-      setStatusText('Файл удалён.');
+      updateDownloadedIds((currentIds) => {
+        if (!currentIds.has(item.id)) return currentIds;
+        const nextIds = new Set(currentIds);
+        nextIds.delete(item.id);
+        return nextIds;
+      });
+      setStatusTone('neutral');
+      setStatusText('');
+      showToast('Файл удалён.');
     } catch (err) {
       console.error(err);
       setStatusTone('error');
@@ -507,7 +442,7 @@ const Converter = () => {
     } finally {
       setDeletingId(null);
     }
-  }, [downloadedIds, persistDownloadedIds]);
+  }, [isLibraryActionBusy, showToast, updateDownloadedIds]);
 
   return (
     <div className={classes.page}>
@@ -579,7 +514,7 @@ const Converter = () => {
           <span>Видео не в MP4 будут сохранены в MP4</span>
         </div>
 
-        {(isUploading || (statusText && statusTone !== 'success')) && (
+        {(isUploading || statusText) && (
           <div
             className={`${classes.statusBox} ${
               statusTone === 'success'
@@ -656,7 +591,7 @@ const Converter = () => {
                   {downloadedIds.has(item.id) && <span className={classes.fileBadgeSuccess}>Скачано</span>}
                 </div>
 
-                {isPreviewableKind(item.kind) && <ConverterPreviewThumbnail item={item} />}
+                {isPreviewableKind(item.kind) && <ConverterPreview item={item} />}
 
                 <div className={classes.fileMain}>
                   <strong title={item.original_name}>{item.original_name}</strong>
@@ -673,7 +608,7 @@ const Converter = () => {
                     type="button"
                     className={classes.primaryButton}
                     onClick={() => void handleDownload(item)}
-                    disabled={downloadingId === item.id}
+                    disabled={isLibraryActionBusy}
                   >
                     {downloadingId === item.id ? 'Скачиваем...' : 'Скачать'}
                   </button>
@@ -681,7 +616,7 @@ const Converter = () => {
                     type="button"
                     className={classes.dangerButton}
                     onClick={() => void handleDelete(item)}
-                    disabled={deletingId === item.id}
+                    disabled={isLibraryActionBusy}
                   >
                     {deletingId === item.id ? 'Удаляем...' : 'Удалить'}
                   </button>

@@ -171,16 +171,8 @@ const generatePreviewImage = (inputPath, outputPath) => runFfmpeg([
   outputPath,
 ]);
 
-const ensureFileMissing = async (filePath) => {
-  try {
-    await fs.promises.unlink(filePath);
-  } catch (err) {
-    if (err?.code !== 'ENOENT') throw err;
-  }
-};
-
 const replaceFile = async (fromPath, toPath) => {
-  await ensureFileMissing(toPath);
+  await removeFileIfExists(toPath);
   await fs.promises.rename(fromPath, toPath);
 };
 

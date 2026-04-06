@@ -4,7 +4,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import Noti from '@/assets/icons/monochrome/noti.svg';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import Burger from '@/assets/icons/monochrome/burger.svg';
-import axiosInstance, { API_URL } from "@/api/axiosInstance";
+import { API_URL } from "@/api/axiosInstance";
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import DropdownWrapper from '../dropdownwrapper/DropdownWrapper';
 import LogoutButton from '@/components/__general/logoutbutton/LogoutButton';
@@ -16,23 +16,8 @@ import { useNotificationsStore } from '@/store/notificationsStore';
 import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { useUIStore } from '@/store/uiStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
-import type { AppTheme } from '@/utils/theme';
 import { applyTheme, getStoredTheme, persistTheme, THEME_OPTIONS } from '@/utils/theme';
-
-interface UserProfile {
-  id: number;
-  username: string;
-  avatar?: string | null;
-  email?: string;
-}
-interface FriendRequestNoti {
-  id: number;
-  user_id: number;
-  username: string;
-  nickname?: string;
-  avatar?: string | null;
-  created_at: string;
-}
+import type { AppTheme } from '@/utils/theme';
 
 type HeaderVariant = 'default' | 'board';
 
@@ -40,14 +25,12 @@ const Header = ({ variant = 'default' }: { variant?: HeaderVariant }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme());
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
-  const [logoutDropdownOpen, setLogoutDropdownOpen] = useState(false);
-  const { user, login } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const isAuth = useAuthStore(state => state.isAuth);
   const isInitialized = useAuthStore(state => state.isInitialized);
   const menuRef = useRef<HTMLElement | null>(null);
   const burgerRef = useRef<HTMLButtonElement | null>(null);
-  const [notiOpen, setNotiOpen] = useState(false);
   const [isAvatarLoaded, setIsAvatarLoaded] = useState(false);
   const { requests, fetchRequests, acceptRequest, rejectRequest, highlightRequestId, setHighlightRequestId } = useNotificationsStore();
   const requestsCount = requests.length;
@@ -144,30 +127,6 @@ useEffect(() => {
     };
   }, [menuOpen]);
 
-  
-  
-useEffect(() => {
-  const updateProfile = async () => {
-    try {
-      const { data } = await axiosInstance.get<UserProfile>('/api/profile/me');
-      login({
-        id: data.id,
-        username: data.username,
-        avatar: data.avatar,
-        email: data.email
-      });
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  window.addEventListener('profile-updated', updateProfile);
-
-  return () => {
-    window.removeEventListener('profile-updated', updateProfile);
-  };
-}, [login]);
-
   useEffect(() => {
     setIsAvatarLoaded(false);
   }, [user?.avatar]);
@@ -191,7 +150,6 @@ const isProfileActive = () => {
   };
 
   const handleLogoutConfirm = () => {
-    setLogoutDropdownOpen(false);
     closeHeaderDropdown();
     logout();
   };
@@ -201,7 +159,6 @@ const isProfileActive = () => {
   useEffect(() => {
     if (isProfileOpen) return;
     setThemeDropdownOpen(false);
-    setLogoutDropdownOpen(false);
   }, [isProfileOpen]);
 
   return (
@@ -230,9 +187,6 @@ const isProfileActive = () => {
         </NavLink>
         <NavLink to="/converter" className={linkClass} onClick={handleMenuItemClick}>
           CONVERTER
-        </NavLink>
-        <NavLink to="/todo" className={linkClass} onClick={handleMenuItemClick}>
-          TODO
         </NavLink>
         {!isInitialized ? (
           <div className={classes.item}>PROFILE</div>
@@ -513,67 +467,10 @@ const isProfileActive = () => {
                       className={classes.profile_logout_item_content}
                       closeSignal={themeDropdownOpen}
                       onOpenChange={(open) => {
-                        setLogoutDropdownOpen(open);
                         if (open) setThemeDropdownOpen(false);
                       }}
                       onLogout={handleLogoutConfirm}
                     />
-                    {false && (
-                    <div
-                      data-dropdown-class={`${classes.profile_logout_item} ${logoutDropdownOpen ? classes.profile_logout_item_open : ''}`.trim()}
-                      className={classes.profile_logout_item_content}
-                    >
-                      <div className={classes.profile_logout_panel} onClick={(event) => event.stopPropagation()}>
-                        <DropdownWrapper
-                          fixed
-                          middleleftTop
-                          isOpen={logoutDropdownOpen}
-                          onClose={() => setLogoutDropdownOpen(false)}
-                          menuClassName={classes.profile_logout_menu}
-                          wrapperClassName={classes.profile_logout_dropdown_wrapper}
-                          buttonClassName={classes.profile_logout_dropdown_button}
-                        >
-                          <button
-                            type="button"
-                            className={classes.profile_logout_trigger}
-                            onClick={() => {
-                              setThemeDropdownOpen(false);
-                              setLogoutDropdownOpen((prev) => !prev);
-                            }}
-                            aria-expanded={logoutDropdownOpen}
-                            aria-label="Выход из аккаунта"
-                          >
-                            <span className={classes.profile_logout_copy}>Выйти</span>
-                            <span className={classes.profile_logout_arrow}>
-                              <Arrow />
-                            </span>
-                          </button>
-                          <div>
-                            <button
-                              type="button"
-                              data-dropdown-class={`${classes.profile_logout_option_item} ${classes.profile_logout_option_item_danger}`.trim()}
-                              className={`${classes.profile_logout_option} ${classes.profile_logout_option_danger}`.trim()}
-                              onClick={handleLogoutConfirm}
-                              aria-label="Подтвердить выход"
-                            >
-                              <span>Да, выйти</span>
-                              <span className={classes.profile_logout_arrow}>
-                                <Arrow />
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              data-dropdown-class={classes.profile_logout_option_item}
-                              className={classes.profile_logout_option}
-                              onClick={() => setLogoutDropdownOpen(false)}
-                              aria-label="Отмена выхода"
-                            >
-                              Отмена
-                            </button>
-                          </div>
-                        </DropdownWrapper>
-                      </div>
-                    </div>)}
                   </div>
                 </DropdownWrapper>
             </div>

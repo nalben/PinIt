@@ -35,7 +35,7 @@ const Profile = () => {
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
 
-  const { user, isInitialized, hasToken } = useAuthStore();
+  const { user, isInitialized, hasToken, login } = useAuthStore();
   const { openHeaderDropdown, openFriendsModal, showTopAlarm } = useUIStore();
   const { setHighlightRequestId } = useNotificationsStore();
 
@@ -67,11 +67,21 @@ const Profile = () => {
 
   useEffect(() => {
     if (openModal !== 'edit') {
-      setAvatarPreview(null);
+      setAvatarPreview((currentPreview) => {
+        if (currentPreview) URL.revokeObjectURL(currentPreview);
+        return null;
+      });
       setAvatarFile(null);
       setCropSourceFile(null);
     }
   }, [openModal]);
+
+  useEffect(() => {
+    return () => {
+      if (!avatarPreview) return;
+      URL.revokeObjectURL(avatarPreview);
+    };
+  }, [avatarPreview]);
 
   useEffect(() => {
     if (!profile) return;
@@ -98,10 +108,18 @@ const Profile = () => {
       });
 
       setProfile((prev) => (prev ? { ...prev, ...data.user } : data.user));
-      window.dispatchEvent(new Event('profile-updated'));
+      login({
+        id: data.user.id,
+        username: data.user.username,
+        avatar: data.user.avatar ?? null,
+        email: user?.email,
+      });
       setOpenModal(null);
       setAvatarFile(null);
-      setAvatarPreview(null);
+      setAvatarPreview((currentPreview) => {
+        if (currentPreview) URL.revokeObjectURL(currentPreview);
+        return null;
+      });
     } catch (err) {
       console.error(err);
     }
