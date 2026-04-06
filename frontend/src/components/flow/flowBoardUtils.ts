@@ -102,11 +102,7 @@ type VisibleRect = {
   cy: number;
 };
 
-const isRectFullyVisible = (rect: VisibleRect, viewport: { left: number; right: number; top: number; bottom: number }) =>
-  rect.left >= viewport.left &&
-  rect.right <= viewport.right &&
-  rect.top >= viewport.top &&
-  rect.bottom <= viewport.bottom;
+const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 export const getInitialViewportForDenseArea = (
   nodes: RFNode[],
@@ -139,49 +135,71 @@ export const getInitialViewportForDenseArea = (
 
   if (visibleWidth <= 0 || visibleHeight <= 0) return null;
 
-  const evaluateCenter = (centerX: number, centerY: number) => {
-    const viewport = {
-      left: centerX - visibleWidth / 2,
-      right: centerX + visibleWidth / 2,
-      top: centerY - visibleHeight / 2,
-      bottom: centerY + visibleHeight / 2,
-    };
+  const halfVisibleWidth = visibleWidth / 2;
+  const halfVisibleHeight = visibleHeight / 2;
+  const candidateLefts = Array.from(new Set(rects.flatMap((rect) => [rect.cx - visibleWidth, rect.cx])));
+  const candidateTops = Array.from(new Set(rects.flatMap((rect) => [rect.cy - visibleHeight, rect.cy])));
 
-    const visibleRects = rects.filter((rect) => isRectFullyVisible(rect, viewport));
-    if (visibleRects.length === 0) return null;
+  let best: { count: number; area: number; spread: number; centerX: number; centerY: number } | null = null;
 
-    const bounds = visibleRects.reduce(
-      (acc, rect) => ({
-        left: Math.min(acc.left, rect.left),
-        right: Math.max(acc.right, rect.right),
-        top: Math.min(acc.top, rect.top),
-        bottom: Math.max(acc.bottom, rect.bottom),
-      }),
-      { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }
-    );
+  for (const left of candidateLefts) {
+    const right = left + visibleWidth;
+    const visibleByX = rects.filter((rect) => rect.cx >= left && rect.cx <= right);
+    if (visibleByX.length === 0) continue;
 
-    return {
-      count: visibleRects.length,
-      area: Math.max(1, bounds.right - bounds.left) * Math.max(1, bounds.bottom - bounds.top),
-      centerX: (bounds.left + bounds.right) / 2,
-      centerY: (bounds.top + bounds.bottom) / 2,
-    };
-  };
+    for (const top of candidateTops) {
+      const bottom = top + visibleHeight;
+      const included = visibleByX.filter((rect) => rect.cy >= top && rect.cy <= bottom);
+      if (included.length === 0) continue;
 
-  let best: ReturnType<typeof evaluateCenter> = null;
+      const bounds = included.reduce(
+        (acc, rect) => ({
+          left: Math.min(acc.left, rect.left),
+          right: Math.max(acc.right, rect.right),
+          top: Math.min(acc.top, rect.top),
+          bottom: Math.max(acc.bottom, rect.bottom),
+        }),
+        { left: Infinity, right: -Infinity, top: Infinity, bottom: -Infinity }
+      );
 
-  for (const rect of rects) {
-    const initial = evaluateCenter(rect.cx, rect.cy);
-    if (!initial) continue;
+      const centerLimits = included.reduce(
+        (acc, rect) => ({
+          minX: Math.max(acc.minX, rect.cx - halfVisibleWidth),
+          maxX: Math.min(acc.maxX, rect.cx + halfVisibleWidth),
+          minY: Math.max(acc.minY, rect.cy - halfVisibleHeight),
+          maxY: Math.min(acc.maxY, rect.cy + halfVisibleHeight),
+        }),
+        { minX: -Infinity, maxX: Infinity, minY: -Infinity, maxY: Infinity }
+      );
 
-    const refined = evaluateCenter(initial.centerX, initial.centerY) ?? initial;
-    const isBetter =
-      !best ||
-      refined.count > best.count ||
-      (refined.count === best.count && refined.area < best.area);
+      const preferredCenterX = (bounds.left + bounds.right) / 2;
+      const preferredCenterY = (bounds.top + bounds.bottom) / 2;
+      const centerX =
+        centerLimits.minX <= centerLimits.maxX
+          ? clampNumber(preferredCenterX, centerLimits.minX, centerLimits.maxX)
+          : left + halfVisibleWidth;
+      const centerY =
+        centerLimits.minY <= centerLimits.maxY
+          ? clampNumber(preferredCenterY, centerLimits.minY, centerLimits.maxY)
+          : top + halfVisibleHeight;
+      const area = Math.max(1, bounds.right - bounds.left) * Math.max(1, bounds.bottom - bounds.top);
+      const spread = included.reduce((sum, rect) => sum + (rect.cx - centerX) ** 2 + (rect.cy - centerY) ** 2, 0);
 
-    if (isBetter) {
-      best = refined;
+      const isBetter =
+        !best ||
+        included.length > best.count ||
+        (included.length === best.count && area < best.area) ||
+        (included.length === best.count && area === best.area && spread < best.spread);
+
+      if (isBetter) {
+        best = {
+          count: included.length,
+          area,
+          spread,
+          centerX,
+          centerY,
+        };
+      }
     }
   }
 

@@ -1,5 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLayoutEffect } from 'react';
 import classes from './Board.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
@@ -50,9 +51,7 @@ const Board = () => {
     const [linkStyleDropdownOpen, setLinkStyleDropdownOpen] = useState(false);
     const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
     const [forcedAuthView, setForcedAuthView] = useState<InviteAuthView>('login');
-    const [hasMounted, setHasMounted] = useState(false);
-    const effectiveBoardMenuOpen = hasMounted ? isBoardMenuOpen : false;
-    const hasAutoOpenedBoardMenuRef = useRef(false);
+    const effectiveBoardMenuOpen = isBoardMenuOpen;
 
     const [debugParticipantsData, setDebugParticipantsData] = useState<BoardParticipantsResponse | null>(null);
     const [removeConfirmParticipantId, setRemoveConfirmParticipantId] = useState<number | null>(null);
@@ -348,14 +347,6 @@ const Board = () => {
     }, [boardId]);
 
     useEffect(() => {
-        setHasMounted(true);
-    }, []);
-
-    useEffect(() => {
-        hasAutoOpenedBoardMenuRef.current = false;
-    }, [boardId]);
-
-    useEffect(() => {
         if (boardMenuView !== 'link' || !selectedLink) {
             setLinkDeleteConfirmOpen(false);
             setLinkDeleteLoading(false);
@@ -418,16 +409,11 @@ const Board = () => {
         onEscape: closeBoardMenu,
     });
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (typeof window === 'undefined') return;
         const shouldOpen = window.innerWidth >= BOARD_MENU_AUTO_OPEN_MIN_WIDTH;
         if (!shouldOpen) return;
-        if (hasAutoOpenedBoardMenuRef.current) return;
-        const id = window.requestAnimationFrame(() => {
-            hasAutoOpenedBoardMenuRef.current = true;
-            openBoardMenu();
-        });
-        return () => window.cancelAnimationFrame(id);
+        openBoardMenu();
     }, [boardId, openBoardMenu]);
 
     const boardInfo = useMemo(() => {

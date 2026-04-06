@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useParams } from 'react-router-dom';
+import { useLayoutEffect } from 'react';
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -108,32 +109,182 @@ const ConnectionHandles = ({ isConnectable, shape, isLocked = false }: { isConne
   );
 };
 
+type NodeFloatMotion = {
+  style: React.CSSProperties;
+};
+
+type NodeFloatVector = {
+  x: number;
+  y: number;
+  rotate: number;
+};
+
+type NodeFloatPathPoint = {
+  t: number;
+  x: number;
+  y: number;
+  rotate: number;
+};
+
+const NODE_FLOAT_PATHS: readonly (readonly NodeFloatPathPoint[])[] = [
+  [
+    { t: 0, x: 0, y: 0, rotate: 0 },
+    { t: 0.19, x: 0.55, y: -0.45, rotate: -0.6 },
+    { t: 0.38, x: -0.35, y: -0.9, rotate: 0.8 },
+    { t: 0.61, x: 0.9, y: 0.2, rotate: -0.45 },
+    { t: 0.83, x: -0.6, y: 0.8, rotate: 0.55 },
+    { t: 1, x: 0, y: 0, rotate: 0 },
+  ],
+  [
+    { t: 0, x: 0, y: 0, rotate: 0 },
+    { t: 0.16, x: -0.75, y: 0.15, rotate: 0.6 },
+    { t: 0.33, x: -0.25, y: -0.95, rotate: -0.55 },
+    { t: 0.57, x: 0.8, y: -0.2, rotate: 0.35 },
+    { t: 0.78, x: 0.3, y: 0.85, rotate: -0.75 },
+    { t: 1, x: 0, y: 0, rotate: 0 },
+  ],
+  [
+    { t: 0, x: 0, y: 0, rotate: 0 },
+    { t: 0.14, x: 0.2, y: -0.85, rotate: -0.65 },
+    { t: 0.29, x: -0.9, y: -0.25, rotate: 0.55 },
+    { t: 0.54, x: 0.65, y: 0.35, rotate: -0.35 },
+    { t: 0.72, x: -0.2, y: 0.95, rotate: 0.75 },
+    { t: 0.89, x: 0.85, y: -0.15, rotate: -0.45 },
+    { t: 1, x: 0, y: 0, rotate: 0 },
+  ],
+  [
+    { t: 0, x: 0, y: 0, rotate: 0 },
+    { t: 0.18, x: -0.45, y: -0.7, rotate: 0.65 },
+    { t: 0.36, x: 0.95, y: -0.1, rotate: -0.35 },
+    { t: 0.58, x: 0.15, y: 0.9, rotate: 0.8 },
+    { t: 0.76, x: -0.85, y: 0.35, rotate: -0.6 },
+    { t: 1, x: 0, y: 0, rotate: 0 },
+  ],
+] as const;
+
+const FLOAT_CLOCK = (() => {
+  let now = 0;
+  let frameId: number | null = null;
+  const listeners = new Set<() => void>();
+
+  const tick = () => {
+    now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    listeners.forEach((listener) => listener());
+    frameId = listeners.size ? window.requestAnimationFrame(tick) : null;
+  };
+
+  return {
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      if (listeners.size === 1 && typeof window !== 'undefined') {
+        now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+        frameId = window.requestAnimationFrame(tick);
+      }
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size && frameId !== null && typeof window !== 'undefined') {
+          window.cancelAnimationFrame(frameId);
+          frameId = null;
+        }
+      };
+    },
+    getSnapshot: () => now,
+    getServerSnapshot: () => 0,
+  };
+})();
+
+const useNodeFloatNow = () =>
+  useSyncExternalStore(FLOAT_CLOCK.subscribe, FLOAT_CLOCK.getSnapshot, FLOAT_CLOCK.getServerSnapshot);
+
+const hashNodeFloatSeed = (nodeId: string) => {
+  let hash = 2166136261;
+  for (let i = 0; i < nodeId.length; i += 1) {
+    hash ^= nodeId.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+};
+
+const sampleNodeFloatPath = (path: readonly NodeFloatPathPoint[], progress: number): NodeFloatPathPoint => {
+  if (progress <= 0) return path[0];
+  if (progress >= 1) return path[path.length - 1];
+
+  for (let i = 1; i < path.length; i += 1) {
+    const prev = path[i - 1];
+    const next = path[i];
+    if (progress > next.t) continue;
+
+    const range = next.t - prev.t || 1;
+    const localT = (progress - prev.t) / range;
+    const easedT = localT * localT * (3 - 2 * localT);
+    return {
+      t: progress,
+      x: prev.x + (next.x - prev.x) * easedT,
+      y: prev.y + (next.y - prev.y) * easedT,
+      rotate: prev.rotate + (next.rotate - prev.rotate) * easedT,
+    };
+  }
+
+  return path[path.length - 1];
+};
+
+const getNodeFloatVector = (nodeId: string, now: number): NodeFloatVector => {
+  const seed = hashNodeFloatSeed(nodeId);
+  const durationSeconds = 14 + (seed % 8);
+  const durationMs = durationSeconds * 1000;
+  const phaseMs = (seed >>> 4) % durationMs;
+  const amplitudeX = 2 + ((seed >>> 8) % 4);
+  const amplitudeY = 2 + ((seed >>> 12) % 4);
+  const rotationDeg = (18 + ((seed >>> 16) % 16)) / 100;
+  const path = NODE_FLOAT_PATHS[seed % NODE_FLOAT_PATHS.length] ?? NODE_FLOAT_PATHS[0];
+  const progress = durationMs > 0 ? ((now + phaseMs) % durationMs) / durationMs : 0;
+  const sample = sampleNodeFloatPath(path, progress);
+  return {
+    x: sample.x * amplitudeX,
+    y: sample.y * amplitudeY,
+    rotate: sample.rotate * rotationDeg,
+  };
+};
+
+const getNodeFloatMotion = (nodeId: string, now: number): NodeFloatMotion => {
+  const vector = getNodeFloatVector(nodeId, now);
+  return {
+    style: {
+      transform: `translate3d(${vector.x.toFixed(2)}px, ${vector.y.toFixed(2)}px, 0) rotate(${vector.rotate.toFixed(3)}deg)`,
+    },
+  };
+};
+
 const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   const isDraft = String(id).startsWith('draft-');
   const hasImage = Boolean(data.imageSrc && data.imageLoaded);
+  const floatNow = useNodeFloatNow();
+  const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
   return (
-    <div
-      className={classes.node_rectangle}
-    >
-      {hasImage ? (
-        <div
-          className={classes.node_image_layer}
-          style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-          aria-hidden="true"
-        />
-      ) : null}
-      {isDraft ? null : <ConnectionHandles shape="rectangle" isConnectable={!data.isLocked} isLocked={Boolean(data.isLocked)} />}
-      {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_rect}`.trim()} aria-hidden="true" /> : null}
-      <svg className={classes.flow_hit_svg} viewBox="0 0 240 80" aria-hidden="true">
-        <rect className={classes.flow_drag_handle} x="0" y="0" width="240" height="80" rx="10" ry="10" />
-      </svg>
-      {data.isLocked ? (
-        <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rectangle}`}>
-          <LockClose />
+    <div className={classes.node_rectangle_shell}>
+      <div className={classes.flow_node_float} style={floatMotion.style}>
+        <div className={classes.node_rectangle}>
+          {hasImage ? (
+            <div
+              className={classes.node_image_layer}
+              style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+              aria-hidden="true"
+            />
+          ) : null}
+          {isDraft ? null : <ConnectionHandles shape="rectangle" isConnectable={!data.isLocked} isLocked={Boolean(data.isLocked)} />}
+          {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_rect}`.trim()} aria-hidden="true" /> : null}
+          <svg className={classes.flow_hit_svg} viewBox="0 0 240 80" aria-hidden="true">
+            <rect className={classes.flow_drag_handle} x="0" y="0" width="240" height="80" rx="10" ry="10" />
+          </svg>
+          {data.isLocked ? (
+            <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rectangle}`}>
+              <LockClose />
+            </div>
+          ) : null}
+          <div className={`${classes.node_rectangle_title} ${classes.flow_drag_handle}`.trim()}>{data.title}</div>
         </div>
-      ) : null}
-      <div className={`${classes.node_rectangle_title} ${classes.flow_drag_handle}`.trim()}>{data.title}</div>
+      </div>
     </div>
   );
 };
@@ -142,30 +293,36 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   const isDraft = String(id).startsWith('draft-');
   const hasImage = Boolean(data.imageSrc && data.imageLoaded);
+  const floatNow = useNodeFloatNow();
+  const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
   return (
-    <div className={classes.node_rhombus}>
-      {isDraft ? null : <ConnectionHandles shape="rhombus" isConnectable={!data.isLocked} />}
-      <div
-        className={classes.rhombus_content}
-      >
-        {hasImage ? (
+    <div className={classes.node_rhombus_shell}>
+      <div className={classes.flow_node_float} style={floatMotion.style}>
+        <div className={classes.node_rhombus}>
+          {isDraft ? null : <ConnectionHandles shape="rhombus" isConnectable={!data.isLocked} />}
           <div
-            className={classes.node_image_layer}
-            style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-            aria-hidden="true"
-          />
-        ) : null}
-        {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
-        <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
-          <polygon className={classes.flow_drag_handle} points="60,0 120,60 60,120 0,60" />
-        </svg>
-      </div>
-      {data.isLocked ? (
-        <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rhombus}`}>
-          <LockClose />
+            className={classes.rhombus_content}
+          >
+            {hasImage ? (
+              <div
+                className={classes.node_image_layer}
+                style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                aria-hidden="true"
+              />
+            ) : null}
+            {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
+            <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
+              <polygon className={classes.flow_drag_handle} points="60,0 120,60 60,120 0,60" />
+            </svg>
+          </div>
+          {data.isLocked ? (
+            <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rhombus}`}>
+              <LockClose />
+            </div>
+          ) : null}
+          <span>{data.title}</span>
         </div>
-      ) : null}
-      <span>{data.title}</span>
+      </div>
     </div>
   );
 };
@@ -174,30 +331,36 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
   const isDraft = String(id).startsWith('draft-');
   const hasImage = Boolean(data.imageSrc && data.imageLoaded);
+  const floatNow = useNodeFloatNow();
+  const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
   return (
-    <div className={`${classes.node_circle} ${data.imageSrc && data.imageLoaded ? classes.node_circle_has_image : ''}`.trim()}>
-      {isDraft ? null : <ConnectionHandles shape="circle" isConnectable={!data.isLocked} />}
-      <div
-        className={classes.circle_content}
-      >
-        {hasImage ? (
+    <div className={classes.node_circle_shell}>
+      <div className={classes.flow_node_float} style={floatMotion.style}>
+        <div className={`${classes.node_circle} ${data.imageSrc && data.imageLoaded ? classes.node_circle_has_image : ''}`.trim()}>
+          {isDraft ? null : <ConnectionHandles shape="circle" isConnectable={!data.isLocked} />}
           <div
-            className={classes.node_image_layer}
-            style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-            aria-hidden="true"
-          />
-        ) : null}
-        {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
-        <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
-          <circle className={classes.flow_drag_handle} cx="60" cy="60" r="60" />
-        </svg>
-      </div>
-      {data.isLocked ? (
-        <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_circle}`}>
-          <LockClose />
+            className={classes.circle_content}
+          >
+            {hasImage ? (
+              <div
+                className={classes.node_image_layer}
+                style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+                aria-hidden="true"
+              />
+            ) : null}
+            {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
+            <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
+              <circle className={classes.flow_drag_handle} cx="60" cy="60" r="60" />
+            </svg>
+          </div>
+          {data.isLocked ? (
+            <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_circle}`}>
+              <LockClose />
+            </div>
+          ) : null}
+          <span>{data.title}</span>
         </div>
-      ) : null}
-      <span>{data.title}</span>
+      </div>
     </div>
   );
 };
@@ -207,19 +370,22 @@ const NODE_TYPES = { rectangle: RectangleNode, rhombus: RhombusNode, circle: Cir
 const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   const { id, source, target, style, markerEnd, sourceX, sourceY, targetX, targetY, data } = props;
   const rf = useReactFlow();
+  const floatNow = useNodeFloatNow();
   const isSelected = Boolean((props as unknown as { selected?: boolean })?.selected);
   const [isHovered, setIsHovered] = useState(false);
   const isDesktopHover = __PLATFORM__ === 'desktop';
+  const sourceFloat = useMemo(() => getNodeFloatVector(String(source), floatNow), [floatNow, source]);
+  const targetFloat = useMemo(() => getNodeFloatVector(String(target), floatNow), [floatNow, target]);
 
   const sNode = rf.getNode(source);
   const tNode = rf.getNode(target);
   const sRect = getNodeRect(sNode);
   const tRect = getNodeRect(tNode);
 
-  let sx = sourceX;
-  let sy = sourceY;
-  let tx = targetX;
-  let ty = targetY;
+  let sx = sourceX + sourceFloat.x;
+  let sy = sourceY + sourceFloat.y;
+  let tx = targetX + targetFloat.x;
+  let ty = targetY + targetFloat.y;
 
   const MIN_EDGE_RENDER_LEN_PX = 12;
   const OVERLAP_HIDE_AABB_PAD_PX = 8;
@@ -227,8 +393,12 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
   if (sRect && tRect) {
     const sType = (sNode?.type as FlowNodeType | undefined) ?? 'rectangle';
     const tType = (tNode?.type as FlowNodeType | undefined) ?? 'rectangle';
-    const dx = tRect.cx - sRect.cx;
-    const dy = tRect.cy - sRect.cy;
+    const sourceCx = sRect.cx + sourceFloat.x;
+    const sourceCy = sRect.cy + sourceFloat.y;
+    const targetCx = tRect.cx + targetFloat.x;
+    const targetCy = tRect.cy + targetFloat.y;
+    const dx = targetCx - sourceCx;
+    const dy = targetCy - sourceCy;
 
     const overlapsOrTouchesAabb =
       Math.abs(dx) <= sRect.hw + tRect.hw + OVERLAP_HIDE_AABB_PAD_PX &&
@@ -236,8 +406,8 @@ const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
 
     if (overlapsOrTouchesAabb) return null;
 
-    const p1 = getBoundaryPoint(sType, sRect.cx, sRect.cy, dx, dy, sRect.hw, sRect.hh);
-    const p2 = getBoundaryPoint(tType, tRect.cx, tRect.cy, -dx, -dy, tRect.hw, tRect.hh);
+    const p1 = getBoundaryPoint(sType, sourceCx, sourceCy, dx, dy, sRect.hw, sRect.hh);
+    const p2 = getBoundaryPoint(tType, targetCx, targetCy, -dx, -dy, tRect.hw, tRect.hh);
     sx = p1.x;
     sy = p1.y;
     tx = p2.x;
@@ -654,19 +824,22 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   const HoverConnectionLine: React.FC<ConnectionLineComponentProps> = (props) => {
     const { fromX, fromY, toX, toY } = props;
     const rf = useReactFlow();
+    const floatNow = useNodeFloatNow();
     const hoverId = connectingHoverTargetNodeId;
-
-    let finalToX = toX;
-    let finalToY = toY;
-    let finalFromX = fromX;
-    let finalFromY = fromY;
-
-    const MIN_EDGE_RENDER_LEN_PX = 12;
-    const OVERLAP_AABB_TOLERANCE_PX = 4;
 
     const sourceId = connectingFromNodeIdRef.current;
     const sNode = sourceId ? rf.getNode(sourceId) : null;
     const sRect = getNodeRect(sNode);
+    const sourceFloat = sourceId ? getNodeFloatVector(sourceId, floatNow) : { x: 0, y: 0, rotate: 0 };
+    const hoverFloat = hoverId ? getNodeFloatVector(hoverId, floatNow) : { x: 0, y: 0, rotate: 0 };
+
+    let finalToX = toX;
+    let finalToY = toY;
+    let finalFromX = fromX + sourceFloat.x;
+    let finalFromY = fromY + sourceFloat.y;
+
+    const MIN_EDGE_RENDER_LEN_PX = 12;
+    const OVERLAP_AABB_TOLERANCE_PX = 4;
 
     if (hoverId && sRect) {
       const tNode = rf.getNode(hoverId);
@@ -674,16 +847,20 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       if (tRect) {
         const sType = (sNode?.type as FlowNodeType | undefined) ?? 'rectangle';
         const tType = (tNode?.type as FlowNodeType | undefined) ?? 'rectangle';
-        const dx = tRect.cx - sRect.cx;
-        const dy = tRect.cy - sRect.cy;
+        const sourceCx = sRect.cx + sourceFloat.x;
+        const sourceCy = sRect.cy + sourceFloat.y;
+        const targetCx = tRect.cx + hoverFloat.x;
+        const targetCy = tRect.cy + hoverFloat.y;
+        const dx = targetCx - sourceCx;
+        const dy = targetCy - sourceCy;
 
         const overlapsAabb =
           Math.abs(dx) < sRect.hw + tRect.hw - OVERLAP_AABB_TOLERANCE_PX &&
           Math.abs(dy) < sRect.hh + tRect.hh - OVERLAP_AABB_TOLERANCE_PX;
         if (overlapsAabb) return null;
 
-        const p1 = getBoundaryPoint(sType, sRect.cx, sRect.cy, dx, dy, sRect.hw, sRect.hh);
-        const p2 = getBoundaryPoint(tType, tRect.cx, tRect.cy, -dx, -dy, tRect.hw, tRect.hh);
+        const p1 = getBoundaryPoint(sType, sourceCx, sourceCy, dx, dy, sRect.hw, sRect.hh);
+        const p2 = getBoundaryPoint(tType, targetCx, targetCy, -dx, -dy, tRect.hw, tRect.hh);
         finalFromX = p1.x;
         finalFromY = p1.y;
         finalToX = p2.x;
@@ -693,8 +870,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       const n = rf.getNode(hoverId);
       const tRect = getNodeRect(n);
       if (tRect) {
-        finalToX = tRect.cx;
-        finalToY = tRect.cy;
+        finalToX = tRect.cx + hoverFloat.x;
+        finalToY = tRect.cy + hoverFloat.y;
       }
     }
 
@@ -919,24 +1096,18 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     initialViewportAppliedRef.current = false;
   }, [numericBoardId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (initialViewportAppliedRef.current) return;
     if (!reactFlow) return;
     if (nodes.length === 0) return;
 
-    const nextViewport = getInitialViewportForDenseArea(nodes, {
-      width: containerRef.current?.clientWidth ?? 0,
-      height: containerRef.current?.clientHeight ?? 0,
-    });
-
+    const width = containerRef.current?.clientWidth ?? 0;
+    const height = containerRef.current?.clientHeight ?? 0;
+    const nextViewport = getInitialViewportForDenseArea(nodes, { width, height });
     if (!nextViewport) return;
 
     initialViewportAppliedRef.current = true;
-    const frameId = window.requestAnimationFrame(() => {
-      reactFlow.setViewport(nextViewport, { duration: 0 });
-    });
-
-    return () => window.cancelAnimationFrame(frameId);
+    reactFlow.setViewport(nextViewport, { duration: 0 });
   }, [nodes, reactFlow]);
 
   useEffect(() => {

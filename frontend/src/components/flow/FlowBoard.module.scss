@@ -254,6 +254,93 @@ $board-menu-wide-min: 1700px;
     100% { transform: translateX(150%); }
 }
 
+@keyframes flow-node-float-a {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+    19% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.55), calc(var(--flow-node-float-y, 3px) * -0.45), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.6)); }
+    38% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * -0.35), calc(var(--flow-node-float-y, 3px) * -0.9), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * 0.8)); }
+    61% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.9), calc(var(--flow-node-float-y, 3px) * 0.2), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.45)); }
+    83% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * -0.6), calc(var(--flow-node-float-y, 3px) * 0.8), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * 0.55)); }
+}
+
+@keyframes flow-node-float-b {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+    16% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * -0.75), calc(var(--flow-node-float-y, 3px) * 0.15), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * 0.6)); }
+    33% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * -0.25), calc(var(--flow-node-float-y, 3px) * -0.95), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.55)); }
+    57% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.8), calc(var(--flow-node-float-y, 3px) * -0.2), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * 0.35)); }
+    78% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.3), calc(var(--flow-node-float-y, 3px) * 0.85), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.75)); }
+}
+
+@keyframes flow-node-float-c {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+    14% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.2), calc(var(--flow-node-float-y, 3px) * -0.85), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.65)); }
+    29% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * -0.9), calc(var(--flow-node-float-y, 3px) * -0.25), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * 0.55)); }
+    54% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.65), calc(var(--flow-node-float-y, 3px) * 0.35), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.35)); }
+    72% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * -0.2), calc(var(--flow-node-float-y, 3px) * 0.95), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * 0.75)); }
+    89% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.85), calc(var(--flow-node-float-y, 3px) * -0.15), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.45)); }
+}
+
+@keyframes flow-node-float-d {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+    18% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * -0.45), calc(var(--flow-node-float-y, 3px) * -0.7), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * 0.65)); }
+    36% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.95), calc(var(--flow-node-float-y, 3px) * -0.1), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.35)); }
+    58% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * 0.15), calc(var(--flow-node-float-y, 3px) * 0.9), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * 0.8)); }
+    76% { transform: translate3d(calc(var(--flow-node-float-x, 3px) * -0.85), calc(var(--flow-node-float-y, 3px) * 0.35), 0) rotate(calc(var(--flow-node-float-rotate, 0.24deg) * -0.6)); }
+}
+
+.flow_node_float{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    animation-duration: var(--flow-node-float-duration, 16s);
+    animation-delay: var(--flow-node-float-delay, 0s);
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+    will-change: transform;
+}
+
+.flow_node_float_path_a{
+    animation-name: flow-node-float-a;
+}
+
+.flow_node_float_path_b{
+    animation-name: flow-node-float-b;
+}
+
+.flow_node_float_path_c{
+    animation-name: flow-node-float-c;
+}
+
+.flow_node_float_path_d{
+    animation-name: flow-node-float-d;
+}
+
+.space_container_connecting .flow_node_float,
+.flow_node_selected .flow_node_float,
+.flow_node_link_hover .flow_node_float,
+.flow_node_link_source .flow_node_float,
+:global(.react-flow__node.dragging) .flow_node_float,
+:global(.react-flow__node.selecting) .flow_node_float{
+    animation: none;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .space_container_desktop .flow_node_wrapper:hover .flow_node_float{
+        animation: none;
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .flow_node_float{
+        animation: none !important;
+        transform: translate3d(0, 0, 0) rotate(0deg);
+    }
+}
+
 .node_image_skeleton{
     position: absolute;
     inset: 0;
@@ -772,6 +859,14 @@ $board-menu-wide-min: 1700px;
     transition: box-shadow 0.5s ease, border-color 0.5s ease, filter 0.5s ease;
 }
 
+.node_rectangle_shell{
+    width: 240px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .node_image_layer{
     position: absolute;
     inset: 0;
@@ -822,6 +917,17 @@ $board-menu-wide-min: 1700px;
         text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
     }
 }
+
+.node_rhombus_shell{
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: visible;
+}
+
 .rhombus_content{
     overflow: hidden;
     border: 3px solid var(--pink);
@@ -866,6 +972,16 @@ $board-menu-wide-min: 1700px;
         font-weight: 600;
         text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
     }
+}
+
+.node_circle_shell{
+    width: 120px;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: visible;
 }
 
 .node_lock_overlay{
