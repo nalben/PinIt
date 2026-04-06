@@ -4,6 +4,7 @@ export type FlowNodeType = FlowCardShape;
 export type FlowNodeData = {
   title: string;
   imageSrc: string | null;
+  color: string | null;
   isLocked: boolean;
   imageLoaded?: boolean;
 };
@@ -15,6 +16,7 @@ export type ApiCard = {
   type: ApiCardType;
   title: string | null;
   image_path: string | null;
+  color: string | null;
   is_locked: number | boolean | null;
   x: number;
   y: number;

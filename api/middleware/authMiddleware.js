@@ -1,4 +1,5 @@
 const jwt = require("jsonwebtoken");
+const { getAuthCookieOptions } = require("../utils/authCookieOptions");
 
 const getTokenFromCookie = (cookieHeader) => {
   if (!cookieHeader) return null;
@@ -14,15 +15,7 @@ const getTokenFromCookie = (cookieHeader) => {
 
 const syncAuthCookie = (req, res, headerToken, cookieToken) => {
   if (!headerToken || headerToken === cookieToken) return;
-
-  const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-  res.cookie('pinit_token', headerToken, {
-    httpOnly: true,
-    sameSite: 'Lax',
-    secure: Boolean(isSecure),
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    path: '/',
-  });
+  res.cookie('pinit_token', headerToken, getAuthCookieOptions(req));
 };
 
 const authMiddleware = (req, res, next) => {

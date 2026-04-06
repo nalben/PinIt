@@ -24,6 +24,7 @@ import ReactFlow, {
   useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { HexColorPicker } from 'react-colorful';
 import classes from './FlowBoard.module.scss';
 import axiosInstance from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
@@ -33,6 +34,7 @@ import LockClose from '@/assets/icons/monochrome/lock_close.svg';
 import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
 import Details from '@/assets/icons/monochrome/details.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
+import ColorIcon from '@/assets/icons/monochrome/color.svg';
 import { BOARD_MENU_WIDE_MIN_WIDTH, useUIStore } from '@/store/uiStore';
 import { useAuthStore } from '@/store/authStore';
 import type { ApiCard, ApiCardLink, ApiLinkStyle, FlowNodeData, FlowNodeType } from './flowBoardModel';
@@ -53,6 +55,7 @@ import { useFlowBoardLinkMode } from './useFlowBoardLinkMode';
 import { useFlowSelection } from '@/components/flowboard/hooks/useFlowSelection';
 import { useFlowBoardMenuTransitions } from '@/components/flowboard/hooks/useFlowBoardMenuTransitions';
 import { FlowLinkModeAlarm } from '@/components/flowboard/components/FlowLinkModeAlarm';
+import { useFlowCardFavoriteColors } from '@/components/flowboard/hooks/useFlowCardFavoriteColors';
 import { getCardImageCropPreset } from '@/utils/imageCropPresets';
 
 export type FlowBoardHandle = {
@@ -65,6 +68,28 @@ const DEFAULT_LINK_COLOR = 'var(--pink)';
 
 const MAX_CARD_IMAGE_SIZE_MB = 5;
 const MAX_CARD_IMAGE_SIZE_BYTES = MAX_CARD_IMAGE_SIZE_MB * 1024 * 1024;
+const DEFAULT_CARD_PICKER_COLOR = '#E7CD73';
+const PRESET_CARD_COLORS = ['#F28B82', '#F7C66F', '#F2E394', '#9FD3C7', '#7AC7E3', '#9DB7FF', '#C7A6FF', '#F3A6C8'] as const;
+
+const normalizeHexColor = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const color = value.trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(color) ? color : null;
+};
+
+const collectUniqueHexColors = (colors: Array<string | null | undefined>): string[] => {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  colors.forEach((value) => {
+    const color = normalizeHexColor(value);
+    if (!color || seen.has(color)) return;
+    seen.add(color);
+    result.push(color);
+  });
+
+  return result;
+};
 
 const MiniMapNode: React.FC<MiniMapNodeProps> = (props) => {
   const { id, x, y, width, height, className, color, strokeColor, strokeWidth, shapeRendering, style, onClick } = props;
@@ -261,10 +286,11 @@ const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const hasImage = Boolean(data.imageSrc && data.imageLoaded);
   const floatNow = useNodeFloatNow();
   const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
+  const nodeStyle = !hasImage && data.color ? { backgroundColor: data.color } : undefined;
   return (
     <div className={classes.node_rectangle_shell}>
       <div className={classes.flow_node_float} style={floatMotion.style}>
-        <div className={classes.node_rectangle}>
+        <div className={classes.node_rectangle} style={nodeStyle}>
           {hasImage ? (
             <div
               className={classes.node_image_layer}
@@ -295,6 +321,7 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const hasImage = Boolean(data.imageSrc && data.imageLoaded);
   const floatNow = useNodeFloatNow();
   const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
+  const nodeStyle = !hasImage && data.color ? { backgroundColor: data.color } : undefined;
   return (
     <div className={classes.node_rhombus_shell}>
       <div className={classes.flow_node_float} style={floatMotion.style}>
@@ -302,6 +329,7 @@ const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
           {isDraft ? null : <ConnectionHandles shape="rhombus" isConnectable={!data.isLocked} />}
           <div
             className={classes.rhombus_content}
+            style={nodeStyle}
           >
             {hasImage ? (
               <div
@@ -333,6 +361,7 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
   const hasImage = Boolean(data.imageSrc && data.imageLoaded);
   const floatNow = useNodeFloatNow();
   const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
+  const nodeStyle = !hasImage && data.color ? { backgroundColor: data.color } : undefined;
   return (
     <div className={classes.node_circle_shell}>
       <div className={classes.flow_node_float} style={floatMotion.style}>
@@ -340,6 +369,7 @@ const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
           {isDraft ? null : <ConnectionHandles shape="circle" isConnectable={!data.isLocked} />}
           <div
             className={classes.circle_content}
+            style={nodeStyle}
           >
             {hasImage ? (
               <div
@@ -538,6 +568,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   const containerRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
   const createPanelRef = useRef<HTMLDivElement | null>(null);
+  const colorPaletteRef = useRef<HTMLDivElement | null>(null);
+  const colorPaletteBodyRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const imagePreloadStartedRef = useRef<Set<string>>(new Set());
@@ -567,7 +599,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   const flowCardSettingsOpen = useUIStore((s) => s.flowCardSettingsOpen);
   const flowCardSettings = useUIStore((s) => s.flowCardSettings);
   const flowCardSettingsDraft = useUIStore((s) => s.flowCardSettingsDraft);
-  const openFlowCardSettings = useUIStore((s) => s.openFlowCardSettings);
   const openFlowCardSettingsFromNode = useUIStore((s) => s.openFlowCardSettingsFromNode);
   const closeFlowCardSettings = useUIStore((s) => s.closeFlowCardSettings);
   const setFlowCardSettingsDraft = useUIStore((s) => s.setFlowCardSettingsDraft);
@@ -751,6 +782,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     (c: ApiCard): RFNode<FlowNodeData> => {
       const nodeType = mapApiTypeToNodeType(c.type);
       const imageSrc = resolveImageSrc(c.image_path ?? null);
+      const color = normalizeHexColor(c.color);
       const imageLoaded = !imageSrc;
       return {
         id: String(c.id),
@@ -762,6 +794,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
         data: {
           title: (c.title ?? 'title').trim() || 'title',
           imageSrc,
+          color,
           isLocked: Boolean(c.is_locked),
           imageLoaded,
         },
@@ -996,6 +1029,19 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   const displayTitle = visualDraft?.title ?? '';
   const displayLocked = Boolean(visualDraft?.isLocked);
   const displayImagePreview = visualDraft?.imageSrc ?? null;
+  const displayColor = normalizeHexColor(visualDraft?.color);
+  const hasVisualSelection = Boolean(displayImagePreview || displayColor);
+  const boardColorOptions = useMemo(() => collectUniqueHexColors(nodes.map((node) => node.data.color)), [nodes]);
+  const [colorPaletteOpen, setColorPaletteOpen] = useState(false);
+  const [colorPaletteDraft, setColorPaletteDraft] = useState<string | null>(null);
+  const [colorPaletteLayout, setColorPaletteLayout] = useState<{
+    left: number;
+    bottom: number;
+    width: number;
+    maxHeight: number;
+    height: number | null;
+    isConstrained: boolean;
+  } | null>(null);
 
   const [cropSourceFile, setCropSourceFile] = useState<File | null>(null);
   const [pendingImageFile, setPendingImageFile] = useState<File | null>(null);
@@ -1013,6 +1059,104 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     },
     [showTopAlarm]
   );
+  const {
+    favoriteColors,
+    favoritesLoading,
+    ensureFavoriteColorsLoaded,
+    addFavoriteColor,
+    removeFavoriteColor,
+    resetFavoriteColors,
+  } = useFlowCardFavoriteColors({
+    numericBoardId,
+    hasToken,
+    onError: reportError,
+  });
+  const paletteDisplayColor = normalizeHexColor(colorPaletteDraft);
+  const palettePickerColorValue = paletteDisplayColor ?? displayColor ?? DEFAULT_CARD_PICKER_COLOR;
+  const isPaletteColorFavorite = Boolean(paletteDisplayColor && favoriteColors.includes(paletteDisplayColor));
+
+  useEffect(() => {
+    setColorPaletteOpen(false);
+    setColorPaletteDraft(null);
+  }, [activeNodeId, isEditing]);
+
+  useEffect(() => {
+    resetFavoriteColors();
+  }, [hasToken, numericBoardId, resetFavoriteColors]);
+
+  useLayoutEffect(() => {
+    if (!colorPaletteOpen) {
+      setColorPaletteLayout(null);
+      return;
+    }
+
+    let rafId = 0;
+
+    const measure = () => {
+      const panelEl = createPanelRef.current;
+      const paletteEl = colorPaletteRef.current;
+      const paletteBodyEl = colorPaletteBodyRef.current;
+      if (!panelEl || !paletteEl || !paletteBodyEl) return;
+
+      const panelRect = panelEl.getBoundingClientRect();
+      const viewportPadding = 12;
+      const expandedFitSlackPx = 28;
+      const modeHysteresisPx = 12;
+      const availableHeight = Math.max(240, panelRect.bottom - viewportPadding);
+      const constrainedHeight = Math.max(240, Math.min(panelRect.height, availableHeight));
+      const paletteChromeHeight = Math.max(0, paletteEl.offsetHeight - paletteBodyEl.clientHeight);
+      const naturalHeight = paletteBodyEl.scrollHeight + paletteChromeHeight;
+      const expandedThreshold = availableHeight - expandedFitSlackPx;
+
+      setColorPaletteLayout((prev) => {
+        let isConstrained = prev?.isConstrained ?? naturalHeight > expandedThreshold;
+
+        if (isConstrained) {
+          if (naturalHeight <= expandedThreshold - modeHysteresisPx) {
+            isConstrained = false;
+          }
+        } else if (naturalHeight >= expandedThreshold + modeHysteresisPx) {
+          isConstrained = true;
+        }
+
+        return {
+          left: panelRect.left,
+          bottom: Math.max(12, window.innerHeight - panelRect.bottom),
+          width: panelRect.width,
+          maxHeight: availableHeight,
+          height: isConstrained ? constrainedHeight : null,
+          isConstrained,
+        };
+      });
+    };
+
+    const requestMeasure = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    };
+
+    requestMeasure();
+    window.addEventListener('resize', requestMeasure);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', requestMeasure);
+    };
+  }, [boardColorOptions.length, colorPaletteOpen, favoriteColors.length]);
+
+  const colorPaletteStyle = useMemo<React.CSSProperties>(() => {
+    if (!colorPaletteLayout) {
+      return { visibility: 'hidden' };
+    }
+
+    return {
+      left: `${colorPaletteLayout.left}px`,
+      bottom: `${colorPaletteLayout.bottom}px`,
+      width: `${colorPaletteLayout.width}px`,
+      maxHeight: `${colorPaletteLayout.maxHeight}px`,
+      height: colorPaletteLayout.isConstrained && colorPaletteLayout.height ? `${colorPaletteLayout.height}px` : undefined,
+    };
+  }, [colorPaletteLayout]);
+  const isColorPaletteConstrained = Boolean(colorPaletteLayout?.isConstrained);
 
   const onNodesChange = useCallback((changes: Parameters<typeof applyNodeChanges>[0]) => {
     setNodes((prev) => applyNodeChanges(changes, prev));
@@ -1181,7 +1325,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   }, [hasToken, numericBoardId, reloadLinksSeq]);
 
   const applyPreviewToNode = useCallback(
-    (nodeId: string, patch: Partial<{ type: FlowNodeType; title: string; isLocked: boolean; imageSrc: string | null }>) => {
+    (nodeId: string, patch: Partial<{ type: FlowNodeType; title: string; isLocked: boolean; imageSrc: string | null; color: string | null }>) => {
       setNodes((prev) =>
         prev.map((n) => {
           if (String(n.id) !== String(nodeId)) return n;
@@ -1200,7 +1344,12 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
           const nextTitle = patch.title ?? n.data.title;
           const nextLocked = patch.isLocked ?? n.data.isLocked;
           const nextImageSrc = patch.imageSrc !== undefined ? patch.imageSrc : n.data.imageSrc;
-          const nextImageLoaded = nextImageSrc === n.data.imageSrc ? Boolean(n.data.imageLoaded) : !nextImageSrc;
+          const imageChanged = nextImageSrc !== n.data.imageSrc;
+          if (imageChanged && nextImageSrc) {
+            imagePreloadStartedRef.current.delete(`${String(n.id)}|${nextImageSrc}`);
+          }
+          const nextImageLoaded = imageChanged ? !nextImageSrc : Boolean(n.data.imageLoaded);
+          const nextColor = patch.color !== undefined ? patch.color : n.data.color;
 
           return {
             ...n,
@@ -1208,7 +1357,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
             dragHandle: nextDragHandle,
             position,
             draggable: canEditCards && !nextLocked,
-            data: { ...n.data, title: nextTitle, isLocked: nextLocked, imageSrc: nextImageSrc, imageLoaded: nextImageLoaded }
+            data: {
+              ...n.data,
+              title: nextTitle,
+              isLocked: nextLocked,
+              imageSrc: nextImageSrc,
+              imageLoaded: nextImageLoaded,
+              color: nextColor,
+            }
           };
         })
       );
@@ -1266,6 +1422,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
         title: node.data.title,
         isLocked: Boolean(node.data.isLocked),
         imageSrc: node.data.imageSrc,
+        color: node.data.color,
       });
     },
     [canEditCards, clearPendingImage, openFlowCardSettingsFromNode]
@@ -1288,7 +1445,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
         type: flowCardSettings.type,
         title: flowCardSettings.title,
         isLocked: flowCardSettings.isLocked,
-        imageSrc: flowCardSettings.imageSrc
+        imageSrc: flowCardSettings.imageSrc,
+        color: flowCardSettings.color,
       });
     }
 
@@ -1359,6 +1517,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       if (panelEl && target && panelEl.contains(target)) return;
       const targetEl = target instanceof HTMLElement ? target : null;
       if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return;
+      if (targetEl?.closest?.('[data-modal-scope="color-palette"]')) return;
       const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       const menuEl = boardMenuRef?.current;
       if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
@@ -1387,6 +1546,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       if (panelEl && target && panelEl.contains(target)) return;
       const targetEl = target instanceof HTMLElement ? target : null;
       if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return;
+      if (targetEl?.closest?.('[data-modal-scope="color-palette"]')) return;
       const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       const menuEl = boardMenuRef?.current;
       if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
@@ -1432,7 +1592,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       className: getNodeWrapperClassName(id, false),
       dragHandle: `.${classes.node_rectangle}`,
       position,
-      data: { title: startTitle, imageSrc: null, isLocked: false },
+      data: { title: startTitle, imageSrc: null, color: null, isLocked: false },
       draggable: canEditCards,
       selectable: true
     };
@@ -1520,10 +1680,10 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     }
   };
 
-  const syncSavedImageToActiveSettings = useCallback((nextImageSrc: string | null) => {
+  const syncSavedVisualsToActiveSettings = useCallback((next: { imageSrc?: string | null; color?: string | null }) => {
     useUIStore.setState((s) => ({
-      flowCardSettings: s.flowCardSettings ? { ...s.flowCardSettings, imageSrc: nextImageSrc } : s.flowCardSettings,
-      flowCardSettingsDraft: s.flowCardSettingsDraft ? { ...s.flowCardSettingsDraft, imageSrc: nextImageSrc } : s.flowCardSettingsDraft,
+      flowCardSettings: s.flowCardSettings ? { ...s.flowCardSettings, ...next } : s.flowCardSettings,
+      flowCardSettingsDraft: s.flowCardSettingsDraft ? { ...s.flowCardSettingsDraft, ...next } : s.flowCardSettingsDraft,
     }));
   }, []);
 
@@ -1534,8 +1694,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     const preview = URL.createObjectURL(file);
     pendingObjectUrlRef.current = preview;
     setPendingImageFile(file);
-    setFlowCardSettingsDraft({ imageSrc: preview });
-    applyPreviewToNode(activeNodeId, { imageSrc: preview });
+    setFlowCardSettingsDraft({ imageSrc: preview, color: null });
+    applyPreviewToNode(activeNodeId, { imageSrc: preview, color: null });
   }, [activeNodeId, applyPreviewToNode, clearPendingImage, setFlowCardSettingsDraft]);
 
   const persistImageForActiveNode = useCallback(async (file: File) => {
@@ -1557,39 +1717,164 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
 
       const form = new FormData();
       form.append('image', file);
-      const res = await axiosInstance.patch<{ image_path: string | null }>(
+      const res = await axiosInstance.patch<{ image_path: string | null; color?: string | null }>(
         `/api/boards/${numericBoardId}/cards/${nodeId}/image`,
         form,
         { headers: { 'Content-Type': 'multipart/form-data' } }
       );
 
       const nextImageSrc = resolveImageSrc(res.data?.image_path ?? null);
+      const nextColor = Object.prototype.hasOwnProperty.call(res.data || {}, 'color') ? normalizeHexColor(res.data?.color) : null;
       clearPendingImage();
-      syncSavedImageToActiveSettings(nextImageSrc ?? null);
-      applyPreviewToNode(nodeId, { imageSrc: nextImageSrc ?? null });
+      syncSavedVisualsToActiveSettings({ imageSrc: nextImageSrc ?? null, color: nextColor });
+      applyPreviewToNode(nodeId, { imageSrc: nextImageSrc ?? null, color: nextColor });
     } catch (e) {
-      reportError('\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438.', e);
+      reportError('Не удалось сохранить изображение карточки.', e);
     } finally {
       setImageUploading(false);
     }
-  }, [activeNodeId, applyPendingCroppedImage, applyPreviewToNode, canEditCards, clearPendingImage, hasToken, numericBoardId, reportError, syncSavedImageToActiveSettings]);
+  }, [activeNodeId, applyPendingCroppedImage, applyPreviewToNode, canEditCards, clearPendingImage, hasToken, numericBoardId, reportError, syncSavedVisualsToActiveSettings]);
 
   const handleImageSelected = (file: File | null) => {
     if (!activeNodeId) return;
     if (!file) return;
     if (file.size > MAX_CARD_IMAGE_SIZE_BYTES) {
-      showTopAlarm(`\u0412\u0435\u0441 \u0441\u043b\u0438\u0448\u043a\u043e\u043c \u0431\u043e\u043b\u044c\u0448\u043e\u0439, \u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0432\u0435\u0441\u043e\u043c \u0434\u043e ${MAX_CARD_IMAGE_SIZE_MB} \u041c\u0411.`);
+      showTopAlarm(`Вес слишком большой, выберите изображение весом до ${MAX_CARD_IMAGE_SIZE_MB} МБ.`);
       return;
     }
     setCropSourceFile(file);
   };
 
+  const restoreDraftPreview = useCallback(() => {
+    if (!activeNodeId) return;
+    applyPreviewToNode(activeNodeId, {
+      imageSrc: flowCardSettingsDraft?.imageSrc ?? null,
+      color: normalizeHexColor(flowCardSettingsDraft?.color),
+    });
+  }, [activeNodeId, applyPreviewToNode, flowCardSettingsDraft]);
+
+  const closeColorPalette = useCallback(() => {
+    setColorPaletteOpen(false);
+    setColorPaletteDraft(null);
+  }, []);
+
+  const openColorPalette = useCallback(() => {
+    if (!isEditing || draftSaving || imageUploading) return;
+    void ensureFavoriteColorsLoaded();
+    setColorPaletteDraft(normalizeHexColor(flowCardSettingsDraft?.color));
+    setColorPaletteOpen(true);
+  }, [draftSaving, ensureFavoriteColorsLoaded, flowCardSettingsDraft?.color, imageUploading, isEditing]);
+
+  const cancelColorPalette = useCallback(() => {
+    restoreDraftPreview();
+    closeColorPalette();
+  }, [closeColorPalette, restoreDraftPreview]);
+
   const removeImageLive = () => {
     if (!activeNodeId) return;
+    closeColorPalette();
     clearPendingImage();
-    setFlowCardSettingsDraft({ imageSrc: null });
-    applyPreviewToNode(activeNodeId, { imageSrc: null });
+    setFlowCardSettingsDraft({ imageSrc: null, color: null });
+    applyPreviewToNode(activeNodeId, { imageSrc: null, color: null });
   };
+
+  const setPaletteColorLive = (color: string) => {
+    if (!activeNodeId) return;
+    const nextColor = normalizeHexColor(color);
+    if (!nextColor) return;
+    setColorPaletteDraft(nextColor);
+    applyPreviewToNode(activeNodeId, { color: nextColor, imageSrc: null });
+  };
+
+  const saveColorPalette = useCallback(async () => {
+    if (!activeNodeId) return;
+
+    const nextColor = normalizeHexColor(colorPaletteDraft);
+    if (!nextColor) {
+      restoreDraftPreview();
+      closeColorPalette();
+      return;
+    }
+
+    const nodeId = String(activeNodeId);
+    const isDraft = nodeId.startsWith('draft-');
+
+    if (isDraft) {
+      clearPendingImage();
+      setFlowCardSettingsDraft({ color: nextColor, imageSrc: null });
+      applyPreviewToNode(nodeId, { color: nextColor, imageSrc: null });
+      closeColorPalette();
+      return;
+    }
+
+    if (!hasToken) return;
+    if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
+
+    setDraftSaving(true);
+    try {
+      suppressSocketReloadByCardIdRef.current.set(nodeId, Date.now() + 1500);
+      const res = await axiosInstance.patch<Partial<{ image_path: string | null; color: string | null }>>(
+        `/api/boards/${numericBoardId}/cards/${nodeId}`,
+        { color: nextColor }
+      );
+
+      clearPendingImage();
+
+      const nextImageSrc = Object.prototype.hasOwnProperty.call(res.data || {}, 'image_path')
+        ? resolveImageSrc(res.data?.image_path ?? null)
+        : null;
+      const savedColor = Object.prototype.hasOwnProperty.call(res.data || {}, 'color')
+        ? normalizeHexColor(res.data?.color)
+        : nextColor;
+
+      syncSavedVisualsToActiveSettings({ imageSrc: nextImageSrc ?? null, color: savedColor });
+      applyPreviewToNode(nodeId, { imageSrc: nextImageSrc ?? null, color: savedColor });
+      closeColorPalette();
+    } catch (e) {
+      restoreDraftPreview();
+      reportError('Не удалось сохранить цвет карточки.', e);
+    } finally {
+      setDraftSaving(false);
+    }
+  }, [
+    activeNodeId,
+    applyPreviewToNode,
+    clearPendingImage,
+    closeColorPalette,
+    colorPaletteDraft,
+    hasToken,
+    numericBoardId,
+    reportError,
+    restoreDraftPreview,
+    setFlowCardSettingsDraft,
+    syncSavedVisualsToActiveSettings,
+  ]);
+
+  const toggleCurrentColorFavorite = async () => {
+    if (!paletteDisplayColor) return;
+    if (isPaletteColorFavorite) {
+      await removeFavoriteColor(paletteDisplayColor);
+      return;
+    }
+    await addFavoriteColor(paletteDisplayColor);
+  };
+
+  useEffect(() => {
+    if (!colorPaletteOpen) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      cancelColorPalette();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [cancelColorPalette, colorPaletteOpen]);
+
+  const pickerColorValue = palettePickerColorValue;
+  const setDraftColorLive = setPaletteColorLive;
+  const isDisplayColorFavorite = isPaletteColorFavorite;
 
   const deleteActive = async () => {
     if (!canEditCards) return;
@@ -1635,11 +1920,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     setDraftSaving(true);
     try {
       let serverNodeId = nodeId;
+      let nextImageSrc = flowCardSettingsDraft.imageSrc;
+      let nextColor = flowCardSettingsDraft.color ?? null;
 
       if (isDraft) {
         const { data } = await axiosInstance.post<{ id: number }>(`/api/boards/${numericBoardId}/cards`, {
           type: typeForDb,
           title,
+          color: flowCardSettingsDraft.color,
           x: node.position.x,
           y: node.position.y
         });
@@ -1653,7 +1941,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
           prev.map((n) => (String(n.id) === String(nodeId) ? { ...n, id: createdId } : n))
         );
       } else {
-        const patch = {} as Partial<{ title: string; type: string; is_locked: boolean; x: number; y: number }>;
+        const patch = {} as Partial<{ title: string; type: string; is_locked: boolean; x: number; y: number; color: string | null }>;
         if (flowCardSettings.title !== title) patch.title = title;
         if (flowCardSettings.type !== flowCardSettingsDraft.type) {
           patch.type = typeForDb;
@@ -1661,27 +1949,38 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
           patch.y = node.position.y;
         }
         if (flowCardSettings.isLocked !== flowCardSettingsDraft.isLocked) patch.is_locked = Boolean(flowCardSettingsDraft.isLocked);
+        if ((flowCardSettings.color ?? null) !== (flowCardSettingsDraft.color ?? null)) patch.color = flowCardSettingsDraft.color ?? null;
 
         if (Object.keys(patch).length) {
           suppressSocketReloadByCardIdRef.current.set(String(serverNodeId), Date.now() + 1500);
-          await axiosInstance.patch(`/api/boards/${numericBoardId}/cards/${serverNodeId}`, patch);
+          const res = await axiosInstance.patch<Partial<{ image_path: string | null; color: string | null }>>(
+            `/api/boards/${numericBoardId}/cards/${serverNodeId}`,
+            patch
+          );
+          if (Object.prototype.hasOwnProperty.call(res.data || {}, 'image_path')) {
+            nextImageSrc = resolveImageSrc(res.data?.image_path ?? null);
+          }
+          if (Object.prototype.hasOwnProperty.call(res.data || {}, 'color')) {
+            nextColor = normalizeHexColor(res.data?.color);
+          }
         }
       }
-
-      let nextImageSrc = flowCardSettingsDraft.imageSrc;
 
       if (pendingImageFile) {
         suppressSocketReloadByCardIdRef.current.set(String(serverNodeId), Date.now() + 1500);
         setImageUploading(true);
         const form = new FormData();
         form.append('image', pendingImageFile);
-        const res = await axiosInstance.patch<{ image_path: string | null }>(
+        const res = await axiosInstance.patch<{ image_path: string | null; color?: string | null }>(
           `/api/boards/${numericBoardId}/cards/${serverNodeId}/image`,
           form,
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
         nextImageSrc = resolveImageSrc(res.data?.image_path ?? null);
-      } else if (flowCardSettings.imageSrc && !flowCardSettingsDraft.imageSrc) {
+        if (Object.prototype.hasOwnProperty.call(res.data || {}, 'color')) {
+          nextColor = normalizeHexColor(res.data?.color);
+        }
+      } else if (flowCardSettings.imageSrc && !flowCardSettingsDraft.imageSrc && !flowCardSettingsDraft.color) {
         suppressSocketReloadByCardIdRef.current.set(String(serverNodeId), Date.now() + 1500);
         const res = await axiosInstance.patch<{ image_path: string | null }>(
           `/api/boards/${numericBoardId}/cards/${serverNodeId}/image`,
@@ -1695,6 +1994,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
         title,
         isLocked: flowCardSettingsDraft.isLocked,
         imageSrc: nextImageSrc ?? null,
+        color: nextColor,
       });
 
       clearPendingImage();
@@ -2028,8 +2328,11 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
                     displayType === 'rectangle' ? classes.preview_active : classes.preview_inactive
                   }`.trim()}
                   style={
-                    displayType === 'rectangle' && displayImagePreview
-                      ? { backgroundImage: `url(${displayImagePreview})` }
+                    displayType === 'rectangle'
+                      ? {
+                          ...(displayColor ? { backgroundColor: displayColor } : {}),
+                          ...(displayImagePreview ? { backgroundImage: `url(${displayImagePreview})` } : {})
+                        }
                       : undefined
                   }
                 >
@@ -2052,8 +2355,11 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
                     displayType === 'circle' && displayImagePreview ? classes.preview_circle_has_image : ''
                   } ${displayType === 'circle' ? classes.preview_active : classes.preview_inactive}`.trim()}
                   style={
-                    displayType === 'circle' && displayImagePreview
-                      ? { backgroundImage: `url(${displayImagePreview})` }
+                    displayType === 'circle'
+                      ? {
+                          ...(displayColor ? { backgroundColor: displayColor } : {}),
+                          ...(displayImagePreview ? { backgroundImage: `url(${displayImagePreview})` } : {})
+                        }
                       : undefined
                   }
                 >
@@ -2079,8 +2385,11 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
                     displayType === 'rhombus' ? classes.preview_active : classes.preview_inactive
                   }`.trim()}
                   style={
-                    displayType === 'rhombus' && displayImagePreview
-                      ? { backgroundImage: `url(${displayImagePreview})` }
+                    displayType === 'rhombus'
+                      ? {
+                          ...(displayColor ? { backgroundColor: displayColor } : {}),
+                          ...(displayImagePreview ? { backgroundImage: `url(${displayImagePreview})` } : {})
+                        }
                       : undefined
                   }
                 >
@@ -2097,26 +2406,26 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
 
           <div className={classes.create_panel_form}>
             <div className={classes.form_field}>
-              <div className={classes.form_label}>{'\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435'}</div>
+              <div className={classes.form_label}>{'Название'}</div>
               <input
                 className={classes.create_panel_input}
                 ref={titleInputRef}
                 value={displayTitle}
                 onChange={e => setDraftTitleLive(e.target.value)}
-                placeholder={visualEditing ? '\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435' : '\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0437\u0430\u043f\u0438\u0441\u044c'}
+                placeholder={visualEditing ? 'Название' : 'Выберите запись'}
                 maxLength={50}
                 disabled={!isEditing}
               />
             </div>
 
             <div className={classes.form_field}>
-              <div className={classes.form_label}>{'\u0418\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435'}</div>
+              <div className={classes.form_label}>{'Изображение'}</div>
               <div className={classes.form_row}>
                 <Mainbtn
                   variant="mini"
                   kind="button"
                   type="button"
-                  text={'\u0412\u044b\u0431\u0440\u0430\u0442\u044c'}
+                  text={'Выбрать'}
                   onClick={() => imageInputRef.current?.click()}
                   disabled={!isEditing || draftSaving || imageUploading}
                 />
@@ -2124,9 +2433,146 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
                   variant="mini"
                   kind="button"
                   type="button"
+                  text={
+                    <span className={classes.color_palette_trigger_inner}>
+                      <ColorIcon />
+                      <span
+                        className={`${classes.color_palette_trigger_swatch} ${displayColor ? '' : classes.color_palette_trigger_swatch_default}`.trim()}
+                        style={displayColor ? { backgroundColor: displayColor } : undefined}
+                      />
+                    </span>
+                  }
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openColorPalette();
+                  }}
+                  disabled={!isEditing || draftSaving || imageUploading}
+                  className={`${classes.icon_btn} ${classes.icon_btn_trash} ${displayColor ? classes.icon_btn_active : ''}`.trim()}
+                />
+                {false ? (
+                <DropdownWrapper upDel closeOnClick={false} isOpen={colorPaletteOpen} onClose={() => setColorPaletteOpen(false)}>
+                {[
+                  <Mainbtn
+                    key="trigger"
+                    variant="mini"
+                    kind="button"
+                    type="button"
+                    text={
+                      <span className={classes.color_palette_trigger_inner}>
+                        <ColorIcon />
+                        <span
+                          className={`${classes.color_palette_trigger_swatch} ${displayColor ? '' : classes.color_palette_trigger_swatch_default}`.trim()}
+                          style={displayColor ? { backgroundColor: displayColor } : undefined}
+                        />
+                      </span>
+                    }
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      if (!isEditing || draftSaving || imageUploading) return;
+                      if (!colorPaletteOpen) {
+                        void ensureFavoriteColorsLoaded();
+                      }
+                      setColorPaletteOpen((prev) => !prev);
+                    }}
+                    disabled={!isEditing || draftSaving || imageUploading}
+                    className={`${classes.icon_btn} ${displayColor ? classes.icon_btn_active : ''} ${classes.icon_btn_palette}`.trim()}
+                  />,
+                  <div key="menu">
+                    <div data-dropdown-class={classes.color_palette_menu_item}>
+                      <div className={classes.color_palette_panel}>
+                        <div className={classes.color_palette_picker}>
+                          <HexColorPicker color={pickerColorValue} onChange={setDraftColorLive} />
+                        </div>
+
+                        <div className={classes.color_palette_current}>
+                          <div className={classes.color_palette_current_label}>Текущий цвет</div>
+                          <div className={classes.color_palette_current_value_row}>
+                            <span
+                              className={`${classes.color_palette_current_swatch} ${displayColor ? '' : classes.color_palette_current_swatch_default}`.trim()}
+                              style={displayColor ? { backgroundColor: displayColor } : undefined}
+                            />
+                            <span className={classes.color_palette_current_value}>{displayColor ?? 'Стандартный'}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className={classes.color_palette_favorite_btn}
+                            onClick={() => void toggleCurrentColorFavorite()}
+                            disabled={!displayColor || favoritesLoading}
+                          >
+                            {isDisplayColorFavorite ? 'Убрать из избранного' : 'В избранное'}
+                          </button>
+                        </div>
+
+                        <div className={classes.color_palette_section}>
+                          <div className={classes.color_palette_section_title}>Базовые цвета</div>
+                          <div className={classes.color_palette_swatch_grid}>
+                            {PRESET_CARD_COLORS.map((color) => (
+                              <button
+                                key={color}
+                                type="button"
+                                className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
+                                style={{ backgroundColor: color }}
+                                onClick={() => setDraftColorLive(color)}
+                                aria-label={`Выбрать цвет ${color}`}
+                              />
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className={classes.color_palette_section}>
+                          <div className={classes.color_palette_section_title}>Цвета на доске</div>
+                          {boardColorOptions.length ? (
+                            <div className={classes.color_palette_swatch_grid}>
+                              {boardColorOptions.map((color) => (
+                                <button
+                                  key={color}
+                                  type="button"
+                                  className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
+                                  style={{ backgroundColor: color }}
+                                  onClick={() => setDraftColorLive(color)}
+                                  aria-label={`Выбрать цвет ${color}`}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className={classes.color_palette_empty}>Пока нет цветных нодов.</div>
+                          )}
+                        </div>
+
+                        <div className={classes.color_palette_section}>
+                          <div className={classes.color_palette_section_title}>Избранные цвета</div>
+                          {favoriteColors.length ? (
+                            <div className={classes.color_palette_swatch_grid}>
+                              {favoriteColors.map((color) => (
+                                <button
+                                  key={color}
+                                  type="button"
+                                  className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
+                                  style={{ backgroundColor: color }}
+                                  onClick={() => setDraftColorLive(color)}
+                                  aria-label={`Выбрать цвет ${color}`}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className={classes.color_palette_empty}>
+                              {favoritesLoading ? 'Загрузка...' : 'Избранных цветов пока нет.'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>,
+                ]}
+                </DropdownWrapper>
+                ) : null}
+                <Mainbtn
+                  variant="mini"
+                  kind="button"
+                  type="button"
                   text={<DeleteIcon />}
                   onClick={removeImageLive}
-                  disabled={!isEditing || draftSaving || imageUploading || !displayImagePreview}
+                  disabled={!isEditing || draftSaving || imageUploading || !hasVisualSelection}
                   className={`${classes.icon_btn} ${classes.icon_btn_trash}`.trim()}
                 />
               </div>
@@ -2161,9 +2607,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
                     className={classes.danger_action_trigger}
                     onClick={() => setDeleteConfirmOpen((prev) => !prev)}
                     disabled={!isEditing || draftSaving || imageUploading}
-                    aria-label={'\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0437\u0430\u043f\u0438\u0441\u044c'}
+                    aria-label={'Удалить запись'}
                   >
-                    {'\u0423\u0434\u0430\u043b\u0438\u0442\u044c'}
+                    {'Удалить'}
                   </button>,
                   <div key="menu">
                     <button
@@ -2217,6 +2663,131 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
           </div>
         </div>
       </div>
+      {colorPaletteOpen && isEditing ? (
+        <div
+          ref={colorPaletteRef}
+          className={`${classes.color_palette_modal} ${isColorPaletteConstrained ? classes.color_palette_modal_constrained : classes.color_palette_modal_expanded}`.trim()}
+          data-modal-scope="color-palette"
+          style={colorPaletteStyle}
+          role="dialog"
+          aria-modal="true"
+          aria-label={'Выбор цвета записи'}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className={classes.color_palette_modal_header}>
+            {'Цвет записи'}
+          </div>
+          <div ref={colorPaletteBodyRef} className={classes.color_palette_modal_body}>
+            <div className={classes.color_palette_modal_primary}>
+              <div className={classes.color_palette_picker}>
+                <HexColorPicker color={palettePickerColorValue} onChange={setPaletteColorLive} />
+              </div>
+              <button
+                type="button"
+                className={classes.color_palette_favorite_btn}
+                onClick={() => void toggleCurrentColorFavorite()}
+                disabled={!paletteDisplayColor || favoritesLoading}
+              >
+                {isPaletteColorFavorite
+                  ? 'Убрать из избранного'
+                  : 'Добавить в избранное'}
+              </button>
+            </div>
+
+            <div className={classes.color_palette_modal_secondary}>
+              <div className={classes.color_palette_current}>
+                <div className={classes.color_palette_current_label}>{'Текущий цвет'}</div>
+                <div className={classes.color_palette_current_value_row}>
+                  <span
+                    className={`${classes.color_palette_current_swatch} ${paletteDisplayColor ? '' : classes.color_palette_current_swatch_default}`.trim()}
+                    style={paletteDisplayColor ? { backgroundColor: paletteDisplayColor } : undefined}
+                  />
+                  <span className={classes.color_palette_current_value}>
+                    {paletteDisplayColor ?? 'Стандартный'}
+                  </span>
+                </div>
+              </div>
+
+              <div className={classes.color_palette_section}>
+                <div className={classes.color_palette_section_title}>{'Базовые цвета'}</div>
+                <div className={classes.color_palette_swatch_grid}>
+                  {PRESET_CARD_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      className={`${classes.color_palette_swatch_btn} ${paletteDisplayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
+                      style={{ backgroundColor: color }}
+                      onClick={() => setPaletteColorLive(color)}
+                      aria-label={`Выбрать цвет ${color}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className={classes.color_palette_section}>
+                <div className={classes.color_palette_section_title}>{'Цвета на доске'}</div>
+                {boardColorOptions.length ? (
+                  <div className={classes.color_palette_swatch_grid}>
+                    {boardColorOptions.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`${classes.color_palette_swatch_btn} ${paletteDisplayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
+                        style={{ backgroundColor: color }}
+                        onClick={() => setPaletteColorLive(color)}
+                        aria-label={`Выбрать цвет ${color}`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className={classes.color_palette_empty}>{'Пока нет цветных нодов.'}</div>
+                )}
+              </div>
+
+              <div className={classes.color_palette_section}>
+                <div className={classes.color_palette_section_title}>{'Избранные цвета'}</div>
+                {favoriteColors.length ? (
+                  <div className={classes.color_palette_swatch_grid}>
+                    {favoriteColors.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`${classes.color_palette_swatch_btn} ${paletteDisplayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
+                        style={{ backgroundColor: color }}
+                        onClick={() => setPaletteColorLive(color)}
+                        aria-label={`Выбрать цвет ${color}`}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className={classes.color_palette_empty}>
+                    {favoritesLoading ? 'Загрузка...' : 'Избранных цветов пока нет.'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className={classes.color_palette_modal_actions}>
+            <Mainbtn
+              variant="mini"
+              kind="button"
+              type="button"
+              text={'Отмена'}
+              onClick={cancelColorPalette}
+              disabled={draftSaving || imageUploading}
+            />
+            <Mainbtn
+              variant="mini"
+              kind="button"
+              type="button"
+              text={'Сохранить'}
+              onClick={saveColorPalette}
+              disabled={draftSaving || imageUploading}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 });

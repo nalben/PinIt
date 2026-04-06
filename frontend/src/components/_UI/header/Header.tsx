@@ -426,6 +426,9 @@ const isProfileActive = () => {
                         <DropdownWrapper
                           fixed
                           middleleftTop
+                          anchorToButton
+                          fixedMarginPx={0}
+                          repositionOnScroll
                           isOpen={themeDropdownOpen}
                           onClose={() => setThemeDropdownOpen(false)}
                           menuClassName={classes.profile_theme_menu}

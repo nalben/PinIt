@@ -52,6 +52,7 @@ const safeUnlinkUpload = async uploadPath => {
 
 const generateInviteToken = () => crypto.randomBytes(24).toString('hex');
 const CARD_DETAIL_BLOCK_TYPES = new Set(['text', 'image', 'facts', 'checklist']);
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 const trimNullableString = value => {
   if (value === null || value === undefined) return null;
@@ -75,6 +76,46 @@ const normalizeCardDetailTextContent = value => {
   const content = trimNullableString(value);
   if (!content) return { ok: false };
   return { ok: true, value: content };
+};
+
+const normalizeHexColor = value => {
+  if (value === null || value === undefined) {
+    return { ok: true, value: null };
+  }
+
+  const color = String(value).trim();
+  if (!HEX_COLOR_RE.test(color)) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: color.toUpperCase() };
+};
+
+const canUserAccessBoard = async (userId, boardId) => {
+  const [rows] = await db.execute(
+    `SELECT 1
+     FROM boards b
+     LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role IN ('guest','editer')
+     WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
+     LIMIT 1`,
+    [userId, boardId, userId]
+  );
+
+  return Boolean(rows.length);
+};
+
+const loadFavoriteCardColors = async userId => {
+  const [rows] = await db.execute(
+    `SELECT color
+     FROM user_card_color_favorites
+     WHERE user_id = ?
+     ORDER BY created_at DESC, color ASC`,
+    [userId]
+  );
+
+  return rows
+    .map(row => (typeof row.color === 'string' ? row.color.toUpperCase() : null))
+    .filter(color => Boolean(color));
 };
 
 const getNextCardDetailBlockSortOrder = async (connection, cardId) => {
@@ -297,7 +338,7 @@ const emitBoardsUpdatedToBoardUsers = async (req, boardId, payload, extraUserIds
   }
 };
 
-/* Получить все доски текущего пользователя */
+/* Р В РЎСџР В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ Р РЋР С“Р В Р’Вµ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ Р РЋРІР‚С™Р В Р’ВµР В РЎвЂќР РЋРЎвЂњР РЋРІР‚В°Р В Р’ВµР В РЎвЂ“Р В РЎвЂў Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР РЏ */
 exports.getMyBoards = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -313,12 +354,12 @@ exports.getMyBoards = async (req, res) => {
     return res.status(200).json(boards);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения досок' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂўР В РЎвЂќ' });
   }
 };
 
 
-/* Получить все доски, где пользователь гость */
+/* Р В РЎСџР В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ Р РЋР С“Р В Р’Вµ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ, Р В РЎвЂ“Р В РўвЂР В Р’Вµ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР Р‰ */
 exports.getGuestBoards = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -338,11 +379,11 @@ exports.getGuestBoards = async (req, res) => {
     return res.status(200).json(boards);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения гостевых досок' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р В Р’ВµР В Р вЂ Р РЋРІР‚в„–Р РЋРІР‚В¦ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂўР В РЎвЂќ' });
   }
 };
 
-/* Доски друзей (где пользователь гость) */
+/* Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ Р В РўвЂР РЋР вЂљР РЋРЎвЂњР В Р’В·Р В Р’ВµР В РІвЂћвЂ“ (Р В РЎвЂ“Р В РўвЂР В Р’Вµ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР Р‰) */
 exports.getFriendsBoards = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -364,12 +405,12 @@ exports.getFriendsBoards = async (req, res) => {
     return res.status(200).json(boards);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения досок друзей' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂўР В РЎвЂќ Р В РўвЂР РЋР вЂљР РЋРЎвЂњР В Р’В·Р В Р’ВµР В РІвЂћвЂ“' });
   }
 };
 
 
-/* Популярные открытые доски */
+/* Р В РЎСџР В РЎвЂўР В РЎвЂ”Р РЋРЎвЂњР В Р’В»Р РЋР РЏР РЋР вЂљР В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂќР РЋР вЂљР РЋРІР‚в„–Р РЋРІР‚С™Р РЋРІР‚в„–Р В Р’Вµ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ */
 exports.getPopularPublicBoards = async (req, res) => {
   try {
     const user_id = Number(req.user?.id);
@@ -406,7 +447,7 @@ exports.getPopularPublicBoards = async (req, res) => {
     return res.status(200).json(boards);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения популярных досок' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂ”Р В РЎвЂўР В РЎвЂ”Р РЋРЎвЂњР В Р’В»Р РЋР РЏР РЋР вЂљР В Р вЂ¦Р РЋРІР‚в„–Р РЋРІР‚В¦ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂўР В РЎвЂќ' });
   }
 };
 
@@ -415,7 +456,7 @@ exports.getPublicBoardById = async (req, res) => {
   try {
     const boardId = Number(req.params.board_id);
     if (!Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректный board_id' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ board_id' });
     }
 
     const user_id = Number(req.user?.id);
@@ -440,17 +481,17 @@ exports.getPublicBoardById = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     return res.status(200).json(rows[0]);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения доски' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ' });
   }
 };
 
-/* Последние посещённые доски */
+/* Р В РЎСџР В РЎвЂўР РЋР С“Р В Р’В»Р В Р’ВµР В РўвЂР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РЎвЂ”Р В РЎвЂўР РЋР С“Р В Р’ВµР РЋРІР‚В°Р РЋРІР‚ВР В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ */
 exports.getRecentBoards = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -478,13 +519,13 @@ exports.getRecentBoards = async (req, res) => {
     return res.status(200).json(boards);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения последних досок' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂ”Р В РЎвЂўР РЋР С“Р В Р’В»Р В Р’ВµР В РўвЂР В Р вЂ¦Р В РЎвЂР РЋРІР‚В¦ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂўР В РЎвЂќ' });
   }
 };
 
 
 
-/* Создать доску */
+/* Р В Р Р‹Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ */
 exports.createBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -502,19 +543,19 @@ exports.createBoard = async (req, res) => {
 
     if (!title) {
       if (req.file) await safeUnlinkUpload(image);
-      return res.status(400).json({ message: 'Название обязательно' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’В°Р В Р’В·Р В Р вЂ Р В Р’В°Р В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РЎвЂўР В Р’В±Р РЋР РЏР В Р’В·Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰Р В Р вЂ¦Р В РЎвЂў' });
     }
     if (title.length > 20) {
       if (req.file) await safeUnlinkUpload(image);
-      return res.status(400).json({ message: 'Название слишком длинное (max 20)' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’В°Р В Р’В·Р В Р вЂ Р В Р’В°Р В Р вЂ¦Р В РЎвЂР В Р’Вµ Р РЋР С“Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р В РЎвЂўР В Р’Вµ (max 20)' });
     }
     if (description && description.length > 80) {
       if (req.file) await safeUnlinkUpload(image);
-      return res.status(400).json({ message: 'Описание слишком длинное (max 80)' });
+      return res.status(400).json({ message: 'Р В РЎвЂєР В РЎвЂ”Р В РЎвЂР РЋР С“Р В Р’В°Р В Р вЂ¦Р В РЎвЂР В Р’Вµ Р РЋР С“Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р В РЎвЂўР В Р’Вµ (max 80)' });
     }
     if (image && image.length > 255) {
       if (req.file) await safeUnlinkUpload(image);
-      return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
+      return res.status(400).json({ message: 'Р В Р Р‹Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р РЋРЎвЂњР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂќ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В Р’Вµ (max 255)' });
     }
 
     const connection = await db.getConnection();
@@ -556,12 +597,12 @@ exports.createBoard = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка создания доски' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋР С“Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ' });
   }
 };
 
 
-/* Удалить доску */
+/* Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ */
 exports.deleteBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -578,7 +619,7 @@ exports.deleteBoard = async (req, res) => {
 
       if (!boardRows.length) {
         await connection.rollback();
-        return res.status(404).json({ message: 'Доска не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
 
       const boardImage = boardRows[0]?.image ?? null;
@@ -613,7 +654,7 @@ exports.deleteBoard = async (req, res) => {
 
       if (result.affectedRows === 0) {
         await connection.rollback();
-        return res.status(404).json({ message: 'Доска не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
 
       await connection.commit();
@@ -622,18 +663,18 @@ exports.deleteBoard = async (req, res) => {
         safeUnlinkUpload(boardImage);
       }
 
-      return res.status(200).json({ message: 'Доска удалена' });
+      return res.status(200).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В Р’В°' });
     } finally {
       connection.release();
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка удаления доски' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ' });
   }
 };
 
 
-/* Переименовать доску */
+/* Р В РЎСџР В Р’ВµР РЋР вЂљР В Р’ВµР В РЎвЂР В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ */
 exports.renameBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -642,10 +683,10 @@ exports.renameBoard = async (req, res) => {
     const title = String(req.body?.title ?? '').trim();
 
     if (!title) {
-      return res.status(400).json({ message: 'Название обязательно' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’В°Р В Р’В·Р В Р вЂ Р В Р’В°Р В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РЎвЂўР В Р’В±Р РЋР РЏР В Р’В·Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰Р В Р вЂ¦Р В РЎвЂў' });
     }
     if (title.length > 20) {
-      return res.status(400).json({ message: 'Название слишком длинное (max 20)' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’В°Р В Р’В·Р В Р вЂ Р В Р’В°Р В Р вЂ¦Р В РЎвЂР В Р’Вµ Р РЋР С“Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р В РЎвЂўР В Р’Вµ (max 20)' });
     }
 
     const [result] = await db.execute(
@@ -655,7 +696,7 @@ exports.renameBoard = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     try {
@@ -676,12 +717,12 @@ exports.renameBoard = async (req, res) => {
     return res.status(200).json({ title });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка переименования' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В Р’ВµР РЋР вЂљР В Р’ВµР В РЎвЂР В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
 
-/* Изменить описание */
+/* Р В Р’ВР В Р’В·Р В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂўР В РЎвЂ”Р В РЎвЂР РЋР С“Р В Р’В°Р В Р вЂ¦Р В РЎвЂР В Р’Вµ */
 exports.updateDescription = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -696,7 +737,7 @@ exports.updateDescription = async (req, res) => {
           : (String(descriptionRaw ?? '').trim() || null);
 
     if (description && description.length > 80) {
-      return res.status(400).json({ message: 'Описание слишком длинное (max 80)' });
+      return res.status(400).json({ message: 'Р В РЎвЂєР В РЎвЂ”Р В РЎвЂР РЋР С“Р В Р’В°Р В Р вЂ¦Р В РЎвЂР В Р’Вµ Р РЋР С“Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р В РЎвЂўР В Р’Вµ (max 80)' });
     }
 
     const [result] = await db.execute(
@@ -706,7 +747,7 @@ exports.updateDescription = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     try {
@@ -727,11 +768,11 @@ exports.updateDescription = async (req, res) => {
     return res.status(200).json({ description });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления описания' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂўР В РЎвЂ”Р В РЎвЂР РЋР С“Р В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
-/* Сделать доску публичной/приватной */
+/* Р В Р Р‹Р В РўвЂР В Р’ВµР В Р’В»Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ Р В РЎвЂ”Р РЋРЎвЂњР В Р’В±Р В Р’В»Р В РЎвЂР РЋРІР‚РЋР В Р вЂ¦Р В РЎвЂўР В РІвЂћвЂ“/Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р вЂ¦Р В РЎвЂўР В РІвЂћвЂ“ */
 exports.updateBoardPublic = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -749,7 +790,7 @@ exports.updateBoardPublic = async (req, res) => {
             : null;
 
     if (isPublic === null) {
-      return res.status(400).json({ message: 'Некорректный параметр is_public' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљ is_public' });
     }
 
     const value = isPublic ? 1 : 0;
@@ -760,7 +801,7 @@ exports.updateBoardPublic = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     try {
@@ -780,18 +821,18 @@ exports.updateBoardPublic = async (req, res) => {
     return res.status(200).json({ is_public: value });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления публичности' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂ”Р РЋРЎвЂњР В Р’В±Р В Р’В»Р В РЎвЂР РЋРІР‚РЋР В Р вЂ¦Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р В РЎвЂ' });
   }
 };
 
-/* Войти в публичную доску как гость (если ещё нет доступа) */
+/* Р В РІР‚в„ўР В РЎвЂўР В РІвЂћвЂ“Р РЋРІР‚С™Р В РЎвЂ Р В Р вЂ  Р В РЎвЂ”Р РЋРЎвЂњР В Р’В±Р В Р’В»Р В РЎвЂР РЋРІР‚РЋР В Р вЂ¦Р РЋРЎвЂњР РЋР вЂ№ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ Р В РЎвЂќР В Р’В°Р В РЎвЂќ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР Р‰ (Р В Р’ВµР РЋР С“Р В Р’В»Р В РЎвЂ Р В Р’ВµР РЋРІР‚В°Р РЋРІР‚В Р В Р вЂ¦Р В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°) */
 exports.joinPublicBoardAsGuest = async (req, res) => {
   try {
     const user_id = req.user.id;
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(
@@ -803,13 +844,13 @@ exports.joinPublicBoardAsGuest = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const board = boardRows[0];
     const isPublic = Number(board?.is_public) === 1;
     if (!isPublic) {
-      return res.status(403).json({ message: 'Доска не публичная' });
+      return res.status(403).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В РЎвЂ”Р РЋРЎвЂњР В Р’В±Р В Р’В»Р В РЎвЂР РЋРІР‚РЋР В Р вЂ¦Р В Р’В°Р РЋР РЏ' });
     }
 
     if (Number(board?.owner_id) === Number(user_id)) {
@@ -825,7 +866,7 @@ exports.joinPublicBoardAsGuest = async (req, res) => {
     );
 
     if (existing.length && String(existing[0]?.role) === 'blocked') {
-      return res.status(403).json({ message: 'Р”РѕСЃС‚СѓРї Р·Р°РїСЂРµС‰С‘РЅ' });
+      return res.status(403).json({ message: 'Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќ Р В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋРІР‚вЂќР В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљР’В°Р В Р Р‹Р Р†Р вЂљР’ВР В Р’В Р В РІР‚В¦' });
     }
 
     if (!existing.length) {
@@ -870,12 +911,12 @@ exports.joinPublicBoardAsGuest = async (req, res) => {
     return res.status(200).json({ board_id: boardId, my_role: 'guest' });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка входа в доску' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В Р вЂ Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂР В Р’В° Р В Р вЂ  Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ' });
   }
 };
 
 
-/* Изменить картинку */
+/* Р В Р’ВР В Р’В·Р В РЎВР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР РЋРЎвЂњ */
 exports.updateBoardImage = async (req, res) => {
   let newImage = null;
 
@@ -891,12 +932,12 @@ exports.updateBoardImage = async (req, res) => {
     } else if (req.body?.image === null) {
       newImage = null;
     } else {
-      return res.status(400).json({ message: 'Картинка обязательна' });
+      return res.status(400).json({ message: 'Р В РЎв„ўР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р РЋР РЏР В Р’В·Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰Р В Р вЂ¦Р В Р’В°' });
     }
 
     if (newImage && newImage.length > 255) {
       if (req.file) await safeUnlinkUpload(newImage);
-      return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
+      return res.status(400).json({ message: 'Р В Р Р‹Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р РЋРЎвЂњР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂќ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В Р’Вµ (max 255)' });
     }
 
     const [rows] = await db.execute(
@@ -908,7 +949,7 @@ exports.updateBoardImage = async (req, res) => {
 
     if (!rows.length) {
       if (req.file) await safeUnlinkUpload(newImage);
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const oldImage = rows[0]?.image ?? null;
@@ -944,29 +985,29 @@ exports.updateBoardImage = async (req, res) => {
       await safeUnlinkUpload(newImage);
     }
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления картинки' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В РЎвЂ' });
   }
 };
 
 
-/* Пригласить в доску по username/friend_code (только владелец) */
+/* Р В РЎСџР РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋР С“Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ  Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ Р В РЎвЂ”Р В РЎвЂў username/friend_code (Р РЋРІР‚С™Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В РЎвЂќР В РЎвЂў Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р В Р’ВµР РЋРІР‚В ) */
 exports.inviteToBoard = async (req, res) => {
   try {
     const inviter_id = req.user.id;
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(boardId)) {
-      return res.status(400).json({ message: 'Некорректный board_id' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ board_id' });
     }
 
     const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
     const friend_code = typeof req.body?.friend_code === 'string' ? req.body.friend_code.trim() : '';
 
     if (!username && !friend_code) {
-      return res.status(400).json({ message: 'Нужен username или friend_code' });
+      return res.status(400).json({ message: 'Р В РЎСљР РЋРЎвЂњР В Р’В¶Р В Р’ВµР В Р вЂ¦ username Р В РЎвЂР В Р’В»Р В РЎвЂ friend_code' });
     }
     if (username && friend_code) {
-      return res.status(400).json({ message: 'Укажи только одно: username или friend_code' });
+      return res.status(400).json({ message: 'Р В Р в‚¬Р В РЎвЂќР В Р’В°Р В Р’В¶Р В РЎвЂ Р РЋРІР‚С™Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В РЎвЂќР В РЎвЂў Р В РЎвЂўР В РўвЂР В Р вЂ¦Р В РЎвЂў: username Р В РЎвЂР В Р’В»Р В РЎвЂ friend_code' });
     }
 
     const [boardRows] = await db.execute(
@@ -978,12 +1019,12 @@ exports.inviteToBoard = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const boardOwnerId = boardRows[0].owner_id;
     if (boardOwnerId !== inviter_id) {
-      return res.status(403).json({ message: 'Только владелец может приглашать' });
+      return res.status(403).json({ message: 'Р В РЎС›Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В РЎвЂќР В РЎвЂў Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р В Р’ВµР РЋРІР‚В  Р В РЎВР В РЎвЂўР В Р’В¶Р В Р’ВµР РЋРІР‚С™ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰' });
     }
 
     let invited_id = null;
@@ -995,13 +1036,13 @@ exports.inviteToBoard = async (req, res) => {
       );
 
       if (!userRows.length) {
-        return res.status(404).json({ message: 'Пользователь не найден' });
+        return res.status(404).json({ message: 'Р В РЎСџР В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦' });
       }
 
       invited_id = userRows[0].id;
     } else {
       if (!/^\d{8}$/.test(friend_code)) {
-        return res.status(400).json({ message: 'Неверный friend_code' });
+        return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В Р вЂ Р В Р’ВµР РЋР вЂљР В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ friend_code' });
       }
 
       const [userRows] = await db.execute(
@@ -1010,18 +1051,18 @@ exports.inviteToBoard = async (req, res) => {
       );
 
       if (!userRows.length) {
-        return res.status(404).json({ message: 'Пользователь не найден' });
+        return res.status(404).json({ message: 'Р В РЎСџР В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦' });
       }
 
       invited_id = userRows[0].id;
     }
 
     if (invited_id === inviter_id) {
-      return res.status(400).json({ message: 'Нельзя пригласить себя' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В Р’В»Р РЋР Р‰Р В Р’В·Р РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋР С“Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р РЋР С“Р В Р’ВµР В Р’В±Р РЋР РЏ' });
     }
 
     if (invited_id === boardOwnerId) {
-      return res.status(400).json({ message: 'Пользователь уже владелец этой доски' });
+      return res.status(400).json({ message: 'Р В РЎСџР В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰ Р РЋРЎвЂњР В Р’В¶Р В Р’Вµ Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р В Р’ВµР РЋРІР‚В  Р РЋР РЉР РЋРІР‚С™Р В РЎвЂўР В РІвЂћвЂ“ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ' });
     }
 
     const [guestRows] = await db.execute(
@@ -1030,7 +1071,7 @@ exports.inviteToBoard = async (req, res) => {
     );
 
     if (guestRows.length && String(guestRows[0]?.role || '') !== 'blocked') {
-      return res.status(409).json({ message: 'Пользователь уже гость этой доски' });
+      return res.status(409).json({ message: 'Р В РЎСџР В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰ Р РЋРЎвЂњР В Р’В¶Р В Р’Вµ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР Р‰ Р РЋР РЉР РЋРІР‚С™Р В РЎвЂўР В РІвЂћвЂ“ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ' });
     }
 
     const [existingInvites] = await db.execute(
@@ -1045,10 +1086,10 @@ exports.inviteToBoard = async (req, res) => {
     if (existingInvites.length) {
       const existing = existingInvites[0];
       if (existing.status === 'sent') {
-        return res.status(409).json({ message: 'Приглашение уже отправлено', invite_id: existing.id, status: 'sent' });
+        return res.status(409).json({ message: 'Р В РЎСџР РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р РЋРЎвЂњР В Р’В¶Р В Р’Вµ Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂў', invite_id: existing.id, status: 'sent' });
       }
       if (existing.status === 'rejected') {
-        return res.status(409).json({ message: 'Пользователь отклонил приглашение', invite_id: existing.id, status: 'rejected' });
+        return res.status(409).json({ message: 'Р В РЎСџР В РЎвЂўР В Р’В»Р РЋР Р‰Р В Р’В·Р В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰ Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂќР В Р’В»Р В РЎвЂўР В Р вЂ¦Р В РЎвЂР В Р’В» Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ', invite_id: existing.id, status: 'rejected' });
       }
     }
 
@@ -1091,12 +1132,12 @@ exports.inviteToBoard = async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка отправки приглашения' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂ”Р РЋР вЂљР В Р’В°Р В Р вЂ Р В РЎвЂќР В РЎвЂ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
 
-/* Удалить гостя из доски (только владелец) */
+/* Р В Р в‚¬Р В РўвЂР В Р’В°Р В Р’В»Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР РЏ Р В РЎвЂР В Р’В· Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ (Р РЋРІР‚С™Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В РЎвЂќР В РЎвЂў Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р В Р’ВµР РЋРІР‚В ) */
 exports.removeGuestFromBoard = async (req, res) => {
   try {
     const owner_id = req.user.id;
@@ -1104,7 +1145,7 @@ exports.removeGuestFromBoard = async (req, res) => {
     const guestId = Number(req.params?.guest_id);
 
     if (!Number.isFinite(boardId) || !Number.isFinite(guestId)) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(
@@ -1113,15 +1154,15 @@ exports.removeGuestFromBoard = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     if (boardRows[0].owner_id !== owner_id) {
-      return res.status(403).json({ message: 'Только владелец может удалять гостей' });
+      return res.status(403).json({ message: 'Р В РЎС›Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В РЎвЂќР В РЎвЂў Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р В Р’ВµР РЋРІР‚В  Р В РЎВР В РЎвЂўР В Р’В¶Р В Р’ВµР РЋРІР‚С™ Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р РЋР РЏР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р В Р’ВµР В РІвЂћвЂ“' });
     }
 
     if (guestId === owner_id) {
-      return res.status(400).json({ message: 'Нельзя удалить владельца' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В Р’В»Р РЋР Р‰Р В Р’В·Р РЋР РЏ Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р РЋР Р‰Р РЋРІР‚В Р В Р’В°' });
     }
 
     const isPublic = Number(boardRows[0]?.is_public) === 1 || boardRows[0]?.is_public === true;
@@ -1145,7 +1186,7 @@ exports.removeGuestFromBoard = async (req, res) => {
     }
 
     if (affectedRows === 0) {
-      return res.status(404).json({ message: 'Гость не найден' });
+      return res.status(404).json({ message: 'Р В РІР‚СљР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦' });
     }
 
     await db.execute(
@@ -1165,16 +1206,16 @@ exports.removeGuestFromBoard = async (req, res) => {
       // ignore
     }
 
-    return res.status(200).json({ message: 'Гость удалён' });
+    return res.status(200).json({ message: 'Р В РІР‚СљР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР Р‰ Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р РЋРІР‚ВР В Р вЂ¦' });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка удаления гостя' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР РЏ' });
   }
 };
 
 
-/* Покинуть доску (для гостя) */
-/* Обновить роль гостя (только владелец) */
+/* Р В РЎСџР В РЎвЂўР В РЎвЂќР В РЎвЂР В Р вЂ¦Р РЋРЎвЂњР РЋРІР‚С™Р РЋР Р‰ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ (Р В РўвЂР В Р’В»Р РЋР РЏ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР РЏ) */
+/* Р В РЎвЂєР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰ Р В РЎвЂ“Р В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР РЏ (Р РЋРІР‚С™Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В РЎвЂќР В РЎвЂў Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р В Р’ВµР РЋРІР‚В ) */
 exports.updateGuestRole = async (req, res) => {
   try {
     const owner_id = req.user.id;
@@ -1183,11 +1224,11 @@ exports.updateGuestRole = async (req, res) => {
     const nextRole = String(req.body?.role || '').trim();
 
     if (!Number.isFinite(boardId) || !Number.isFinite(guestId)) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     if (nextRole !== 'guest' && nextRole !== 'editer') {
-      return res.status(400).json({ message: 'Некорректная роль' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р В Р’В°Р РЋР РЏ Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰' });
     }
 
     const [boardRows] = await db.execute(
@@ -1196,15 +1237,15 @@ exports.updateGuestRole = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     if (boardRows[0].owner_id !== owner_id) {
-      return res.status(403).json({ message: 'Только владелец может менять роли' });
+      return res.status(403).json({ message: 'Р В РЎС›Р В РЎвЂўР В Р’В»Р РЋР Р‰Р В РЎвЂќР В РЎвЂў Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р В Р’ВµР РЋРІР‚В  Р В РЎВР В РЎвЂўР В Р’В¶Р В Р’ВµР РЋРІР‚С™ Р В РЎВР В Р’ВµР В Р вЂ¦Р РЋР РЏР РЋРІР‚С™Р РЋР Р‰ Р РЋР вЂљР В РЎвЂўР В Р’В»Р В РЎвЂ' });
     }
 
     if (guestId === owner_id) {
-      return res.status(400).json({ message: 'Нельзя менять роль владельца' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В Р’В»Р РЋР Р‰Р В Р’В·Р РЋР РЏ Р В РЎВР В Р’ВµР В Р вЂ¦Р РЋР РЏР РЋРІР‚С™Р РЋР Р‰ Р РЋР вЂљР В РЎвЂўР В Р’В»Р РЋР Р‰ Р В Р вЂ Р В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р РЋР Р‰Р РЋРІР‚В Р В Р’В°' });
     }
 
     const [guestRows] = await db.execute(
@@ -1213,7 +1254,7 @@ exports.updateGuestRole = async (req, res) => {
     );
 
     if (!guestRows.length) {
-      return res.status(404).json({ message: 'Гость не найден' });
+      return res.status(404).json({ message: 'Р В РІР‚СљР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦' });
     }
 
     await db.execute(
@@ -1230,7 +1271,7 @@ exports.updateGuestRole = async (req, res) => {
     return res.status(204).end();
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка изменения роли' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂР В Р’В·Р В РЎВР В Р’ВµР В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР вЂљР В РЎвЂўР В Р’В»Р В РЎвЂ' });
   }
 };
 
@@ -1240,7 +1281,7 @@ exports.leaveBoard = async (req, res) => {
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(boardId)) {
-      return res.status(400).json({ message: 'Некорректный board_id' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ board_id' });
     }
 
     const [boardRows] = await db.execute(
@@ -1249,11 +1290,11 @@ exports.leaveBoard = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     if (boardRows[0].owner_id === user_id) {
-      return res.status(400).json({ message: 'Владелец не может покинуть доску' });
+      return res.status(400).json({ message: 'Р В РІР‚в„ўР В Р’В»Р В Р’В°Р В РўвЂР В Р’ВµР В Р’В»Р В Р’ВµР РЋРІР‚В  Р В Р вЂ¦Р В Р’Вµ Р В РЎВР В РЎвЂўР В Р’В¶Р В Р’ВµР РЋРІР‚С™ Р В РЎвЂ”Р В РЎвЂўР В РЎвЂќР В РЎвЂР В Р вЂ¦Р РЋРЎвЂњР РЋРІР‚С™Р РЋР Р‰ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР РЋРЎвЂњ' });
     }
 
     const [result] = await db.execute(
@@ -1267,7 +1308,7 @@ exports.leaveBoard = async (req, res) => {
     );
 
     if (result.affectedRows === 0) {
-      return res.status(404).json({ message: 'Р’С‹ РЅРµ РіРѕСЃС‚СЊ СЌС‚РѕР№ РґРѕСЃРєРё' });
+      return res.status(404).json({ message: 'Р В Р’В Р Р†Р вЂљРІвЂћСћР В Р Р‹Р Р†Р вЂљРІвЂћвЂ“ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚вЂњР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В Р вЂ° Р В Р Р‹Р В Р Р‰Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р Р†РІР‚С›РІР‚вЂњ Р В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚В' });
     }
     try {
       emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'left', board_id: boardId, user_id }, [user_id, boardRows[0]?.owner_id]);
@@ -1278,12 +1319,12 @@ exports.leaveBoard = async (req, res) => {
     return res.status(204).end();
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка выхода из доски' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В Р вЂ Р РЋРІР‚в„–Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂР В Р’В° Р В РЎвЂР В Р’В· Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ' });
   }
 };
 
 
-/* Зафиксировать посещение доски */
+/* Р В РІР‚вЂќР В Р’В°Р РЋРІР‚С›Р В РЎвЂР В РЎвЂќР РЋР С“Р В РЎвЂР РЋР вЂљР В РЎвЂўР В Р вЂ Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂ”Р В РЎвЂўР РЋР С“Р В Р’ВµР РЋРІР‚В°Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ */
 exports.visitBoard = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -1291,7 +1332,7 @@ exports.visitBoard = async (req, res) => {
     const boardId = Number(board_id);
 
     if (!Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     await db.execute(
@@ -1340,7 +1381,7 @@ exports.visitBoard = async (req, res) => {
     return res.status(204).end();
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка фиксации посещения' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋРІР‚С›Р В РЎвЂР В РЎвЂќР РЋР С“Р В Р’В°Р РЋРІР‚В Р В РЎвЂР В РЎвЂ Р В РЎвЂ”Р В РЎвЂўР РЋР С“Р В Р’ВµР РЋРІР‚В°Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
@@ -1366,18 +1407,18 @@ exports.getBoardById = async (req, res) => {
     );
 
     if (rows.length === 0) {
-    return res.status(404).json({ message: 'Доска не найдена' });
+    return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
   }
 
     return res.status(200).json(rows[0]);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения доски' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ' });
   }
 };
 
 
-/* Получить все данные доски */
+/* Р В РЎСџР В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В РЎвЂР РЋРІР‚С™Р РЋР Р‰ Р В Р вЂ Р РЋР С“Р В Р’Вµ Р В РўвЂР В Р’В°Р В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ */
 /* Participants list (owner + guests) */
 exports.getBoardParticipants = async (req, res) => {
   try {
@@ -1385,7 +1426,7 @@ exports.getBoardParticipants = async (req, res) => {
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(
@@ -1405,7 +1446,7 @@ exports.getBoardParticipants = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const board = boardRows[0];
@@ -1446,7 +1487,7 @@ exports.getBoardParticipants = async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения участников' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋРЎвЂњР РЋРІР‚РЋР В Р’В°Р РЋР С“Р РЋРІР‚С™Р В Р вЂ¦Р В РЎвЂР В РЎвЂќР В РЎвЂўР В Р вЂ ' });
   }
 };
 
@@ -1473,7 +1514,7 @@ exports.getBoardFull = async (req, res) => {
     );
 
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const board = boardRows[0];
@@ -1572,12 +1613,12 @@ exports.getBoardFull = async (req, res) => {
     });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения данных доски' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РўвЂР В Р’В°Р В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р РЋРІР‚В¦ Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ' });
   }
 };
 
 
-/* Приглашения в доски (входящие) */
+/* Р В РЎСџР РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В Р вЂ  Р В РўвЂР В РЎвЂўР РЋР С“Р В РЎвЂќР В РЎвЂ (Р В Р вЂ Р РЋРІР‚В¦Р В РЎвЂўР В РўвЂР РЋР РЏР РЋРІР‚В°Р В РЎвЂР В Р’Вµ) */
 exports.getIncomingBoardInvites = async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -1597,7 +1638,7 @@ exports.getIncomingBoardInvites = async (req, res) => {
     return res.status(200).json(invites);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения приглашений' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В РІвЂћвЂ“' });
   }
 };
 
@@ -1618,7 +1659,7 @@ exports.acceptBoardInvite = async (req, res) => {
 
     if (!rows.length) {
       await connection.rollback();
-      return res.status(404).json({ message: 'Приглашение не найдено' });
+      return res.status(404).json({ message: 'Р В РЎСџР РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В РЎвЂў' });
     }
 
     const board_id = rows[0].board_id;
@@ -1661,7 +1702,7 @@ exports.acceptBoardInvite = async (req, res) => {
     } catch {
       // ignore
     }
-    return res.status(200).json({ message: 'Приглашение принято' });
+    return res.status(200).json({ message: 'Р В РЎСџР РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В Р вЂ¦Р РЋР РЏР РЋРІР‚С™Р В РЎвЂў' });
   } catch (e) {
     try {
       await connection.rollback();
@@ -1669,7 +1710,7 @@ exports.acceptBoardInvite = async (req, res) => {
       // ignore
     }
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка принятия приглашения' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В Р вЂ¦Р РЋР РЏР РЋРІР‚С™Р В РЎвЂР РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   } finally {
     connection.release();
   }
@@ -1688,7 +1729,7 @@ exports.rejectBoardInvite = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(404).json({ message: 'Приглашение не найдено' });
+      return res.status(404).json({ message: 'Р В РЎСџР РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В РЎвЂў' });
     }
 
     await db.execute(
@@ -1709,10 +1750,10 @@ exports.rejectBoardInvite = async (req, res) => {
       // ignore
     }
 
-    return res.status(200).json({ message: 'Приглашение отклонено' });
+    return res.status(200).json({ message: 'Р В РЎСџР РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР В Р’Вµ Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂќР В Р’В»Р В РЎвЂўР В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂў' });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка отклонения приглашения' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР РЋРІР‚С™Р В РЎвЂќР В Р’В»Р В РЎвЂўР В Р вЂ¦Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂ”Р РЋР вЂљР В РЎвЂР В РЎвЂ“Р В Р’В»Р В Р’В°Р РЋРІвЂљВ¬Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
@@ -2120,30 +2161,37 @@ exports.createCard = async (req, res) => {
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const rawType = String(req.body?.type || '').trim();
     const rawTitle = String(req.body?.title || '').trim();
     const x = Number(req.body?.x);
     const y = Number(req.body?.y);
+    const colorResult = Object.prototype.hasOwnProperty.call(req.body || {}, 'color')
+      ? normalizeHexColor(req.body?.color)
+      : { ok: true, value: null };
 
     const allowedTypes = new Set(['rectangle', 'circle', 'diamond']);
     if (!allowedTypes.has(rawType)) {
-      return res.status(400).json({ message: 'Некорректный тип' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р РЋРІР‚С™Р В РЎвЂР В РЎвЂ”' });
     }
 
     if (!rawTitle || rawTitle.length > 50) {
-      return res.status(400).json({ message: 'Некорректный заголовок' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В Р’В·Р В Р’В°Р В РЎвЂ“Р В РЎвЂўР В Р’В»Р В РЎвЂўР В Р вЂ Р В РЎвЂўР В РЎвЂќ' });
     }
 
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      return res.status(400).json({ message: 'Некорректные координаты' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂќР В РЎвЂўР В РЎвЂўР РЋР вЂљР В РўвЂР В РЎвЂР В Р вЂ¦Р В Р’В°Р РЋРІР‚С™Р РЋРІР‚в„–' });
+    }
+
+    if (!colorResult.ok) {
+      return res.status(400).json({ message: 'Invalid color' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -2158,7 +2206,7 @@ exports.createCard = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const connection = await db.getConnection();
@@ -2166,9 +2214,9 @@ exports.createCard = async (req, res) => {
       await connection.beginTransaction();
 
       const [result] = await connection.execute(
-        `INSERT INTO cards (board_id, type, title, x, y)
-         VALUES (?, ?, ?, ?, ?)`,
-        [boardId, rawType, rawTitle, x, y]
+        `INSERT INTO cards (board_id, type, title, color, x, y)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [boardId, rawType, rawTitle, colorResult.value, x, y]
       );
 
       const id = Number(result?.insertId);
@@ -2187,6 +2235,7 @@ exports.createCard = async (req, res) => {
         board_id: boardId,
         type: rawType,
         title: rawTitle,
+        color: colorResult.value,
         x,
         y,
       });
@@ -2202,7 +2251,7 @@ exports.createCard = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка создания записи' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋР С“Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В Р’В·Р В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р В РЎвЂ' });
   }
 };
 
@@ -2213,7 +2262,7 @@ exports.getBoardCards = async (req, res) => {
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [accessRows] = await db.execute(
@@ -2226,11 +2275,11 @@ exports.getBoardCards = async (req, res) => {
     );
 
     if (!accessRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const [rows] = await db.execute(
-      `SELECT id, board_id, type, title, image_path, is_locked, x, y, created_at
+      `SELECT id, board_id, type, title, image_path, color, is_locked, x, y, created_at
        FROM cards
        WHERE board_id = ?
        ORDER BY created_at ASC, id ASC`,
@@ -2240,7 +2289,96 @@ exports.getBoardCards = async (req, res) => {
     return res.status(200).json(rows);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения записей' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В Р’В·Р В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р В Р’ВµР В РІвЂћвЂ“' });
+  }
+};
+
+exports.getFavoriteCardColors = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РІР‚С™Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“' });
+    }
+
+    const hasAccess = await canUserAccessBoard(user_id, boardId);
+    if (!hasAccess) {
+      return res.status(404).json({ message: 'Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°' });
+    }
+
+    const colors = await loadFavoriteCardColors(user_id);
+    return res.status(200).json({ colors });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р’В Р РЋРІР‚вЂќР В Р’В Р РЋРІР‚СћР В Р’В Р вЂ™Р’В»Р В Р Р‹Р РЋРІР‚СљР В Р Р‹Р Р†Р вЂљР Р‹Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В·Р В Р’В Р вЂ™Р’В±Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р В РІР‚В¦Р В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р Р‹Р Р†Р вЂљР’В¦ Р В Р Р‹Р Р†Р вЂљР’В Р В Р’В Р В РІР‚В Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚СћР В Р’В Р В РІР‚В ' });
+  }
+};
+
+exports.addFavoriteCardColor = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РІР‚С™Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“' });
+    }
+
+    const colorResult = normalizeHexColor(req.body?.color);
+    if (!colorResult.ok || !colorResult.value) {
+      return res.status(400).json({ message: 'Invalid color' });
+    }
+
+    const hasAccess = await canUserAccessBoard(user_id, boardId);
+    if (!hasAccess) {
+      return res.status(404).json({ message: 'Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°' });
+    }
+
+    await db.execute(
+      `INSERT INTO user_card_color_favorites (user_id, color)
+       VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE color = VALUES(color)`,
+      [user_id, colorResult.value]
+    );
+
+    const colors = await loadFavoriteCardColors(user_id);
+    return res.status(200).json({ colors });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Failed to save favorite color' });
+  }
+};
+
+exports.deleteFavoriteCardColor = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РІР‚С™Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“' });
+    }
+
+    const colorResult = normalizeHexColor(req.params?.color);
+    if (!colorResult.ok || !colorResult.value) {
+      return res.status(400).json({ message: 'Invalid color' });
+    }
+
+    const hasAccess = await canUserAccessBoard(user_id, boardId);
+    if (!hasAccess) {
+      return res.status(404).json({ message: 'Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°' });
+    }
+
+    await db.execute(
+      `DELETE FROM user_card_color_favorites
+       WHERE user_id = ? AND color = ?`,
+      [user_id, colorResult.value]
+    );
+
+    const colors = await loadFavoriteCardColors(user_id);
+    return res.status(200).json({ colors });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Failed to delete favorite color' });
   }
 };
 
@@ -2259,7 +2397,7 @@ exports.getCardDetails = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [accessRows] = await db.execute(
@@ -2272,7 +2410,7 @@ exports.getCardDetails = async (req, res) => {
     );
 
     if (!accessRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const connection = await db.getConnection();
@@ -2286,7 +2424,7 @@ exports.getCardDetails = async (req, res) => {
       );
 
       if (!cardRows.length) {
-        return res.status(404).json({ message: 'Запись не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
 
       await ensureCardDetailsDefaults(connection, {
@@ -2296,7 +2434,7 @@ exports.getCardDetails = async (req, res) => {
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
       if (!payload) {
-        return res.status(404).json({ message: 'Запись не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
 
       return res.status(200).json(payload);
@@ -2305,7 +2443,7 @@ exports.getCardDetails = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения карточки' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂўР РЋРІР‚РЋР В РЎвЂќР В РЎвЂ' });
   }
 };
 
@@ -2313,7 +2451,7 @@ exports.getPublicBoardCards = async (req, res) => {
   try {
     const boardId = Number(req.params?.board_id);
     if (!Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const userId = req.user?.id ? Number(req.user.id) : null;
@@ -2328,7 +2466,7 @@ exports.getPublicBoardCards = async (req, res) => {
         [userId, boardId]
       );
       if (!boardRows.length) {
-        return res.status(404).json({ message: 'Доска не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
     } else {
       const [boardRows] = await db.execute(
@@ -2339,12 +2477,12 @@ exports.getPublicBoardCards = async (req, res) => {
         [boardId]
       );
       if (!boardRows.length) {
-        return res.status(404).json({ message: 'Доска не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
     }
 
     const [rows] = await db.execute(
-      `SELECT id, board_id, type, title, image_path, is_locked, x, y, created_at
+      `SELECT id, board_id, type, title, image_path, color, is_locked, x, y, created_at
        FROM cards
        WHERE board_id = ?
        ORDER BY created_at ASC, id ASC`,
@@ -2354,7 +2492,7 @@ exports.getPublicBoardCards = async (req, res) => {
     return res.status(200).json(rows);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения записей' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В Р’В·Р В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р В Р’ВµР В РІвЂћвЂ“' });
   }
 };
 
@@ -2364,7 +2502,7 @@ exports.getPublicCardDetails = async (req, res) => {
     const cardId = Number(req.params?.card_id);
 
     if (!Number.isFinite(boardId) || boardId <= 0 || !Number.isFinite(cardId) || cardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const userId = req.user?.id ? Number(req.user.id) : null;
@@ -2379,7 +2517,7 @@ exports.getPublicCardDetails = async (req, res) => {
         [userId, boardId]
       );
       if (!boardRows.length) {
-        return res.status(404).json({ message: 'Доска не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
     } else {
       const [boardRows] = await db.execute(
@@ -2390,7 +2528,7 @@ exports.getPublicCardDetails = async (req, res) => {
         [boardId]
       );
       if (!boardRows.length) {
-        return res.status(404).json({ message: 'Доска не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
     }
 
@@ -2405,7 +2543,7 @@ exports.getPublicCardDetails = async (req, res) => {
       );
 
       if (!cardRows.length) {
-        return res.status(404).json({ message: 'Запись не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
 
       await ensureCardDetailsDefaults(connection, {
@@ -2415,7 +2553,7 @@ exports.getPublicCardDetails = async (req, res) => {
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
       if (!payload) {
-        return res.status(404).json({ message: 'Запись не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
 
       return res.status(200).json(payload);
@@ -2424,7 +2562,7 @@ exports.getPublicCardDetails = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения карточки' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂўР РЋРІР‚РЋР В РЎвЂќР В РЎвЂ' });
   }
 };
 
@@ -2445,18 +2583,18 @@ exports.createCardDetailsBlock = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     if (!CARD_DETAIL_BLOCK_TYPES.has(blockType)) {
       if (req.file) await safeUnlinkUpload(`/uploads/${req.file.filename}`);
-      return res.status(400).json({ message: 'Некорректный тип блока' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р РЋРІР‚С™Р В РЎвЂР В РЎвЂ” Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В Р’В°' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
       if (req.file) await safeUnlinkUpload(`/uploads/${req.file.filename}`);
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -2471,24 +2609,24 @@ exports.createCardDetailsBlock = async (req, res) => {
 
     if (!canEdit) {
       if (req.file) await safeUnlinkUpload(`/uploads/${req.file.filename}`);
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     if (blockType === 'image') {
       if (!req.file) {
-        return res.status(400).json({ message: 'Картинка обязательна' });
+        return res.status(400).json({ message: 'Р В РЎв„ўР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р РЋР РЏР В Р’В·Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰Р В Р вЂ¦Р В Р’В°' });
       }
       newImage = `/uploads/${req.file.filename}`;
       if (newImage.length > 255) {
         await safeUnlinkUpload(newImage);
-        return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
+        return res.status(400).json({ message: 'Р В Р Р‹Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р РЋРЎвЂњР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂќ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В Р’Вµ (max 255)' });
       }
     }
 
     if (blockType === 'text') {
       const textResult = normalizeCardDetailTextContent(req.body?.content);
       if (!textResult.ok) {
-        return res.status(400).json({ message: 'Пустой текст нельзя сохранить' });
+        return res.status(400).json({ message: 'Р В РЎСџР РЋРЎвЂњР РЋР С“Р РЋРІР‚С™Р В РЎвЂўР В РІвЂћвЂ“ Р РЋРІР‚С™Р В Р’ВµР В РЎвЂќР РЋР С“Р РЋРІР‚С™ Р В Р вЂ¦Р В Р’ВµР В Р’В»Р РЋР Р‰Р В Р’В·Р РЋР РЏ Р РЋР С“Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰' });
       }
     }
 
@@ -2507,7 +2645,7 @@ exports.createCardDetailsBlock = async (req, res) => {
       if (!cardRows.length) {
         await connection.rollback();
         if (newImage) await safeUnlinkUpload(newImage);
-        return res.status(404).json({ message: 'Запись не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
 
       await ensureCardDetailsDefaults(connection, {
@@ -2554,7 +2692,7 @@ exports.createCardDetailsBlock = async (req, res) => {
   } catch (e) {
     if (newImage) await safeUnlinkUpload(newImage);
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка создания блока' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋР С“Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В Р’В°' });
   }
 };
 exports.updateCardDetailsBlock = async (req, res) => {
@@ -2576,12 +2714,12 @@ exports.updateCardDetailsBlock = async (req, res) => {
       !Number.isFinite(blockId) ||
       blockId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -2595,7 +2733,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const connection = await db.getConnection();
@@ -2610,7 +2748,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
       );
 
       if (!blockRows.length) {
-        return res.status(404).json({ message: 'Блок не найден' });
+        return res.status(404).json({ message: 'Р В РІР‚ВР В Р’В»Р В РЎвЂўР В РЎвЂќ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦' });
       }
 
       const blockType = String(blockRows[0]?.block_type || '');
@@ -2618,7 +2756,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
       if (blockType === 'text') {
         const textResult = normalizeCardDetailTextContent(req.body?.content);
         if (!textResult.ok) {
-          return res.status(400).json({ message: 'Пустой текст нельзя сохранить' });
+          return res.status(400).json({ message: 'Р В РЎСџР РЋРЎвЂњР РЋР С“Р РЋРІР‚С™Р В РЎвЂўР В РІвЂћвЂ“ Р РЋРІР‚С™Р В Р’ВµР В РЎвЂќР РЋР С“Р РЋРІР‚С™ Р В Р вЂ¦Р В Р’ВµР В Р’В»Р РЋР Р‰Р В Р’В·Р РЋР РЏ Р РЋР С“Р В РЎвЂўР РЋРІР‚В¦Р РЋР вЂљР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋРІР‚С™Р РЋР Р‰' });
         }
 
         await connection.execute(
@@ -2637,7 +2775,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
         if (hasCaption) {
           const captionResult = normalizeCardDetailCaption(req.body?.caption);
           if (!captionResult.ok) {
-            return res.status(400).json({ message: 'Некорректная подпись' });
+            return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р В Р’В°Р РЋР РЏ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰' });
           }
           updates.push('caption = ?');
           params.push(captionResult.value);
@@ -2657,7 +2795,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
 
           if (newImage && newImage.length > 255) {
             await safeUnlinkUpload(newImage);
-            return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
+            return res.status(400).json({ message: 'Р В Р Р‹Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р РЋРЎвЂњР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂќ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В Р’Вµ (max 255)' });
           }
 
           updates.push('image_path = ?');
@@ -2671,7 +2809,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
         }
 
         if (!updates.length) {
-          return res.status(400).json({ message: 'Нет полей для обновления' });
+          return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р В Р’ВµР В РІвЂћвЂ“ Р В РўвЂР В Р’В»Р РЋР РЏ Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
         }
 
         params.push(blockId);
@@ -2682,7 +2820,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
           params
         );
       } else {
-        return res.status(400).json({ message: 'Этот блок пока не поддерживает PATCH' });
+        return res.status(400).json({ message: 'Р В Р’В­Р РЋРІР‚С™Р В РЎвЂўР РЋРІР‚С™ Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќ Р В РЎвЂ”Р В РЎвЂўР В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В РЎвЂ”Р В РЎвЂўР В РўвЂР В РўвЂР В Р’ВµР РЋР вЂљР В Р’В¶Р В РЎвЂР В Р вЂ Р В Р’В°Р В Р’ВµР РЋРІР‚С™ PATCH' });
       }
 
       const payload = await loadCardDetailsPayload(connection, cardId, boardId);
@@ -2694,7 +2832,7 @@ exports.updateCardDetailsBlock = async (req, res) => {
   } catch (e) {
     if (newImage) await safeUnlinkUpload(newImage);
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления блока' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В Р’В°' });
   }
 };
 
@@ -2715,12 +2853,12 @@ exports.deleteCardDetailsBlock = async (req, res) => {
       !Number.isFinite(blockId) ||
       blockId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -2734,7 +2872,7 @@ exports.deleteCardDetailsBlock = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const connection = await db.getConnection();
@@ -2750,7 +2888,7 @@ exports.deleteCardDetailsBlock = async (req, res) => {
       );
 
       if (!blockRows.length) {
-        return res.status(404).json({ message: 'Блок не найден' });
+        return res.status(404).json({ message: 'Р В РІР‚ВР В Р’В»Р В РЎвЂўР В РЎвЂќ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦' });
       }
 
       const imagePath = blockRows[0]?.image_path ?? null;
@@ -2767,7 +2905,7 @@ exports.deleteCardDetailsBlock = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка удаления блока' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В Р’В°' });
   }
 };
 exports.createCardDetailsBlockItem = async (req, res) => {
@@ -2787,17 +2925,17 @@ exports.createCardDetailsBlockItem = async (req, res) => {
       !Number.isFinite(blockId) ||
       blockId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const itemResult = normalizeCardDetailItemContent(req.body?.content);
     if (!itemResult.ok) {
-      return res.status(400).json({ message: 'Некорректный текст элемента' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р РЋРІР‚С™Р В Р’ВµР В РЎвЂќР РЋР С“Р РЋРІР‚С™ Р РЋР РЉР В Р’В»Р В Р’ВµР В РЎВР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -2811,7 +2949,7 @@ exports.createCardDetailsBlockItem = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const connection = await db.getConnection();
@@ -2826,12 +2964,12 @@ exports.createCardDetailsBlockItem = async (req, res) => {
       );
 
       if (!blockRows.length) {
-        return res.status(404).json({ message: 'Блок не найден' });
+        return res.status(404).json({ message: 'Р В РІР‚ВР В Р’В»Р В РЎвЂўР В РЎвЂќ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦' });
       }
 
       const blockType = String(blockRows[0]?.block_type || '');
       if (blockType !== 'facts' && blockType !== 'checklist') {
-        return res.status(400).json({ message: 'Некорректный тип блока для элементов' });
+        return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р РЋРІР‚С™Р В РЎвЂР В РЎвЂ” Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В Р’В° Р В РўвЂР В Р’В»Р РЋР РЏ Р РЋР РЉР В Р’В»Р В Р’ВµР В РЎВР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В РЎвЂўР В Р вЂ ' });
       }
 
       const tableName = blockType === 'facts' ? 'carddetail_fact_items' : 'carddetail_checklist_items';
@@ -2865,7 +3003,7 @@ exports.createCardDetailsBlockItem = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка создания элемента' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋР С“Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР РЉР В Р’В»Р В Р’ВµР В РЎВР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°' });
   }
 };
 
@@ -2889,12 +3027,12 @@ exports.updateCardDetailsBlockItem = async (req, res) => {
       !Number.isFinite(itemId) ||
       itemId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -2908,7 +3046,7 @@ exports.updateCardDetailsBlockItem = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const connection = await db.getConnection();
@@ -2923,12 +3061,12 @@ exports.updateCardDetailsBlockItem = async (req, res) => {
       );
 
       if (!blockRows.length) {
-        return res.status(404).json({ message: 'Блок не найден' });
+        return res.status(404).json({ message: 'Р В РІР‚ВР В Р’В»Р В РЎвЂўР В РЎвЂќ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦' });
       }
 
       const blockType = String(blockRows[0]?.block_type || '');
       if (blockType !== 'facts' && blockType !== 'checklist') {
-        return res.status(400).json({ message: 'Некорректный тип блока для элемента' });
+        return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р РЋРІР‚С™Р В РЎвЂР В РЎвЂ” Р В Р’В±Р В Р’В»Р В РЎвЂўР В РЎвЂќР В Р’В° Р В РўвЂР В Р’В»Р РЋР РЏ Р РЋР РЉР В Р’В»Р В Р’ВµР В РЎВР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°' });
       }
 
       const itemResult = Object.prototype.hasOwnProperty.call(req.body || {}, 'content')
@@ -2936,12 +3074,12 @@ exports.updateCardDetailsBlockItem = async (req, res) => {
         : null;
 
       if (itemResult && !itemResult.ok) {
-        return res.status(400).json({ message: 'Некорректный текст элемента' });
+        return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р РЋРІР‚С™Р В Р’ВµР В РЎвЂќР РЋР С“Р РЋРІР‚С™ Р РЋР РЉР В Р’В»Р В Р’ВµР В РЎВР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°' });
       }
 
       if (blockType === 'facts') {
         if (!itemResult) {
-          return res.status(400).json({ message: 'Нет полей для обновления' });
+          return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р В Р’ВµР В РІвЂћвЂ“ Р В РўвЂР В Р’В»Р РЋР РЏ Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
         }
 
         await connection.execute(
@@ -2965,7 +3103,7 @@ exports.updateCardDetailsBlockItem = async (req, res) => {
         }
 
         if (!updates.length) {
-          return res.status(400).json({ message: 'Нет полей для обновления' });
+          return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р В Р’ВµР В РІвЂћвЂ“ Р В РўвЂР В Р’В»Р РЋР РЏ Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
         }
 
         params.push(itemId, blockId);
@@ -2985,7 +3123,7 @@ exports.updateCardDetailsBlockItem = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления элемента' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР РЉР В Р’В»Р В Р’ВµР В РЎВР В Р’ВµР В Р вЂ¦Р РЋРІР‚С™Р В Р’В°' });
   }
 };
 exports.deleteCardDetailsBlockItem = async (req, res) => {
@@ -3008,12 +3146,12 @@ exports.deleteCardDetailsBlockItem = async (req, res) => {
       !Number.isFinite(itemId) ||
       itemId <= 0
     ) {
-      return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹' });
+      return res.status(400).json({ message: 'Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РІР‚С™Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’В°Р В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р В РІР‚С™Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°' });
+      return res.status(404).json({ message: 'Р В Р’В Р Р†Р вЂљРЎСљР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3027,7 +3165,7 @@ exports.deleteCardDetailsBlockItem = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'РќРµС‚ РґРѕСЃС‚СѓРїР°' });
+      return res.status(403).json({ message: 'Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’ВµР В Р Р‹Р Р†Р вЂљРЎв„ў Р В Р’В Р СћРІР‚ВР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РЎвЂњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р Р‹Р РЋРІР‚СљР В Р’В Р РЋРІР‚вЂќР В Р’В Р вЂ™Р’В°' });
     }
 
     const connection = await db.getConnection();
@@ -3042,12 +3180,12 @@ exports.deleteCardDetailsBlockItem = async (req, res) => {
       );
 
       if (!blockRows.length) {
-        return res.status(404).json({ message: 'Р‘Р»РѕРє РЅРµ РЅР°Р№РґРµРЅ' });
+        return res.status(404).json({ message: 'Р В Р’В Р Р†Р вЂљР’ВР В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚Сњ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’Вµ Р В Р’В Р В РІР‚В¦Р В Р’В Р вЂ™Р’В°Р В Р’В Р Р†РІР‚С›РІР‚вЂњР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦' });
       }
 
       const blockType = String(blockRows[0]?.block_type || '');
       if (blockType !== 'facts' && blockType !== 'checklist') {
-        return res.status(400).json({ message: 'РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РёРї Р±Р»РѕРєР° РґР»СЏ СЌР»РµРјРµРЅС‚Р°' });
+        return res.status(400).json({ message: 'Р В Р’В Р РЋРЎС™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р’В Р РЋРІР‚СћР В Р Р‹Р В РІР‚С™Р В Р Р‹Р В РІР‚С™Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋРІР‚СњР В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРІвЂћвЂ“Р В Р’В Р Р†РІР‚С›РІР‚вЂњ Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р РЋРІР‚ВР В Р’В Р РЋРІР‚вЂќ Р В Р’В Р вЂ™Р’В±Р В Р’В Р вЂ™Р’В»Р В Р’В Р РЋРІР‚СћР В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В»Р В Р Р‹Р В Р РЏ Р В Р Р‹Р В Р Р‰Р В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°' });
       }
 
       const tableName = blockType === 'facts' ? 'carddetail_fact_items' : 'carddetail_checklist_items';
@@ -3080,7 +3218,7 @@ exports.deleteCardDetailsBlockItem = async (req, res) => {
     }
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'РћС€РёР±РєР° СѓРґР°Р»РµРЅРёСЏ СЌР»РµРјРµРЅС‚Р°' });
+    return res.status(500).json({ message: 'Р В Р’В Р РЋРІР‚С”Р В Р Р‹Р Р†РІР‚С™Р’В¬Р В Р’В Р РЋРІР‚ВР В Р’В Р вЂ™Р’В±Р В Р’В Р РЋРІР‚СњР В Р’В Р вЂ™Р’В° Р В Р Р‹Р РЋРІР‚СљР В Р’В Р СћРІР‚ВР В Р’В Р вЂ™Р’В°Р В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р’В Р РЋРІР‚ВР В Р Р‹Р В Р РЏ Р В Р Р‹Р В Р Р‰Р В Р’В Р вЂ™Р’В»Р В Р’В Р вЂ™Р’ВµР В Р’В Р РЋР’ВР В Р’В Р вЂ™Р’ВµР В Р’В Р В РІР‚В¦Р В Р Р‹Р Р†Р вЂљРЎв„ўР В Р’В Р вЂ™Р’В°' });
   }
 };
 exports.getBoardLinks = async (req, res) => {
@@ -3089,7 +3227,7 @@ exports.getBoardLinks = async (req, res) => {
     const boardId = Number(req.params?.board_id);
 
     if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [accessRows] = await db.execute(
@@ -3102,7 +3240,7 @@ exports.getBoardLinks = async (req, res) => {
     );
 
     if (!accessRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const [rows] = await db.execute(
@@ -3116,7 +3254,7 @@ exports.getBoardLinks = async (req, res) => {
     return res.status(200).json(rows);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения связей' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В Р’ВµР В РІвЂћвЂ“' });
   }
 };
 
@@ -3124,7 +3262,7 @@ exports.getPublicBoardLinks = async (req, res) => {
   try {
     const boardId = Number(req.params?.board_id);
     if (!Number.isFinite(boardId) || boardId <= 0) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const userId = req.user?.id ? Number(req.user.id) : null;
@@ -3139,7 +3277,7 @@ exports.getPublicBoardLinks = async (req, res) => {
         [userId, boardId]
       );
       if (!boardRows.length) {
-        return res.status(404).json({ message: 'Доска не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
     } else {
       const [boardRows] = await db.execute(
@@ -3150,7 +3288,7 @@ exports.getPublicBoardLinks = async (req, res) => {
         [boardId]
       );
       if (!boardRows.length) {
-        return res.status(404).json({ message: 'Доска не найдена' });
+        return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
       }
     }
 
@@ -3165,7 +3303,7 @@ exports.getPublicBoardLinks = async (req, res) => {
     return res.status(200).json(rows);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка получения связей' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р РЋРЎвЂњР РЋРІР‚РЋР В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В Р’ВµР В РІвЂћвЂ“' });
   }
 };
 
@@ -3194,16 +3332,16 @@ exports.createCardLink = async (req, res) => {
       !Number.isFinite(toCardId) ||
       toCardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     if (fromCardId === toCardId) {
-      return res.status(400).json({ message: 'Нельзя связать карточку с самой собой' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В Р’В»Р РЋР Р‰Р В Р’В·Р РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В Р’В°Р РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂўР РЋРІР‚РЋР В РЎвЂќР РЋРЎвЂњ Р РЋР С“ Р РЋР С“Р В Р’В°Р В РЎВР В РЎвЂўР В РІвЂћвЂ“ Р РЋР С“Р В РЎвЂўР В Р’В±Р В РЎвЂўР В РІвЂћвЂ“' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3218,7 +3356,7 @@ exports.createCardLink = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [cardRows] = await db.execute(
@@ -3226,7 +3364,7 @@ exports.createCardLink = async (req, res) => {
       [boardId, fromCardId, toCardId]
     );
     if (!Array.isArray(cardRows) || cardRows.length !== 2) {
-      return res.status(404).json({ message: 'Карточки не найдены' });
+      return res.status(404).json({ message: 'Р В РЎв„ўР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂўР РЋРІР‚РЋР В РЎвЂќР В РЎвЂ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р РЋРІР‚в„–' });
     }
 
     // Enforce "single attachment point": one link per (from,to,style)
@@ -3251,7 +3389,7 @@ exports.createCardLink = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(500).json({ message: 'Ошибка создания связи' });
+      return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋР С“Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В РЎвЂ' });
     }
 
     const link = rows[0];
@@ -3269,7 +3407,7 @@ exports.createCardLink = async (req, res) => {
     return res.status(200).json(link);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка создания связи' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋР С“Р В РЎвЂўР В Р’В·Р В РўвЂР В Р’В°Р В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В РЎвЂ' });
   }
 };
 
@@ -3287,12 +3425,12 @@ exports.updateCardLink = async (req, res) => {
       !Number.isFinite(linkId) ||
       linkId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3307,7 +3445,7 @@ exports.updateCardLink = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [existingRows] = await db.execute(
@@ -3319,7 +3457,7 @@ exports.updateCardLink = async (req, res) => {
     );
 
     if (!existingRows.length) {
-      return res.status(404).json({ message: 'Связь не найдена' });
+      return res.status(404).json({ message: 'Р В Р Р‹Р В Р вЂ Р РЋР РЏР В Р’В·Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const existing = existingRows[0];
@@ -3375,7 +3513,7 @@ exports.updateCardLink = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(500).json({ message: 'Ошибка обновления связи' });
+      return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В РЎвЂ' });
     }
 
     const link = rows[0];
@@ -3393,7 +3531,7 @@ exports.updateCardLink = async (req, res) => {
     return res.status(200).json(link);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления связи' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В РЎвЂ' });
   }
 };
 
@@ -3411,12 +3549,12 @@ exports.flipCardLinkDirection = async (req, res) => {
       !Number.isFinite(linkId) ||
       linkId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3431,7 +3569,7 @@ exports.flipCardLinkDirection = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [existingRows] = await db.execute(
@@ -3443,7 +3581,7 @@ exports.flipCardLinkDirection = async (req, res) => {
     );
 
     if (!existingRows.length) {
-      return res.status(404).json({ message: 'Связь не найдена' });
+      return res.status(404).json({ message: 'Р В Р Р‹Р В Р вЂ Р РЋР РЏР В Р’В·Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const existing = existingRows[0];
@@ -3451,7 +3589,7 @@ exports.flipCardLinkDirection = async (req, res) => {
     const nextTo = Number(existing.from_card_id);
 
     if (!Number.isFinite(nextFrom) || !Number.isFinite(nextTo) || nextFrom <= 0 || nextTo <= 0) {
-      return res.status(500).json({ message: 'Ошибка обновления связи' });
+      return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В РЎвЂ' });
     }
 
     await db.execute(
@@ -3476,7 +3614,7 @@ exports.flipCardLinkDirection = async (req, res) => {
     );
 
     if (!rows.length) {
-      return res.status(500).json({ message: 'Ошибка обновления связи' });
+      return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В РЎвЂ' });
     }
 
     const link = rows[0];
@@ -3494,7 +3632,7 @@ exports.flipCardLinkDirection = async (req, res) => {
     return res.status(200).json(link);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления связи' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В РЎвЂ' });
   }
 };
 
@@ -3512,12 +3650,12 @@ exports.deleteCardLink = async (req, res) => {
       !Number.isFinite(linkId) ||
       linkId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3532,12 +3670,12 @@ exports.deleteCardLink = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [rows] = await db.execute(`SELECT id FROM cardlinks WHERE id = ? AND board_id = ? LIMIT 1`, [linkId, boardId]);
     if (!rows.length) {
-      return res.status(404).json({ message: 'Связь не найдена' });
+      return res.status(404).json({ message: 'Р В Р Р‹Р В Р вЂ Р РЋР РЏР В Р’В·Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     await db.execute(`DELETE FROM cardlinks WHERE id = ? AND board_id = ?`, [linkId, boardId]);
@@ -3545,7 +3683,7 @@ exports.deleteCardLink = async (req, res) => {
     return res.status(200).json({ id: linkId, board_id: boardId });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка удаления связи' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р РЋР С“Р В Р вЂ Р РЋР РЏР В Р’В·Р В РЎвЂ' });
   }
 };
 
@@ -3564,14 +3702,14 @@ exports.updateCardLock = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const is_locked = Boolean(req.body?.is_locked);
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3586,12 +3724,12 @@ exports.updateCardLock = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
     if (!cardRows.length) {
-      return res.status(404).json({ message: 'Запись не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     await db.execute(`UPDATE cards SET is_locked = ? WHERE id = ? AND board_id = ?`, [is_locked ? 1 : 0, cardId, boardId]);
@@ -3599,7 +3737,7 @@ exports.updateCardLock = async (req, res) => {
     return res.status(200).json({ id: cardId, board_id: boardId, is_locked: is_locked ? 1 : 0 });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
@@ -3620,7 +3758,7 @@ exports.updateCardImage = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     if (req.file) {
@@ -3628,18 +3766,18 @@ exports.updateCardImage = async (req, res) => {
     } else if (req.body?.image === null) {
       newImage = null;
     } else {
-      return res.status(400).json({ message: 'Картинка обязательна' });
+      return res.status(400).json({ message: 'Р В РЎв„ўР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р РЋР РЏР В Р’В·Р В Р’В°Р РЋРІР‚С™Р В Р’ВµР В Р’В»Р РЋР Р‰Р В Р вЂ¦Р В Р’В°' });
     }
 
     if (newImage && newImage.length > 255) {
       if (req.file) await safeUnlinkUpload(newImage);
-      return res.status(400).json({ message: 'Слишком длинный путь к картинке (max 255)' });
+      return res.status(400).json({ message: 'Р В Р Р‹Р В Р’В»Р В РЎвЂР РЋРІвЂљВ¬Р В РЎвЂќР В РЎвЂўР В РЎВ Р В РўвЂР В Р’В»Р В РЎвЂР В Р вЂ¦Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В РЎвЂ”Р РЋРЎвЂњР РЋРІР‚С™Р РЋР Р‰ Р В РЎвЂќ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В Р’Вµ (max 255)' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
       if (req.file) await safeUnlinkUpload(newImage);
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3655,22 +3793,27 @@ exports.updateCardImage = async (req, res) => {
 
     if (!canEdit) {
       if (req.file) await safeUnlinkUpload(newImage);
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [cardRows] = await db.execute(
-      `SELECT title, image_path FROM cards WHERE id = ? AND board_id = ? LIMIT 1`,
+      `SELECT title, image_path, color FROM cards WHERE id = ? AND board_id = ? LIMIT 1`,
       [cardId, boardId]
     );
 
     if (!cardRows.length) {
       if (req.file) await safeUnlinkUpload(newImage);
-      return res.status(404).json({ message: 'Запись не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const oldImage = cardRows[0]?.image_path ?? null;
+    const shouldClearColor = Boolean(req.file);
 
-    await db.execute(`UPDATE cards SET image_path = ? WHERE id = ? AND board_id = ?`, [newImage, cardId, boardId]);
+    if (shouldClearColor) {
+      await db.execute(`UPDATE cards SET image_path = ?, color = NULL WHERE id = ? AND board_id = ?`, [newImage, cardId, boardId]);
+    } else {
+      await db.execute(`UPDATE cards SET image_path = ? WHERE id = ? AND board_id = ?`, [newImage, cardId, boardId]);
+    }
 
     const connection = await db.getConnection();
     try {
@@ -3688,14 +3831,22 @@ exports.updateCardImage = async (req, res) => {
       await safeUnlinkUpload(oldImage);
     }
 
-    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'card_updated', card_id: cardId, image_path: newImage }, [user_id]);
-    return res.status(200).json({ id: cardId, board_id: boardId, image_path: newImage });
+    const socketPayload = { reason: 'card_updated', card_id: cardId, image_path: newImage };
+    const responsePayload = { id: cardId, board_id: boardId, image_path: newImage };
+
+    if (shouldClearColor) {
+      socketPayload.color = null;
+      responsePayload.color = null;
+    }
+
+    emitBoardsUpdatedToBoardUsers(req, boardId, socketPayload, [user_id]);
+    return res.status(200).json(responsePayload);
   } catch (e) {
     if (req.file && newImage) {
       await safeUnlinkUpload(newImage);
     }
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления картинки' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ Р В РЎвЂќР В Р’В°Р РЋР вЂљР РЋРІР‚С™Р В РЎвЂР В Р вЂ¦Р В РЎвЂќР В РЎвЂ' });
   }
 };
 
@@ -3713,7 +3864,7 @@ exports.updateCard = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const body = req.body || {};
@@ -3723,16 +3874,17 @@ exports.updateCard = async (req, res) => {
     const hasLocked = Object.prototype.hasOwnProperty.call(body, 'is_locked');
     const hasX = Object.prototype.hasOwnProperty.call(body, 'x');
     const hasY = Object.prototype.hasOwnProperty.call(body, 'y');
+    const hasColor = Object.prototype.hasOwnProperty.call(body, 'color');
 
-    if (!hasTitle && !hasType && !hasLocked && !hasX && !hasY) {
-      return res.status(400).json({ message: 'Нет полей для обновления' });
+    if (!hasTitle && !hasType && !hasLocked && !hasX && !hasY && !hasColor) {
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р В Р’ВµР В РІвЂћвЂ“ Р В РўвЂР В Р’В»Р РЋР РЏ Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
     }
 
     let rawTitle = null;
     if (hasTitle) {
       rawTitle = String(body?.title || '').trim();
       if (!rawTitle || rawTitle.length > 50) {
-        return res.status(400).json({ message: 'Некорректный заголовок' });
+        return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В Р’В·Р В Р’В°Р В РЎвЂ“Р В РЎвЂўР В Р’В»Р В РЎвЂўР В Р вЂ Р В РЎвЂўР В РЎвЂќ' });
       }
     }
 
@@ -3741,11 +3893,15 @@ exports.updateCard = async (req, res) => {
       rawType = String(body?.type || '').trim();
       const allowedTypes = new Set(['rectangle', 'circle', 'diamond']);
       if (!allowedTypes.has(rawType)) {
-        return res.status(400).json({ message: 'Некорректный тип' });
+        return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р РЋРІР‚С™Р В РЎвЂР В РЎвЂ”' });
       }
     }
 
     const is_locked = hasLocked ? Boolean(body?.is_locked) : null;
+    const colorResult = hasColor ? normalizeHexColor(body?.color) : { ok: true, value: null };
+    if (!colorResult.ok) {
+      return res.status(400).json({ message: 'Invalid color' });
+    }
 
     let x = null;
     let y = null;
@@ -3753,13 +3909,13 @@ exports.updateCard = async (req, res) => {
       x = Number(body?.x);
       y = Number(body?.y);
       if (!Number.isFinite(x) || !Number.isFinite(y)) {
-        return res.status(400).json({ message: 'Некорректные координаты' });
+        return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂќР В РЎвЂўР В РЎвЂўР РЋР вЂљР В РўвЂР В РЎвЂР В Р вЂ¦Р В Р’В°Р РЋРІР‚С™Р РЋРІР‚в„–' });
       }
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3774,16 +3930,18 @@ exports.updateCard = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
     if (!cardRows.length) {
-      return res.status(404).json({ message: 'Запись не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const set = [];
     const params = [];
+    const oldImage = cardRows[0]?.image_path ?? null;
+    const shouldClearImageBecauseColor = hasColor && Boolean(colorResult.value);
 
     if (rawTitle !== null) {
       set.push('title = ?');
@@ -3800,6 +3958,11 @@ exports.updateCard = async (req, res) => {
       params.push(is_locked ? 1 : 0);
     }
 
+    if (hasColor) {
+      set.push('color = ?');
+      params.push(colorResult.value);
+    }
+
     if (x !== null && y !== null) {
       set.push('x = ?');
       set.push('y = ?');
@@ -3807,8 +3970,13 @@ exports.updateCard = async (req, res) => {
       params.push(y);
     }
 
+    if (shouldClearImageBecauseColor) {
+      set.push('image_path = ?');
+      params.push(null);
+    }
+
     if (!set.length) {
-      return res.status(400).json({ message: 'Нет полей для обновления' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РЎвЂ”Р В РЎвЂўР В Р’В»Р В Р’ВµР В РІвЂћвЂ“ Р В РўвЂР В Р’В»Р РЋР РЏ Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
     }
 
     params.push(cardId, boardId);
@@ -3836,11 +4004,22 @@ exports.updateCard = async (req, res) => {
       socketPatch.y = y;
     }
 
+    if (hasColor) {
+      payload.color = colorResult.value;
+      socketPatch.color = colorResult.value;
+    }
+
+    if (shouldClearImageBecauseColor) {
+      payload.image_path = null;
+      socketPatch.image_path = null;
+      await safeUnlinkUpload(oldImage);
+    }
+
     emitBoardsUpdatedToBoardUsers(req, boardId, socketPatch, [user_id]);
     return res.status(200).json(payload);
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
@@ -3859,18 +4038,18 @@ exports.updateCardType = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const rawType = String(req.body?.type || '').trim();
     const allowedTypes = new Set(['rectangle', 'circle', 'diamond']);
     if (!allowedTypes.has(rawType)) {
-      return res.status(400).json({ message: 'Некорректный тип' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р РЋРІР‚С™Р В РЎвЂР В РЎвЂ”' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3885,12 +4064,12 @@ exports.updateCardType = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
     if (!cardRows.length) {
-      return res.status(404).json({ message: 'Запись не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     await db.execute(`UPDATE cards SET type = ? WHERE id = ? AND board_id = ?`, [rawType, cardId, boardId]);
@@ -3898,7 +4077,7 @@ exports.updateCardType = async (req, res) => {
     return res.status(200).json({ id: cardId, board_id: boardId, type: rawType });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
@@ -3917,17 +4096,17 @@ exports.updateCardTitle = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const rawTitle = String(req.body?.title || '').trim();
     if (!rawTitle || rawTitle.length > 50) {
-      return res.status(400).json({ message: 'Некорректный заголовок' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В РІвЂћвЂ“ Р В Р’В·Р В Р’В°Р В РЎвЂ“Р В РЎвЂўР В Р’В»Р В РЎвЂўР В Р вЂ Р В РЎвЂўР В РЎвЂќ' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3942,12 +4121,12 @@ exports.updateCardTitle = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
     if (!cardRows.length) {
-      return res.status(404).json({ message: 'Запись не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     await db.execute(`UPDATE cards SET title = ? WHERE id = ? AND board_id = ?`, [rawTitle, cardId, boardId]);
@@ -3955,7 +4134,7 @@ exports.updateCardTitle = async (req, res) => {
     return res.status(200).json({ id: cardId, board_id: boardId, title: rawTitle });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
@@ -3973,18 +4152,18 @@ exports.updateCardPosition = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const x = Number(req.body?.x);
     const y = Number(req.body?.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
-      return res.status(400).json({ message: 'Некорректные координаты' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂќР В РЎвЂўР В РЎвЂўР РЋР вЂљР В РўвЂР В РЎвЂР В Р вЂ¦Р В Р’В°Р РЋРІР‚С™Р РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -3999,12 +4178,12 @@ exports.updateCardPosition = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [cardRows] = await db.execute(`SELECT 1 FROM cards WHERE id = ? AND board_id = ? LIMIT 1`, [cardId, boardId]);
     if (!cardRows.length) {
-      return res.status(404).json({ message: 'Запись не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     await db.execute(`UPDATE cards SET x = ?, y = ? WHERE id = ? AND board_id = ?`, [x, y, cardId, boardId]);
@@ -4012,7 +4191,7 @@ exports.updateCardPosition = async (req, res) => {
     return res.status(200).json({ id: cardId, board_id: boardId, x, y });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка обновления' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р В РЎвЂўР В Р’В±Р В Р вЂ¦Р В РЎвЂўР В Р вЂ Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 
@@ -4030,12 +4209,12 @@ exports.deleteCard = async (req, res) => {
       !Number.isFinite(cardId) ||
       cardId <= 0
     ) {
-      return res.status(400).json({ message: 'Некорректные параметры' });
+      return res.status(400).json({ message: 'Р В РЎСљР В Р’ВµР В РЎвЂќР В РЎвЂўР РЋР вЂљР РЋР вЂљР В Р’ВµР В РЎвЂќР РЋРІР‚С™Р В Р вЂ¦Р РЋРІР‚в„–Р В Р’Вµ Р В РЎвЂ”Р В Р’В°Р РЋР вЂљР В Р’В°Р В РЎВР В Р’ВµР РЋРІР‚С™Р РЋР вЂљР РЋРІР‚в„–' });
     }
 
     const [boardRows] = await db.execute(`SELECT owner_id FROM boards WHERE id = ? LIMIT 1`, [boardId]);
     if (!boardRows.length) {
-      return res.status(404).json({ message: 'Доска не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚СњР В РЎвЂўР РЋР С“Р В РЎвЂќР В Р’В° Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const owner_id = Number(boardRows[0]?.owner_id);
@@ -4050,7 +4229,7 @@ exports.deleteCard = async (req, res) => {
     }
 
     if (!canEdit) {
-      return res.status(403).json({ message: 'Нет доступа' });
+      return res.status(403).json({ message: 'Р В РЎСљР В Р’ВµР РЋРІР‚С™ Р В РўвЂР В РЎвЂўР РЋР С“Р РЋРІР‚С™Р РЋРЎвЂњР В РЎвЂ”Р В Р’В°' });
     }
 
     const [cardRows] = await db.execute(
@@ -4058,7 +4237,7 @@ exports.deleteCard = async (req, res) => {
       [cardId, boardId]
     );
     if (!cardRows.length) {
-      return res.status(404).json({ message: 'Запись не найдена' });
+      return res.status(404).json({ message: 'Р В РІР‚вЂќР В Р’В°Р В РЎвЂ”Р В РЎвЂР РЋР С“Р РЋР Р‰ Р В Р вЂ¦Р В Р’Вµ Р В Р вЂ¦Р В Р’В°Р В РІвЂћвЂ“Р В РўвЂР В Р’ВµР В Р вЂ¦Р В Р’В°' });
     }
 
     const imagePath = cardRows[0]?.image_path ?? null;
@@ -4070,7 +4249,7 @@ exports.deleteCard = async (req, res) => {
     return res.status(200).json({ id: cardId, board_id: boardId });
   } catch (e) {
     console.error(e);
-    return res.status(500).json({ message: 'Ошибка удаления' });
+    return res.status(500).json({ message: 'Р В РЎвЂєР РЋРІвЂљВ¬Р В РЎвЂР В Р’В±Р В РЎвЂќР В Р’В° Р РЋРЎвЂњР В РўвЂР В Р’В°Р В Р’В»Р В Р’ВµР В Р вЂ¦Р В РЎвЂР РЋР РЏ' });
   }
 };
 

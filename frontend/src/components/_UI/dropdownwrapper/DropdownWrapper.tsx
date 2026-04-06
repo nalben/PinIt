@@ -14,6 +14,9 @@ type DropdownWrapperProps = {
   up?: boolean;
   upDel?: boolean;
   fixed?: boolean;
+  anchorToButton?: boolean;
+  fixedMarginPx?: number;
+  repositionOnScroll?: boolean;
   minWidthPx?: number;
   menuClassName?: string;
   children: [React.ReactNode, React.ReactNode];
@@ -35,6 +38,9 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
   up,
   upDel,
   fixed,
+  anchorToButton,
+  fixedMarginPx,
+  repositionOnScroll,
   minWidthPx,
   menuClassName,
   children,
@@ -44,6 +50,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 }) => {
   const [button, dropdown] = children;
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const [internalOpen, setInternalOpen] = useState(false);
@@ -125,7 +132,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     const wrapperRect = wrapper.getBoundingClientRect();
     const menuWidth = menu.offsetWidth;
     const viewportWidth = window.innerWidth;
-    const margin = 8;
+    const margin = typeof fixedMarginPx === "number" ? fixedMarginPx : 8;
 
     let desiredLeft = wrapperRect.right - menuWidth;
     if (menuWidth + margin * 2 > viewportWidth) {
@@ -143,6 +150,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
 
   const updateFixedPosition = () => {
     const wrapper = wrapperRef.current;
+    const buttonNode = buttonRef.current;
     const menu = dropdownRef.current;
     if (!wrapper || !menu) return;
 
@@ -165,16 +173,22 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     const menuWidth = menu.offsetWidth;
     const menuHeight = menu.offsetHeight;
     const cb = getFixedContainingRect();
-    const margin = 8;
+    const verticalMargin = 8;
+    const horizontalMargin = typeof fixedMarginPx === "number" ? fixedMarginPx : verticalMargin;
 
     if (middleleftTop) {
-      const desiredWidth = Math.round(wrapperRect.width) + 2;
+      const buttonAnchor =
+        buttonNode?.firstElementChild instanceof HTMLElement
+          ? buttonNode.firstElementChild
+          : buttonNode;
+      const anchorRect = anchorToButton && buttonAnchor ? buttonAnchor.getBoundingClientRect() : wrapperRect;
+      const desiredWidth = Math.round(anchorRect.width) + 2;
       const leftPx = Math.min(
-        Math.max(wrapperRect.left - 1, cb.left + margin),
-        cb.left + cb.width - desiredWidth - margin
+        Math.max(anchorRect.left - 1, cb.left + horizontalMargin),
+        cb.left + cb.width - desiredWidth - horizontalMargin
       );
-      let topPx = wrapperRect.bottom;
-      topPx = Math.min(Math.max(topPx, cb.top + margin), cb.top + cb.height - menuHeight - margin);
+      let topPx = anchorRect.bottom;
+      topPx = Math.min(Math.max(topPx, cb.top + verticalMargin), cb.top + cb.height - menuHeight - verticalMargin);
 
       setMenuStyle({
         left: `${Math.round(leftPx - cb.left)}px`,
@@ -191,16 +205,16 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     if (left) leftPx = wrapperRect.left;
     if (middle) leftPx = wrapperRect.left + wrapperRect.width / 2 - menuWidth / 2;
     if (middleleft) leftPx = wrapperRect.left - 5 - menuWidth;
-    if (middleleft && leftPx < cb.left + margin) {
+    if (middleleft && leftPx < cb.left + horizontalMargin) {
       leftPx = wrapperRect.right + 5;
     }
-    leftPx = Math.min(Math.max(leftPx, cb.left + margin), cb.left + cb.width - menuWidth - margin);
+    leftPx = Math.min(Math.max(leftPx, cb.left + horizontalMargin), cb.left + cb.width - menuWidth - horizontalMargin);
 
     const belowTop = wrapperRect.bottom + 15;
     const aboveTop = wrapperRect.top - 15 - menuHeight;
     let topPx = belowTop;
-    if (belowTop + menuHeight + margin > cb.top + cb.height) topPx = aboveTop;
-    topPx = Math.min(Math.max(topPx, cb.top + margin), cb.top + cb.height - menuHeight - margin);
+    if (belowTop + menuHeight + verticalMargin > cb.top + cb.height) topPx = aboveTop;
+    topPx = Math.min(Math.max(topPx, cb.top + verticalMargin), cb.top + cb.height - menuHeight - verticalMargin);
 
     setMenuStyle({
       left: `${Math.round(leftPx - cb.left)}px`,
@@ -228,7 +242,7 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     if (!open) return;
     if (fixed) updateFixedPosition();
     else updatePosition();
-  }, [left, right, middle, middleleft, middleleftTop, profile, noti, up, upDel, fixed, open]);
+  }, [anchorToButton, left, right, middle, middleleft, middleleftTop, profile, noti, up, upDel, fixed, fixedMarginPx, open]);
 
   useEffect(() => {
     if (fixed) updateFixedPosition();
@@ -240,19 +254,25 @@ const DropdownWrapper: React.FC<DropdownWrapperProps> = ({
     };
 
     window.addEventListener("resize", handleResize);
+    if (repositionOnScroll) {
+      window.addEventListener("scroll", handleResize, true);
+    }
     document.addEventListener("pointerdown", handleClickOutside, true);
     return () => {
       window.removeEventListener("resize", handleResize);
+      if (repositionOnScroll) {
+        window.removeEventListener("scroll", handleResize, true);
+      }
       document.removeEventListener("pointerdown", handleClickOutside, true);
     };
-  }, [left, right, middle, middleleft, middleleftTop, profile, noti, up, upDel, fixed, open]);
+  }, [anchorToButton, left, right, middle, middleleft, middleleftTop, profile, noti, up, upDel, fixed, fixedMarginPx, open, repositionOnScroll]);
 
   return (
     <div
       ref={wrapperRef}
       className={`${styles.wrapper} ${__PLATFORM__ === 'desktop' ? styles.wrapper_desktop : styles.wrapper_mobile} ${wrapperClassName || ""}`.trim()}
     >
-      <div onClick={toggleDropdown} className={`${styles.button || ""} ${buttonClassName || ""}`.trim()}>
+      <div ref={buttonRef} onClick={toggleDropdown} className={`${styles.button || ""} ${buttonClassName || ""}`.trim()}>
         {button}
       </div>
       {open && (

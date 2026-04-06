@@ -3,6 +3,7 @@ const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
 const axios = require("axios");
 const UserModel = require("../models/UserModel");
+const { getAuthCookieBaseOptions, getAuthCookieOptions } = require("../utils/authCookieOptions");
 
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
@@ -111,14 +112,7 @@ const authController = {
         { expiresIn: "7d" }
       );
 
-      const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-      res.cookie('pinit_token', token, {
-        httpOnly: true,
-        sameSite: 'Lax',
-        secure: Boolean(isSecure),
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        path: '/',
-      });
+      res.cookie('pinit_token', token, getAuthCookieOptions(req));
 
       res.json({
         token,
@@ -137,7 +131,7 @@ const authController = {
   // LOGOUT
   // =====================================================
   logout: (req, res) => {
-    res.clearCookie('pinit_token', { path: '/' });
+    res.clearCookie('pinit_token', getAuthCookieBaseOptions(req));
     res.json({ ok: true });
   },
 
@@ -238,14 +232,7 @@ const authController = {
       { expiresIn: "7d" }
     );
 
-    const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
-    res.cookie('pinit_token', token, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      secure: Boolean(isSecure),
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-    });
+    res.cookie('pinit_token', token, getAuthCookieOptions(req));
 
     res.json({
       message: "Пароль успешно изменён",

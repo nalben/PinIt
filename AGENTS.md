@@ -1477,3 +1477,31 @@ Update (2026-03-28)
   - `frontend/src/index.tsx` renders `frontend/src/pages/converter/Converter.tsx` directly (without `ProtectedRoute`);
   - `frontend/src/pages/converter/Converter.tsx` skips converter API/socket work until login, and anonymous upload actions open the auth modal instead of the file picker;
   - `frontend/src/components/app/App.tsx` no longer auto-opens or locks the auth modal on `/converter`.
+
+Update (2026-04-06)
+
+- DB migration script added: `api/sql/2026-04-06-card-colors.sql`
+  - adds `cards.color CHAR(7) NULL`
+  - creates `user_card_color_favorites (user_id, color, created_at)` for per-user saved node colors.
+- Board card list endpoints now include node background color in each card row:
+  - `GET /api/boards/:board_id/cards`
+  - `GET /api/boards/public/:board_id/cards`
+- New authenticated favorite-color endpoints under boards cards:
+  - `GET /api/boards/:board_id/cards/favorite-colors` — returns `{ colors: string[] }` for the current user after board access check.
+  - `POST /api/boards/:board_id/cards/favorite-colors` — body `{ color }`, upserts that color into the current user's favorites and returns `{ colors }`.
+  - `DELETE /api/boards/:board_id/cards/favorite-colors/:color` — removes that color from the current user's favorites and returns `{ colors }`.
+- Card create/update contract now supports optional `color` (hex `#RRGGBB` or `null` on update) in `api/controllers/boardsController.js`:
+  - `POST /api/boards/:board_id/cards` stores `cards.color`.
+  - `PATCH /api/boards/:board_id/cards/:card_id` updates `cards.color`; when a non-null color is saved, backend also clears `cards.image_path`.
+  - `PATCH /api/boards/:board_id/cards/:card_id/image` clears `cards.color` when a new image file is uploaded.
+- `boards:updated` card payload handling in flow now supports `color` for `reason: 'card_updated'`.
+- `frontend/src/store/uiStore.ts` `FlowCardSettingsSnapshot` / `flowCardSettingsDraft` now include `color`.
+- `frontend/src/components/flow/FlowBoard.tsx` node settings panel now has a palette button between image select and delete:
+  - palette uses `react-colorful` (`HexColorPicker`);
+  - choosing a color clears the node image preview/save path;
+  - delete button clears either image or color back to the default look;
+  - palette shows preset colors, colors already used by nodes on the current board, and per-user favorite colors loaded via the new API.
+
+Update (2026-04-07)
+
+- Auth cookie helper added in `api/utils/authCookieOptions.js`; `authController` and `authMiddleware` now set/sync `pinit_token` with `domain=pin-it.ru` when the request host is `pin-it.ru` or `www.pin-it.ru`, so the same login cookie is shared across apex and `www` hosts.

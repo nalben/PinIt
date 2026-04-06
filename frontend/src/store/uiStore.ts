@@ -64,6 +64,7 @@ export type FlowCardSettingsSnapshot = {
   title: string;
   isLocked: boolean;
   imageSrc: string | null;
+  color: string | null;
 };
 
 interface UIState {
@@ -373,6 +374,7 @@ export const useUIStore = create<UIState>((set, get) => {
           title: snapshot.title,
           isLocked: snapshot.isLocked,
           imageSrc: snapshot.imageSrc,
+          color: snapshot.color,
         },
         restoreBoardMenuAfterFlowCardSettings:
           s.flowCardSettingsOpen
