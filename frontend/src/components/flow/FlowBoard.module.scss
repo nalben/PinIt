@@ -838,11 +838,6 @@ $board-menu-wide-min: 1700px;
         fill: var(--pink);
     }
 }
-
-.icon_btn_active{
-    background: rgba(0, 0, 0, 0.35);
-}
-
 .color_palette_trigger_inner{
     position: relative;
     width: 100%;
@@ -856,8 +851,8 @@ $board-menu-wide-min: 1700px;
     position: absolute;
     bottom: 6px;
     right: 6px;
-    width: 12px;
-    height: 12px;
+    width: 15px;
+    height: 15px;
     border-radius: 100%;
     border: 1px solid rgba(255, 255, 255, 0.8);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);

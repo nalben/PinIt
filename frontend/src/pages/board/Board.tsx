@@ -5,19 +5,59 @@ import classes from './Board.module.scss';
 import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import { useAuthStore } from '@/store/authStore';
 import { UnifiedBoard, useBoardsUnifiedStore } from '@/store/boardsUnifiedStore';
-import { BOARD_MENU_AUTO_OPEN_MIN_WIDTH, useUIStore } from '@/store/uiStore';
+import {
+    BOARD_MENU_AUTO_OPEN_MIN_WIDTH,
+    type SelectedLinkDraft,
+    type SelectedLinkSnapshot,
+    useUIStore,
+} from '@/store/uiStore';
 import FlowBoard, { type FlowBoardHandle } from '@/components/flow/FlowBoard';
 import { useBoardAccess } from '@/components/flowboard/hooks/useBoardAccess';
 import { resolveAvatarSrc } from '@/components/flowboard/utils/avatar';
 import BoardSettingsModal from '@/components/boards/boardsettingsmodal/BoardSettingsModal';
+import UnsavedChangesModal from '@/components/_UI/unsavedchangesmodal/UnsavedChangesModal';
 import { InviteAuthModals, type InviteAuthView } from '@/components/flowboard/components/InviteAuthModals';
 import { BoardParticipant, BoardParticipantsResponse, useBoardDetailsStore } from '@/store/boardDetailsStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 import { BoardRightMenu } from './BoardRightMenu';
 
 type BoardParticipantRole = 'owner' | 'guest' | 'editer';
+type LinkCloseMode = 'restore' | 'collapse';
 
 const PENDING_INVITE_LS_KEY = 'pinit_pendingInviteUrl';
+
+const getSelectedLinkDraftChangeState = (
+    selectedLink: SelectedLinkSnapshot | null,
+    selectedLinkDraft: SelectedLinkDraft | null
+) => {
+    if (!selectedLink || !selectedLinkDraft) {
+        return {
+            label: '',
+            currentLabel: '',
+            shouldFlipDirection: false,
+            shouldPatchLink: false,
+            isDirty: false,
+        };
+    }
+
+    const label = selectedLinkDraft.label.trim().slice(0, 70);
+    const currentLabel = (selectedLink.label ?? '').trim().slice(0, 70);
+    const shouldFlipDirection =
+        Number(selectedLinkDraft.fromCardId) === Number(selectedLink.toCardId) &&
+        Number(selectedLinkDraft.toCardId) === Number(selectedLink.fromCardId);
+    const shouldPatchLink =
+        selectedLinkDraft.style !== selectedLink.style ||
+        label !== currentLabel ||
+        Boolean(selectedLinkDraft.isLabelVisible) !== Boolean(selectedLink.isLabelVisible);
+
+    return {
+        label,
+        currentLabel,
+        shouldFlipDirection,
+        shouldPatchLink,
+        isDirty: shouldFlipDirection || shouldPatchLink,
+    };
+};
 
 const Board = () => {
     const { boardId } = useParams<{ boardId: string }>();
@@ -42,12 +82,14 @@ const Board = () => {
     const closeLinkInspector = useUIStore((s) => s.closeLinkInspector);
     const patchSelectedLinkDraft = useUIStore((s) => s.patchSelectedLinkDraft);
     const closeCardDetails = useUIStore((s) => s.closeCardDetails);
+    const handleBoardMenuBlur = useUIStore((s) => s.handleBoardMenuBlur);
     const showTopAlarm = useUIStore((s) => s.showTopAlarm);
     const openBoardSettingsModal = useUIStore((s) => s.openBoardSettingsModal);
     const closeBoardSettingsModal = useUIStore((s) => s.closeBoardSettingsModal);
     const setBoardSettingsModalParticipantsInnerViewNext = useUIStore((s) => s.setBoardSettingsModalParticipantsInnerViewNext);
     const [linkDeleteConfirmOpen, setLinkDeleteConfirmOpen] = useState(false);
     const [linkDeleteLoading, setLinkDeleteLoading] = useState(false);
+    const [linkCloseConfirmOpen, setLinkCloseConfirmOpen] = useState(false);
     const [linkStyleDropdownOpen, setLinkStyleDropdownOpen] = useState(false);
     const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
     const [forcedAuthView, setForcedAuthView] = useState<InviteAuthView>('login');
@@ -62,6 +104,7 @@ const Board = () => {
     const [removeLoadingParticipantId, setRemoveLoadingParticipantId] = useState<number | null>(null);
     const flowBoardRef = useRef<FlowBoardHandle | null>(null);
     const boardMenuRef = useRef<HTMLDivElement | null>(null);
+    const pendingLinkCloseModeRef = useRef<LinkCloseMode>('restore');
     const [isBoardMetaLoading, setIsBoardMetaLoading] = useState(true);
     const [boardMetaOverride, setBoardMetaOverride] = useState<Partial<UnifiedBoard> | null>(null);
     const [loadedBoardImageSrc, setLoadedBoardImageSrc] = useState<string | null>(null);
@@ -84,8 +127,45 @@ const Board = () => {
     const participantsLoadingFlags = useBoardDetailsStore((s) => (hasValidBoardId ? s.participantsLoadingByBoardId[numericBoardId] : undefined));
     const accessLost = useBoardDetailsStore((s) => (hasValidBoardId ? Boolean(s.accessLostBoards[numericBoardId]) : false));
     const participantsInitialLoading = Boolean(participantsLoadingFlags?.initial) && !participantsData;
+    const linkDraftChangeState = useMemo(
+        () => getSelectedLinkDraftChangeState(selectedLink, selectedLinkDraft),
+        [selectedLink, selectedLinkDraft]
+    );
+    const linkInspectorHasUnsavedChanges = boardMenuView === 'link' && linkDraftChangeState.isDirty;
 
-    const saveSelectedLink = async () => {
+    const performLinkClose = useCallback((mode: LinkCloseMode) => {
+        if (mode === 'collapse') {
+            closeBoardMenu();
+            return;
+        }
+        closeLinkInspector();
+    }, [closeBoardMenu, closeLinkInspector]);
+
+    const requestImplicitLinkInspectorClose = useCallback((mode: LinkCloseMode = 'restore') => {
+        if (boardMenuView !== 'link' || !selectedLink) {
+            performLinkClose(mode);
+            return false;
+        }
+
+        if (!linkInspectorHasUnsavedChanges) {
+            performLinkClose(mode);
+            return false;
+        }
+
+        pendingLinkCloseModeRef.current = mode;
+        setLinkCloseConfirmOpen(true);
+        return true;
+    }, [boardMenuView, linkInspectorHasUnsavedChanges, performLinkClose, selectedLink]);
+
+    const requestBoardMenuBlur = useCallback(() => {
+        if (boardMenuView === 'link') {
+            return requestImplicitLinkInspectorClose('restore');
+        }
+        handleBoardMenuBlur();
+        return false;
+    }, [boardMenuView, handleBoardMenuBlur, requestImplicitLinkInspectorClose]);
+
+    const saveSelectedLink = async (closeMode: LinkCloseMode = 'restore') => {
         if (!hasValidBoardId) return;
         if (!selectedLink) return;
         if (!selectedLinkDraft) return;
@@ -104,15 +184,7 @@ const Board = () => {
             created_at: string;
         };
 
-        const label = selectedLinkDraft.label.trim().slice(0, 70);
-        const currentLabel = (selectedLink.label ?? '').trim().slice(0, 70);
-        const shouldFlipDirection =
-            Number(selectedLinkDraft.fromCardId) === Number(selectedLink.toCardId) &&
-            Number(selectedLinkDraft.toCardId) === Number(selectedLink.fromCardId);
-        const shouldPatchLink =
-            selectedLinkDraft.style !== selectedLink.style ||
-            label !== currentLabel ||
-            Boolean(selectedLinkDraft.isLabelVisible) !== Boolean(selectedLink.isLabelVisible);
+        const { label, shouldFlipDirection, shouldPatchLink } = getSelectedLinkDraftChangeState(selectedLink, selectedLinkDraft);
 
         try {
             let finalFromCardId = Number(selectedLink.fromCardId);
@@ -164,7 +236,7 @@ const Board = () => {
                 isLabelVisible: finalIsLabelVisible,
             });
 
-            closeLinkInspector();
+            performLinkClose(closeMode);
         } catch (e) {
             showTopAlarm('Не удалось сохранить связь.');
             if (process.env.NODE_ENV !== 'production') console.error(e);
@@ -342,12 +414,14 @@ const Board = () => {
         setLeaveLoading(false);
         setRoleDropdownParticipantId(null);
         setRoleLoadingParticipantId(null);
+        setLinkCloseConfirmOpen(false);
         setLinkDeleteConfirmOpen(false);
         setLinkDeleteLoading(false);
     }, [boardId]);
 
     useEffect(() => {
         if (boardMenuView !== 'link' || !selectedLink) {
+            setLinkCloseConfirmOpen(false);
             setLinkDeleteConfirmOpen(false);
             setLinkDeleteLoading(false);
         }
@@ -396,6 +470,13 @@ const Board = () => {
     });
 
     useEscapeHandler({
+        id: 'board:link-close-confirm',
+        priority: 1250,
+        isOpen: linkCloseConfirmOpen,
+        onEscape: () => setLinkCloseConfirmOpen(false),
+    });
+
+    useEscapeHandler({
         id: 'board:participants-role-dropdown',
         priority: 1100,
         isOpen: roleDropdownParticipantId !== null,
@@ -406,7 +487,13 @@ const Board = () => {
         id: 'board:right-menu',
         priority: 500,
         isOpen: effectiveBoardMenuOpen,
-        onEscape: closeBoardMenu,
+        onEscape: () => {
+            if (boardMenuView === 'link') {
+                requestImplicitLinkInspectorClose('collapse');
+                return;
+            }
+            closeBoardMenu();
+        },
     });
 
     useLayoutEffect(() => {
@@ -736,7 +823,13 @@ const Board = () => {
     return (
             <div className={`${classes.board_container} ${__PLATFORM__ === 'desktop' ? classes.board_container_desktop : classes.board_container_mobile}`.trim()}>
                 <div className={`${classes.board_flow_wrap} ${effectiveBoardMenuOpen ? classes.board_flow_shrink : ''}`.trim()}>
-                    <FlowBoard ref={flowBoardRef} canEditCards={canEditCards} boardMenuRef={boardMenuRef} />
+                    <FlowBoard
+                        ref={flowBoardRef}
+                        canEditCards={canEditCards}
+                        boardMenuRef={boardMenuRef}
+                        onRequestBoardMenuBlur={requestBoardMenuBlur}
+                        onRequestImplicitLinkInspectorClose={() => requestImplicitLinkInspectorClose('restore')}
+                    />
                 </div>            <BoardRightMenu
                 boardInfo={boardInfo}
                 boardMenuRef={boardMenuRef}
@@ -772,7 +865,13 @@ const Board = () => {
                     openBoardSettingsModal('participants');
                 }}
                 onStartLinkMode={() => flowBoardRef.current?.startLinkMode()}
-                onToggleBoardMenu={toggleBoardMenu}
+                onToggleBoardMenu={() => {
+                    if (effectiveBoardMenuOpen && boardMenuView === 'link') {
+                        requestImplicitLinkInspectorClose('collapse');
+                        return;
+                    }
+                    toggleBoardMenu();
+                }}
                 ownerAvatarSrc={ownerAvatarSrc}
                 ownerParticipant={ownerParticipant}
                 participantsInitialLoading={participantsInitialLoading}
@@ -814,6 +913,19 @@ const Board = () => {
                 onAbort={abortInviteAuth}
                 onSuccess={closeInviteAuthAfterSuccess}
                 onOpenView={setForcedAuthView}
+            />
+            <UnsavedChangesModal
+                isOpen={linkCloseConfirmOpen}
+                wide
+                onSaveAndClose={() => {
+                    setLinkCloseConfirmOpen(false);
+                    void saveSelectedLink(pendingLinkCloseModeRef.current);
+                }}
+                onDiscardChanges={() => {
+                    setLinkCloseConfirmOpen(false);
+                    performLinkClose(pendingLinkCloseModeRef.current);
+                }}
+                onContinueEditing={() => setLinkCloseConfirmOpen(false)}
             />
         </div>
     );

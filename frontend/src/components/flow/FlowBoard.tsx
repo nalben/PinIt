@@ -30,6 +30,7 @@ import axiosInstance from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
+import UnsavedChangesModal from '@/components/_UI/unsavedchangesmodal/UnsavedChangesModal';
 import LockClose from '@/assets/icons/monochrome/lock_close.svg';
 import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
 import Details from '@/assets/icons/monochrome/details.svg';
@@ -57,6 +58,7 @@ import { useFlowBoardMenuTransitions } from '@/components/flowboard/hooks/useFlo
 import { FlowLinkModeAlarm } from '@/components/flowboard/components/FlowLinkModeAlarm';
 import { useFlowCardFavoriteColors } from '@/components/flowboard/hooks/useFlowCardFavoriteColors';
 import { getCardImageCropPreset } from '@/utils/imageCropPresets';
+import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 
 export type FlowBoardHandle = {
   createDraftNodeAtCenter: () => void;
@@ -528,9 +530,16 @@ const EDGE_TYPES = { flowStraight: FlowStraightEdge } as const;
 type FlowBoardProps = {
   canEditCards?: boolean;
   boardMenuRef?: React.RefObject<HTMLDivElement | null>;
+  onRequestBoardMenuBlur?: () => boolean;
+  onRequestImplicitLinkInspectorClose?: () => boolean;
 };
 
-const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCards = false, boardMenuRef }, ref) => {
+const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
+  canEditCards = false,
+  boardMenuRef,
+  onRequestBoardMenuBlur,
+  onRequestImplicitLinkInspectorClose,
+}, ref) => {
   const { boardId } = useParams<{ boardId: string }>();
   const numericBoardId = Number(boardId);
   const isAuth = useAuthStore((s) => s.isAuth);
@@ -1049,6 +1058,20 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
   const [imageUploading, setImageUploading] = useState(false);
   const [draftSaving, setDraftSaving] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [cardCloseConfirmOpen, setCardCloseConfirmOpen] = useState(false);
+  const hasUnsavedCardSettingsChanges = useMemo(() => {
+    if (!flowCardSettingsOpen || !flowCardSettings || !flowCardSettingsDraft || !activeNodeId) return false;
+    if (String(activeNodeId).startsWith('draft-')) return true;
+    return (
+      flowCardSettings.title !== flowCardSettingsDraft.title ||
+      flowCardSettings.type !== flowCardSettingsDraft.type ||
+      flowCardSettings.isLocked !== flowCardSettingsDraft.isLocked ||
+      (flowCardSettings.imageSrc ?? null) !== (flowCardSettingsDraft.imageSrc ?? null) ||
+      normalizeHexColor(flowCardSettings.color) !== normalizeHexColor(flowCardSettingsDraft.color) ||
+      Boolean(pendingImageFile) ||
+      Boolean(cropSourceFile)
+    );
+  }, [activeNodeId, cropSourceFile, flowCardSettings, flowCardSettingsDraft, flowCardSettingsOpen, pendingImageFile]);
   const showTopAlarm = useUIStore((s) => s.showTopAlarm);
   const suppressSocketReloadByCardIdRef = useRef<Map<string, number>>(new Map());
 
@@ -1454,14 +1477,30 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     closeFlowCardSettings();
   }, [applyPreviewToNode, clearPendingImage, closeFlowCardSettings, flowCardSettings]);
 
+  const requestImplicitCardSettingsClose = useCallback(() => {
+    if (!flowCardSettingsOpen) return false;
+    if (draftSaving || imageUploading) return true;
+    if (hasUnsavedCardSettingsChanges) {
+      setCardCloseConfirmOpen(true);
+      return true;
+    }
+    cancelCardSettings();
+    return false;
+  }, [cancelCardSettings, draftSaving, flowCardSettingsOpen, hasUnsavedCardSettingsChanges, imageUploading]);
+
+  useEscapeHandler({
+    id: 'flow-board:card-close-confirm',
+    priority: 1250,
+    isOpen: cardCloseConfirmOpen,
+    onEscape: () => setCardCloseConfirmOpen(false),
+  });
+
   const { handleEdgeClick, handleNodeClick } = useFlowBoardMenuTransitions({
     activeNodeId,
     boardMenuView,
     canEditCards,
     closeCardDetails,
     closeContextMenu,
-    closeFlowCardSettings,
-    closeLinkInspector,
     flowDragHandleClassName: classes.flow_drag_handle,
     flowCardSettingsOpen,
     hasToken,
@@ -1479,8 +1518,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     setSelectedNodeOnly,
     clearSelectedEdges,
     defaultLinkColor: DEFAULT_LINK_COLOR,
-    cancelCardSettings,
+    requestImplicitFlowCardSettingsClose: requestImplicitCardSettingsClose,
+    requestImplicitLinkInspectorClose: onRequestImplicitLinkInspectorClose ?? (() => false),
   });
+
+  useEffect(() => {
+    if (flowCardSettingsOpen) return;
+    setCardCloseConfirmOpen(false);
+  }, [flowCardSettingsOpen]);
 
   useEffect(() => {
     if (canEditCards) return;
@@ -1518,6 +1563,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       const targetEl = target instanceof HTMLElement ? target : null;
       if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return;
       if (targetEl?.closest?.('[data-modal-scope="color-palette"]')) return;
+      if (targetEl?.closest?.('[data-modal-scope="unsaved-changes"]')) return;
       const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       const menuEl = boardMenuRef?.current;
       if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
@@ -1547,12 +1593,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       const targetEl = target instanceof HTMLElement ? target : null;
       if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return;
       if (targetEl?.closest?.('[data-modal-scope="color-palette"]')) return;
+      if (targetEl?.closest?.('[data-modal-scope="unsaved-changes"]')) return;
       const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       const menuEl = boardMenuRef?.current;
       if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
       if (targetEl?.closest?.('.react-flow__node')) return;
 
-      if (!moved) cancelCardSettings();
+      if (!moved) requestImplicitCardSettingsClose();
     };
 
     window.addEventListener('pointerdown', onPointerDownCapture, true);
@@ -1565,7 +1612,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
       window.removeEventListener('pointerup', onPointerUpCapture, true);
       window.removeEventListener('pointercancel', onPointerUpCapture, true);
     };
-  }, [activeNodeId, boardMenuRef, cancelCardSettings, flowCardSettingsOpen]);
+  }, [activeNodeId, boardMenuRef, flowCardSettingsOpen, requestImplicitCardSettingsClose]);
 
   const createDraftNodeAt = useCallback((anchorX: number, anchorY: number) => {
     if (!canEditCards) return;
@@ -2015,6 +2062,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
     if (!panelEl) return;
 
     const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (cardCloseConfirmOpen) return;
       const targetEl = e.target as unknown as HTMLElement | null;
       const isFormField =
         Boolean(targetEl) &&
@@ -2058,7 +2106,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
 
     window.addEventListener('keydown', onKeyDownCapture, true);
     return () => window.removeEventListener('keydown', onKeyDownCapture, true);
-  }, [cancelCardSettings, deleteActive, deleteConfirmOpen, displayTitle, isEditing, saveActive]);
+  }, [cancelCardSettings, cardCloseConfirmOpen, deleteActive, deleteConfirmOpen, displayTitle, isEditing, saveActive]);
 
   return (
     <div
@@ -2156,7 +2204,17 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
               setEdgeHighlightBySelectedNodes(new Set(selectedNodes.map((n) => String(n.id))));
             }}
             onPaneClick={() => {
-              handleBoardMenuBlur();
+              if (requestImplicitCardSettingsClose()) {
+                closeContextMenu();
+                return;
+              }
+              if ((onRequestBoardMenuBlur ?? (() => {
+                handleBoardMenuBlur();
+                return false;
+              }))()) {
+                closeContextMenu();
+                return;
+              }
               closeContextMenu();
               clearSelectedElements();
             }}
@@ -2663,6 +2721,19 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({ canEditCa
           </div>
         </div>
       </div>
+      <UnsavedChangesModal
+        isOpen={cardCloseConfirmOpen}
+        wide
+        onSaveAndClose={() => {
+          setCardCloseConfirmOpen(false);
+          void saveActive();
+        }}
+        onDiscardChanges={() => {
+          setCardCloseConfirmOpen(false);
+          cancelCardSettings();
+        }}
+        onContinueEditing={() => setCardCloseConfirmOpen(false)}
+      />
       {colorPaletteOpen && isEditing ? (
         <div
           ref={colorPaletteRef}

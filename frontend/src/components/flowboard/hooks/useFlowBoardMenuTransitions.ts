@@ -11,8 +11,6 @@ type UseFlowBoardMenuTransitionsParams = {
   canEditCards: boolean;
   closeCardDetails: () => void;
   closeContextMenu: () => void;
-  closeFlowCardSettings: () => void;
-  closeLinkInspector: () => void;
   flowDragHandleClassName: string;
   flowCardSettingsOpen: boolean;
   hasToken: boolean;
@@ -30,7 +28,8 @@ type UseFlowBoardMenuTransitionsParams = {
   setSelectedNodeOnly: (nodeId: string | null) => void;
   clearSelectedEdges: () => void;
   defaultLinkColor: string;
-  cancelCardSettings: () => void;
+  requestImplicitFlowCardSettingsClose: () => boolean;
+  requestImplicitLinkInspectorClose: () => boolean;
 };
 
 export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsParams) => {
@@ -40,8 +39,6 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
     canEditCards,
     closeCardDetails,
     closeContextMenu,
-    closeFlowCardSettings,
-    closeLinkInspector,
     flowDragHandleClassName,
     flowCardSettingsOpen,
     hasToken,
@@ -59,7 +56,8 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
     setSelectedNodeOnly,
     clearSelectedEdges,
     defaultLinkColor,
-    cancelCardSettings,
+    requestImplicitFlowCardSettingsClose,
+    requestImplicitLinkInspectorClose,
   } = params;
 
   const handleEdgeClick = useCallback(
@@ -76,7 +74,8 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
       const fromTitle = nodes.find((n) => String(n.id) === String(edge.source))?.data?.title ?? null;
       const toTitle = nodes.find((n) => String(n.id) === String(edge.target))?.data?.title ?? null;
 
-      if (flowCardSettingsOpen) closeFlowCardSettings();
+      if (flowCardSettingsOpen && requestImplicitFlowCardSettingsClose()) return;
+      if (boardMenuView === 'link' && requestImplicitLinkInspectorClose()) return;
       if (boardMenuView === 'card') closeCardDetails();
 
       selectEdgeAndNodes({
@@ -102,13 +101,14 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
       boardMenuView,
       canEditCards,
       closeCardDetails,
-      closeFlowCardSettings,
       defaultLinkColor,
       flowCardSettingsOpen,
       hasToken,
       nodes,
       numericBoardId,
       openLinkInspector,
+      requestImplicitFlowCardSettingsClose,
+      requestImplicitLinkInspectorClose,
       selectEdgeAndNodes,
     ]
   );
@@ -126,11 +126,18 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
         (String(node.type) === 'rectangle' && Boolean(targetEl?.closest(`.${nodeRectangleClassName}`)));
       if (!clickedShape) return;
 
-      setSelectedNodeOnly(clickedId);
-
       const wideBoardMenu = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       if (boardMenuView === 'link' && selectedLink && !clickedId.startsWith('draft-')) {
-        closeLinkInspector();
+        if (requestImplicitLinkInspectorClose()) return;
+      }
+
+      if (flowCardSettingsOpen && activeNodeId && clickedId !== String(activeNodeId)) {
+        if (requestImplicitFlowCardSettingsClose()) return;
+      }
+
+      setSelectedNodeOnly(clickedId);
+
+      if (boardMenuView === 'link' && selectedLink && !clickedId.startsWith('draft-')) {
         clearSelectedEdges();
         setNodes((prev) => prev.map((n) => ({ ...n, selected: String(n.id) === clickedId })));
         setEdgeHighlightBySelectedNodes(new Set([clickedId]));
@@ -161,10 +168,6 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
         return;
       }
 
-      if (flowCardSettingsOpen && activeNodeId && clickedId !== String(activeNodeId)) {
-        cancelCardSettings();
-      }
-
       openSettingsForNode(node);
       if (cardDetailsSnapshot) openCardDetailsFromNode(cardDetailsSnapshot, { openMenu: shouldOpenDetailsMenu });
 
@@ -180,17 +183,17 @@ export const useFlowBoardMenuTransitions = (params: UseFlowBoardMenuTransitionsP
       activeNodeId,
       boardMenuView,
       canEditCards,
-      cancelCardSettings,
       clearSelectedEdges,
       closeCardDetails,
       closeContextMenu,
-      closeLinkInspector,
       flowCardSettingsOpen,
       flowDragHandleClassName,
       nodeRectangleClassName,
       numericBoardId,
       openCardDetailsFromNode,
       openSettingsForNode,
+      requestImplicitFlowCardSettingsClose,
+      requestImplicitLinkInspectorClose,
       selectedLink,
       setEdgeHighlightBySelectedNodes,
       setLinkSourceNodeId,

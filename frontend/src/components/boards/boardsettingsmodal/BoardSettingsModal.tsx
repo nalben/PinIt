@@ -7,6 +7,7 @@ import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
+import UnsavedChangesModal from '@/components/_UI/unsavedchangesmodal/UnsavedChangesModal';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Edit from '@/assets/icons/monochrome/edit.svg';
 import DefaultUser from '@/assets/icons/monochrome/default-user.svg';
@@ -93,6 +94,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false);
 
   const [participantsError, setParticipantsError] = useState<string | null>(null);
   const [removedGuestsByUserId, setRemovedGuestsByUserId] = useState<Record<number, BoardParticipant>>({});
@@ -105,6 +107,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const [inviteLinkCopied, setInviteLinkCopied] = useState(false);
   const inviteLinkCopiedTimeoutRef = useRef<number | null>(null);
   const friendsListRef = useRef<HTMLDivElement | null>(null);
+  const modalContentRef = useRef<HTMLDivElement | null>(null);
   const [hasFriendsListScroll, setHasFriendsListScroll] = useState(false);
   const [participantsInnerView, setParticipantsInnerView] = useState<'friends' | 'guests'>('friends');
   const [friendsSearch, setFriendsSearch] = useState('');
@@ -123,13 +126,6 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     priority: 1040,
     isOpen: deleteConfirmOpen,
     onEscape: () => setDeleteConfirmOpen(false),
-  });
-
-  useEscapeHandler({
-    id: 'board-settings:modal',
-    priority: 800,
-    isOpen: isOpen,
-    onEscape: close,
   });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -151,6 +147,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const title = draft?.title ?? (typeof initialTitle === 'string' ? initialTitle : '');
   const description = draft?.description ?? (typeof initialDescription === 'string' ? initialDescription : '');
   const isPublic = draft?.is_public ?? Boolean(initialIsPublic);
+  const hasUnsavedCloseChanges = isDraftDirty || Boolean(imageFile || imagePreview || cropSourceFile);
   const currentImageSrc = resolveBoardImageSrc(boardMeta?.image ?? null);
   const imageSrc = imagePreview ?? currentImageSrc ?? initialImageSrc ?? null;
   const participantsResponse = useBoardDetailsStore((s) => (numericBoardId ? (s.participantsByBoardId[numericBoardId] ?? null) : null));
@@ -174,6 +171,29 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const participantsLoading = Boolean(participantsLoadingFlags?.initial) && !participantsResponse;
   const outgoingInvitesLoading = Boolean(outgoingInvitesLoadingFlags?.initial) && Object.keys(outgoingInvitesByUserId).length === 0;
   const inviteLinkLoading = inviteLinkActionLoading || (Boolean(inviteLinkLoadingFlags?.initial) && !inviteLinkToken);
+
+  const requestClose = useCallback(() => {
+    if (!isOpen || isSaving || isDeleting) return;
+    if (hasUnsavedCloseChanges) {
+      setCloseConfirmOpen(true);
+      return;
+    }
+    close();
+  }, [close, hasUnsavedCloseChanges, isDeleting, isOpen, isSaving]);
+
+  useEscapeHandler({
+    id: 'board-settings:unsaved-close',
+    priority: 1300,
+    isOpen: closeConfirmOpen,
+    onEscape: () => setCloseConfirmOpen(false),
+  });
+
+  useEscapeHandler({
+    id: 'board-settings:modal',
+    priority: 800,
+    isOpen: isOpen,
+    onEscape: requestClose,
+  });
 
   useEffect(() => {
     setRemovedGuestsByUserId((prev) => {
@@ -230,6 +250,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
 
   useEffect(() => {
     if (isOpen) return;
+    setCloseConfirmOpen(false);
     setImageFile(null);
     if (imagePreview) URL.revokeObjectURL(imagePreview);
     setImagePreview(null);
@@ -249,6 +270,60 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     }
     if (numericBoardId) useBoardDetailsStore.getState().resetBoardDraft(numericBoardId);
   }, [imagePreview, isOpen, numericBoardId, shouldWarmAllTabs]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let activePointerId: number | null = null;
+    let startX = 0;
+    let startY = 0;
+    let moved = false;
+    const moveThreshold = 6;
+
+    const shouldIgnoreTarget = (target: EventTarget | null) => {
+      const modalEl = modalContentRef.current;
+      if (modalEl && target instanceof Node && modalEl.contains(target)) return true;
+      const targetEl = target instanceof HTMLElement ? target : null;
+      if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return true;
+      if (targetEl?.closest?.('[data-modal-scope="unsaved-changes"]')) return true;
+      return false;
+    };
+
+    const onPointerDownCapture = (e: PointerEvent) => {
+      if (e.button !== 0 && e.button !== 2) return;
+      if (shouldIgnoreTarget(e.target)) return;
+      activePointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      moved = false;
+    };
+
+    const onPointerMoveCapture = (e: PointerEvent) => {
+      if (activePointerId === null || e.pointerId !== activePointerId) return;
+      if (moved) return;
+      if (Math.abs(e.clientX - startX) > moveThreshold || Math.abs(e.clientY - startY) > moveThreshold) {
+        moved = true;
+      }
+    };
+
+    const onPointerUpCapture = (e: PointerEvent) => {
+      if (activePointerId === null || e.pointerId !== activePointerId) return;
+      activePointerId = null;
+      if (moved || shouldIgnoreTarget(e.target)) return;
+      requestClose();
+    };
+
+    window.addEventListener('pointerdown', onPointerDownCapture, true);
+    window.addEventListener('pointermove', onPointerMoveCapture, true);
+    window.addEventListener('pointerup', onPointerUpCapture, true);
+    window.addEventListener('pointercancel', onPointerUpCapture, true);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDownCapture, true);
+      window.removeEventListener('pointermove', onPointerMoveCapture, true);
+      window.removeEventListener('pointerup', onPointerUpCapture, true);
+      window.removeEventListener('pointercancel', onPointerUpCapture, true);
+    };
+  }, [isOpen, requestClose]);
 
   const inviteLinkUrl = useMemo(() => {
     if (!numericBoardId || !inviteLinkToken) return '';
@@ -682,8 +757,8 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   };
 
   return (
-    <AuthModal isOpen={isOpen} onClose={close} closeOnOverlayClick={false}>
-      <div className={classes.root}>
+    <AuthModal isOpen={isOpen} onClose={requestClose} closeOnOverlayClick={false}>
+      <div ref={modalContentRef} className={classes.root}>
         <div className={classes.toggleButtons}>
           <button
             type="button"
@@ -1204,6 +1279,19 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
         onApply={async (file) => {
           await persistBoardImage(file);
         }}
+      />
+      <UnsavedChangesModal
+        isOpen={closeConfirmOpen}
+        wide
+        onSaveAndClose={() => {
+          setCloseConfirmOpen(false);
+          void submit();
+        }}
+        onDiscardChanges={() => {
+          setCloseConfirmOpen(false);
+          close();
+        }}
+        onContinueEditing={() => setCloseConfirmOpen(false)}
       />
     </AuthModal>
   );
