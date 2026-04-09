@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useParams } from 'react-router-dom';
 import { useLayoutEffect } from 'react';
@@ -7,17 +7,9 @@ import ReactFlow, {
   BackgroundVariant,
   ConnectionLineType,
   ConnectionLineComponentProps,
-  BaseEdge,
   Edge,
-  EdgeProps,
-  EdgeLabelRenderer,
-  Handle,
   MiniMap,
-  MiniMapNodeProps,
   Node as RFNode,
-  NodeProps,
-  Position,
-  MarkerType,
   SelectionMode,
   applyNodeChanges,
   ReactFlowInstance,
@@ -34,7 +26,6 @@ import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
 import UnsavedChangesModal from '@/components/_UI/unsavedchangesmodal/UnsavedChangesModal';
 import LockClose from '@/assets/icons/monochrome/lock_close.svg';
 import LockOpen from '@/assets/icons/monochrome/lock_open.svg';
-import BackIcon from '@/assets/icons/monochrome/back.svg';
 import Details from '@/assets/icons/monochrome/details.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
 import ColorIcon from '@/assets/icons/monochrome/color.svg';
@@ -45,12 +36,46 @@ import {
   buildEdgeFromLink,
   getBoundaryPoint,
   getInitialViewportForDenseArea,
-  getLinkHandleStyle,
   getNodeRect,
   NODE_SIZES,
   mapApiTypeToNodeType,
   resolveImageSrc
 } from './flowBoardUtils';
+import {
+  buildDrawingPathFromPoints,
+  clampDrawingStrokeWidth,
+  clampFlowZoom,
+  collectUniqueHexColors,
+  DEFAULT_CARD_PICKER_COLOR,
+  DEFAULT_DRAW_COLOR,
+  DEFAULT_DRAW_STROKE_WIDTH,
+  type DrawingCanvasItem,
+  type DrawingCreateSnapshot,
+  type DrawingHistoryEntry,
+  type DrawingPersistedSnapshot,
+  expandDrawingIdsByGroup,
+  getDrawingBoundsFromPathD,
+  getDrawingScreenBounds,
+  isPointInRect,
+  isPointNearDrawingPath,
+  makeClientDrawId,
+  makeDrawingGroupKey,
+  MAX_CARD_IMAGE_SIZE_BYTES,
+  MAX_CARD_IMAGE_SIZE_MB,
+  MIN_DRAW_POINT_DISTANCE,
+  normalizeDrawingSortOrders,
+  normalizeHexColor,
+  parseViewportTransform,
+  type PendingBoardDrawing,
+  PRESET_CARD_COLORS,
+  rectsIntersect,
+  roundDrawingCoord,
+  sortBoardDrawings,
+  toDrawingCreateSnapshot,
+  toDrawingPersistedSnapshot,
+  translateDrawingPath,
+} from './flowBoardDrawingUtils';
+import { EDGE_TYPES, getNodeFloatVector, MiniMapNode, NODE_TYPES, useNodeFloatNow } from './flowBoardRenderers';
 import { useFlowBoardBoardsUpdatedSocket } from './useFlowBoardBoardsUpdatedSocket';
 import { useFlowBoardContextMenu } from './useFlowBoardContextMenu';
 import { useFlowBoardPointerGestures } from './useFlowBoardPointerGestures';
@@ -62,6 +87,7 @@ import { useFlowCardFavoriteColors } from '@/components/flowboard/hooks/useFlowC
 import { getCardImageCropPreset } from '@/utils/imageCropPresets';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 import { FlowColorPaletteModal } from './FlowColorPaletteModal';
+import { FlowDrawingToolbar } from './FlowDrawingToolbar';
 
 export type FlowBoardHandle = {
   createDraftNodeAtCenter: () => void;
@@ -72,882 +98,6 @@ export type FlowBoardHandle = {
 
 const DEFAULT_LINK_STYLE: ApiLinkStyle = 'line';
 const DEFAULT_LINK_COLOR = 'var(--pink)';
-
-const MAX_CARD_IMAGE_SIZE_MB = 5;
-const MAX_CARD_IMAGE_SIZE_BYTES = MAX_CARD_IMAGE_SIZE_MB * 1024 * 1024;
-const DEFAULT_CARD_PICKER_COLOR = '#E7CD73';
-const DEFAULT_DRAW_COLOR = '#F7C66F';
-const DEFAULT_DRAW_STROKE_WIDTH = 6;
-const MIN_DRAW_POINT_DISTANCE = 0.7;
-const PRESET_CARD_COLORS = ['#F28B82', '#F7C66F', '#F2E394', '#9FD3C7', '#7AC7E3', '#9DB7FF', '#C7A6FF', '#F3A6C8'] as const;
-
-const normalizeHexColor = (value: unknown): string | null => {
-  if (typeof value !== 'string') return null;
-  const color = value.trim().toUpperCase();
-  return /^#[0-9A-F]{6}$/.test(color) ? color : null;
-};
-
-const collectUniqueHexColors = (colors: Array<string | null | undefined>): string[] => {
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  colors.forEach((value) => {
-    const color = normalizeHexColor(value);
-    if (!color || seen.has(color)) return;
-    seen.add(color);
-    result.push(color);
-  });
-
-  return result;
-};
-
-const clampDrawingStrokeWidth = (value: unknown) => {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return DEFAULT_DRAW_STROKE_WIDTH;
-  return Math.min(24, Math.max(2, Math.round(numeric)));
-};
-
-const clampFlowZoom = (value: number) => {
-  if (!Number.isFinite(value)) return 1;
-  return Math.min(2, Math.max(0.5, value));
-};
-
-const makeClientDrawId = () => `draw-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-const makeDrawingGroupKey = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID().toLowerCase();
-  }
-
-  const bytes = new Uint8Array(16);
-  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
-    crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < bytes.length; i += 1) {
-      bytes[i] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-};
-
-const sortBoardDrawings = <TDrawing extends { sort_order: number; id?: number }>(items: TDrawing[]) =>
-  items.slice().sort((a, b) => {
-    const orderDiff = Number(a.sort_order) - Number(b.sort_order);
-    if (orderDiff) return orderDiff;
-    return Number(a.id ?? 0) - Number(b.id ?? 0);
-  });
-
-const normalizeDrawingSortOrders = <TDrawing extends { sort_order: number }>(items: TDrawing[]) =>
-  items.map((item, index) => ({ ...item, sort_order: index + 1 }));
-
-const roundDrawingCoord = (value: number) => Math.round(value * 100) / 100;
-
-const buildDrawingPathFromPoints = (points: ApiBoardDrawingPoint[]) => {
-  if (points.length < 2) return '';
-  if (points.length === 2) {
-    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-  }
-
-  let path = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length - 1; i += 1) {
-    const current = points[i];
-    const next = points[i + 1];
-    const midX = roundDrawingCoord((current.x + next.x) / 2);
-    const midY = roundDrawingCoord((current.y + next.y) / 2);
-    path += ` Q ${current.x} ${current.y} ${midX} ${midY}`;
-  }
-
-  const last = points[points.length - 1];
-  path += ` L ${last.x} ${last.y}`;
-  return path;
-};
-
-type PendingBoardDrawing = {
-  client_draw_id: string;
-  board_id: number;
-  user_id: number;
-  color: string;
-  stroke_width: number;
-  path_d: string;
-  sort_order: number;
-  group_key: string | null;
-  created_at: string;
-  points: ApiBoardDrawingPoint[];
-};
-
-type DrawingPersistedSnapshot = {
-  id: number;
-  board_id: number;
-  user_id: number;
-  color: string;
-  stroke_width: number;
-  path_d: string;
-  sort_order: number;
-  group_key: string | null;
-  created_at: string;
-};
-
-type DrawingCreateSnapshot = Omit<DrawingPersistedSnapshot, 'id' | 'created_at'> & {
-  points?: ApiBoardDrawingPoint[];
-  created_at?: string;
-};
-
-type DrawingHistoryEntry =
-  | {
-      kind: 'create';
-      snapshot: DrawingPersistedSnapshot;
-      restore: DrawingCreateSnapshot;
-    }
-  | {
-      kind: 'delete';
-      snapshots: DrawingPersistedSnapshot[];
-    }
-  | {
-      kind: 'update';
-      before: DrawingPersistedSnapshot[];
-      after: DrawingPersistedSnapshot[];
-    };
-
-type DrawingPathCommandType = 'M' | 'L' | 'Q';
-
-type DrawingPathCommand = {
-  command: DrawingPathCommandType;
-  values: number[];
-};
-
-type DrawingBounds = {
-  minX: number;
-  minY: number;
-  maxX: number;
-  maxY: number;
-};
-
-type DrawingCanvasItem = {
-  key: string;
-  drawing: ApiBoardDrawing | PendingBoardDrawing;
-  path: Path2D;
-  bounds: DrawingBounds | null;
-  selectable: boolean;
-};
-
-const DRAWING_PATH_TOKEN_RE = /[MLQ]|-?\d+(?:\.\d+)?/g;
-const DRAWING_PATH_COMMAND_ARITY: Record<DrawingPathCommandType, number> = {
-  M: 2,
-  L: 2,
-  Q: 4,
-};
-
-const parseDrawingPathCommands = (pathD: string): DrawingPathCommand[] | null => {
-  if (!pathD) return null;
-  const tokens = pathD.match(DRAWING_PATH_TOKEN_RE);
-  if (!tokens?.length) return null;
-
-  const commands: DrawingPathCommand[] = [];
-  let index = 0;
-
-  while (index < tokens.length) {
-    const rawCommand = tokens[index++]?.toUpperCase();
-    if (rawCommand !== 'M' && rawCommand !== 'L' && rawCommand !== 'Q') return null;
-
-    const arity = DRAWING_PATH_COMMAND_ARITY[rawCommand];
-    const values: number[] = [];
-
-    for (let i = 0; i < arity; i += 1) {
-      const token = tokens[index++];
-      const value = roundDrawingCoord(Number(token));
-      if (!Number.isFinite(value)) return null;
-      values.push(value);
-    }
-
-    commands.push({ command: rawCommand, values });
-  }
-
-  return commands.length ? commands : null;
-};
-
-const stringifyDrawingPathCommands = (commands: DrawingPathCommand[]) =>
-  commands
-    .map(({ command, values }) => `${command} ${values.map((value) => roundDrawingCoord(value)).join(' ')}`)
-    .join(' ');
-
-const getDistanceToSegment = (
-  point: { x: number; y: number },
-  start: { x: number; y: number },
-  end: { x: number; y: number }
-) => {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  if (dx === 0 && dy === 0) return Math.hypot(point.x - start.x, point.y - start.y);
-
-  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy)));
-  const projectedX = start.x + dx * t;
-  const projectedY = start.y + dy * t;
-  return Math.hypot(point.x - projectedX, point.y - projectedY);
-};
-
-const getQuadraticPoint = (
-  start: { x: number; y: number },
-  control: { x: number; y: number },
-  end: { x: number; y: number },
-  t: number
-) => {
-  const mt = 1 - t;
-  return {
-    x: mt * mt * start.x + 2 * mt * t * control.x + t * t * end.x,
-    y: mt * mt * start.y + 2 * mt * t * control.y + t * t * end.y,
-  };
-};
-
-const isPointNearDrawingPath = (pathD: string, point: { x: number; y: number }, tolerance: number) => {
-  const commands = parseDrawingPathCommands(pathD);
-  if (!commands?.length) return false;
-
-  let currentPoint: { x: number; y: number } | null = null;
-  for (const command of commands) {
-    if (command.command === 'M') {
-      currentPoint = { x: command.values[0], y: command.values[1] };
-      continue;
-    }
-
-    if (!currentPoint) return false;
-
-    if (command.command === 'L') {
-      const nextPoint = { x: command.values[0], y: command.values[1] };
-      if (getDistanceToSegment(point, currentPoint, nextPoint) <= tolerance) return true;
-      currentPoint = nextPoint;
-      continue;
-    }
-
-    if (command.command === 'Q') {
-      const control = { x: command.values[0], y: command.values[1] };
-      const end = { x: command.values[2], y: command.values[3] };
-      let previousPoint = currentPoint;
-      const segments = 20;
-      for (let index = 1; index <= segments; index += 1) {
-        const nextPoint = getQuadraticPoint(currentPoint, control, end, index / segments);
-        if (getDistanceToSegment(point, previousPoint, nextPoint) <= tolerance) return true;
-        previousPoint = nextPoint;
-      }
-      currentPoint = end;
-    }
-  }
-
-  return false;
-};
-
-const getDrawingBoundsFromPathD = (pathD: string): DrawingBounds | null => {
-  const commands = parseDrawingPathCommands(pathD);
-  if (!commands?.length) return null;
-
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-
-  commands.forEach(({ values }) => {
-    for (let i = 0; i < values.length; i += 2) {
-      const x = values[i];
-      const y = values[i + 1];
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  });
-
-  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
-    return null;
-  }
-
-  return { minX, minY, maxX, maxY };
-};
-
-const translateDrawingPath = (pathD: string, dx: number, dy: number): string | null => {
-  const commands = parseDrawingPathCommands(pathD);
-  if (!commands?.length) return null;
-
-  const nextCommands = commands.map(({ command, values }) => ({
-    command,
-    values: values.map((value, index) => roundDrawingCoord(value + (index % 2 === 0 ? dx : dy))),
-  }));
-
-  return stringifyDrawingPathCommands(nextCommands);
-};
-
-const getTranslatedDrawingBounds = (bounds: DrawingBounds | null, dx: number, dy: number): DrawingBounds | null => {
-  if (!bounds) return null;
-  return {
-    minX: roundDrawingCoord(bounds.minX + dx),
-    minY: roundDrawingCoord(bounds.minY + dy),
-    maxX: roundDrawingCoord(bounds.maxX + dx),
-    maxY: roundDrawingCoord(bounds.maxY + dy),
-  };
-};
-
-const getDrawingScreenBounds = (
-  bounds: DrawingBounds | null,
-  viewport: { x: number; y: number; zoom: number },
-  options?: { offsetX?: number; offsetY?: number; pad?: number }
-) => {
-  if (!bounds) return null;
-  const { offsetX = 0, offsetY = 0, pad = 0 } = options ?? {};
-  const zoom = Number.isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1;
-
-  const left = (bounds.minX + offsetX) * zoom + viewport.x - pad;
-  const top = (bounds.minY + offsetY) * zoom + viewport.y - pad;
-  const right = (bounds.maxX + offsetX) * zoom + viewport.x + pad;
-  const bottom = (bounds.maxY + offsetY) * zoom + viewport.y + pad;
-
-  return {
-    left,
-    top,
-    right,
-    bottom,
-    width: Math.max(0, right - left),
-    height: Math.max(0, bottom - top),
-  };
-};
-
-const isPointInRect = (
-  x: number,
-  y: number,
-  rect: { left: number; top: number; right: number; bottom: number } | null
-) => Boolean(rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
-
-const rectsIntersect = (
-  a: { left: number; top: number; right: number; bottom: number } | null,
-  b: { left: number; top: number; right: number; bottom: number } | null
-) => Boolean(a && b && a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top);
-
-const mergeDrawingBounds = (items: Array<DrawingBounds | null>): DrawingBounds | null => {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-
-  items.forEach((bounds) => {
-    if (!bounds) return;
-    minX = Math.min(minX, bounds.minX);
-    minY = Math.min(minY, bounds.minY);
-    maxX = Math.max(maxX, bounds.maxX);
-    maxY = Math.max(maxY, bounds.maxY);
-  });
-
-  if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
-    return null;
-  }
-
-  return { minX, minY, maxX, maxY };
-};
-
-const toDrawingPersistedSnapshot = (drawing: ApiBoardDrawing): DrawingPersistedSnapshot => ({
-  id: drawing.id,
-  board_id: drawing.board_id,
-  user_id: drawing.user_id,
-  color: drawing.color,
-  stroke_width: drawing.stroke_width,
-  path_d: drawing.path_d,
-  sort_order: drawing.sort_order,
-  group_key: drawing.group_key ?? null,
-  created_at: drawing.created_at,
-});
-
-const toDrawingCreateSnapshot = (
-  drawing: ApiBoardDrawing | PendingBoardDrawing | DrawingPersistedSnapshot,
-  points?: ApiBoardDrawingPoint[]
-): DrawingCreateSnapshot => ({
-  board_id: drawing.board_id,
-  user_id: drawing.user_id,
-  color: drawing.color,
-  stroke_width: drawing.stroke_width,
-  path_d: drawing.path_d,
-  sort_order: drawing.sort_order,
-  group_key: drawing.group_key ?? null,
-  points,
-});
-
-const expandDrawingIdsByGroup = (drawings: ApiBoardDrawing[], ids: number[]) => {
-  if (!ids.length) return [];
-
-  const selectedSet = new Set(ids);
-  const selectedGroups = new Set(
-    drawings
-      .filter((drawing) => selectedSet.has(drawing.id) && drawing.group_key)
-      .map((drawing) => drawing.group_key as string)
-  );
-
-  return sortBoardDrawings(
-    drawings.filter((drawing) => selectedSet.has(drawing.id) || (drawing.group_key && selectedGroups.has(drawing.group_key)))
-  ).map((drawing) => drawing.id);
-};
-
-const parseViewportTransform = (transform: string | null | undefined) => {
-  if (!transform || transform === 'none') return null;
-
-  const matrixMatch = transform.match(/^matrix\((.+)\)$/);
-  if (matrixMatch) {
-    const values = matrixMatch[1].split(',').map((value) => Number(value.trim()));
-    if (values.length === 6 && values.every((value) => Number.isFinite(value))) {
-      return {
-        x: values[4],
-        y: values[5],
-        zoom: clampFlowZoom(values[0]),
-      };
-    }
-  }
-
-  const matrix3dMatch = transform.match(/^matrix3d\((.+)\)$/);
-  if (matrix3dMatch) {
-    const values = matrix3dMatch[1].split(',').map((value) => Number(value.trim()));
-    if (values.length === 16 && values.every((value) => Number.isFinite(value))) {
-      return {
-        x: values[12],
-        y: values[13],
-        zoom: clampFlowZoom(values[0]),
-      };
-    }
-  }
-
-  return null;
-};
-
-const MiniMapNode: React.FC<MiniMapNodeProps> = (props) => {
-  const { id, x, y, width, height, className, color, strokeColor, strokeWidth, shapeRendering, style, onClick } = props;
-
-  const commonProps = {
-    className,
-    style,
-    fill: color,
-    stroke: strokeColor,
-    strokeWidth,
-    shapeRendering,
-    onClick: onClick ? (e: React.MouseEvent<SVGElement>) => onClick(e, id) : undefined,
-  };
-
-  if (className.includes('minimap_circle')) {
-    const r = Math.min(width, height) / 2;
-    return <circle {...commonProps} cx={x + width / 2} cy={y + height / 2} r={r} />;
-  }
-
-  if (className.includes('minimap_rhombus')) {
-    const points = [
-      `${x + width / 2},${y}`,
-      `${x + width},${y + height / 2}`,
-      `${x + width / 2},${y + height}`,
-      `${x},${y + height / 2}`,
-    ].join(' ');
-    return <polygon {...commonProps} points={points} />;
-  }
-
-  return <rect {...commonProps} x={x} y={y} width={width} height={height} rx={props.borderRadius} ry={props.borderRadius} />;
-};
-
-const ConnectionHandles = ({ isConnectable, shape, isLocked = false }: { isConnectable: boolean; shape: FlowNodeType; isLocked?: boolean }) => {
-  const sourceClass = `${classes.flow_link_handle} ${classes.flow_link_handle_source} nodrag`.trim();
-  const targetClass = `${classes.flow_link_handle} ${classes.flow_link_handle_target} nodrag`.trim();
-  const style = getLinkHandleStyle(shape, { isLocked });
-  return (
-    <>
-      <Handle type="source" id="s" position={Position.Top} className={sourceClass} style={style} isConnectable={isConnectable} />
-      <Handle type="target" id="t" position={Position.Top} className={targetClass} style={style} isConnectable={isConnectable} />
-    </>
-  );
-};
-
-type NodeFloatMotion = {
-  style: React.CSSProperties;
-};
-
-type NodeFloatVector = {
-  x: number;
-  y: number;
-  rotate: number;
-};
-
-type NodeFloatPathPoint = {
-  t: number;
-  x: number;
-  y: number;
-  rotate: number;
-};
-
-const NODE_FLOAT_PATHS: readonly (readonly NodeFloatPathPoint[])[] = [
-  [
-    { t: 0, x: 0, y: 0, rotate: 0 },
-    { t: 0.19, x: 0.55, y: -0.45, rotate: -0.6 },
-    { t: 0.38, x: -0.35, y: -0.9, rotate: 0.8 },
-    { t: 0.61, x: 0.9, y: 0.2, rotate: -0.45 },
-    { t: 0.83, x: -0.6, y: 0.8, rotate: 0.55 },
-    { t: 1, x: 0, y: 0, rotate: 0 },
-  ],
-  [
-    { t: 0, x: 0, y: 0, rotate: 0 },
-    { t: 0.16, x: -0.75, y: 0.15, rotate: 0.6 },
-    { t: 0.33, x: -0.25, y: -0.95, rotate: -0.55 },
-    { t: 0.57, x: 0.8, y: -0.2, rotate: 0.35 },
-    { t: 0.78, x: 0.3, y: 0.85, rotate: -0.75 },
-    { t: 1, x: 0, y: 0, rotate: 0 },
-  ],
-  [
-    { t: 0, x: 0, y: 0, rotate: 0 },
-    { t: 0.14, x: 0.2, y: -0.85, rotate: -0.65 },
-    { t: 0.29, x: -0.9, y: -0.25, rotate: 0.55 },
-    { t: 0.54, x: 0.65, y: 0.35, rotate: -0.35 },
-    { t: 0.72, x: -0.2, y: 0.95, rotate: 0.75 },
-    { t: 0.89, x: 0.85, y: -0.15, rotate: -0.45 },
-    { t: 1, x: 0, y: 0, rotate: 0 },
-  ],
-  [
-    { t: 0, x: 0, y: 0, rotate: 0 },
-    { t: 0.18, x: -0.45, y: -0.7, rotate: 0.65 },
-    { t: 0.36, x: 0.95, y: -0.1, rotate: -0.35 },
-    { t: 0.58, x: 0.15, y: 0.9, rotate: 0.8 },
-    { t: 0.76, x: -0.85, y: 0.35, rotate: -0.6 },
-    { t: 1, x: 0, y: 0, rotate: 0 },
-  ],
-] as const;
-
-const FLOAT_CLOCK = (() => {
-  let now = 0;
-  let frameId: number | null = null;
-  const listeners = new Set<() => void>();
-
-  const tick = () => {
-    now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-    listeners.forEach((listener) => listener());
-    frameId = listeners.size ? window.requestAnimationFrame(tick) : null;
-  };
-
-  return {
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      if (listeners.size === 1 && typeof window !== 'undefined') {
-        now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-        frameId = window.requestAnimationFrame(tick);
-      }
-      return () => {
-        listeners.delete(listener);
-        if (!listeners.size && frameId !== null && typeof window !== 'undefined') {
-          window.cancelAnimationFrame(frameId);
-          frameId = null;
-        }
-      };
-    },
-    getSnapshot: () => now,
-    getServerSnapshot: () => 0,
-  };
-})();
-
-const useNodeFloatNow = () =>
-  useSyncExternalStore(FLOAT_CLOCK.subscribe, FLOAT_CLOCK.getSnapshot, FLOAT_CLOCK.getServerSnapshot);
-
-const hashNodeFloatSeed = (nodeId: string) => {
-  let hash = 2166136261;
-  for (let i = 0; i < nodeId.length; i += 1) {
-    hash ^= nodeId.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-};
-
-const sampleNodeFloatPath = (path: readonly NodeFloatPathPoint[], progress: number): NodeFloatPathPoint => {
-  if (progress <= 0) return path[0];
-  if (progress >= 1) return path[path.length - 1];
-
-  for (let i = 1; i < path.length; i += 1) {
-    const prev = path[i - 1];
-    const next = path[i];
-    if (progress > next.t) continue;
-
-    const range = next.t - prev.t || 1;
-    const localT = (progress - prev.t) / range;
-    const easedT = localT * localT * (3 - 2 * localT);
-    return {
-      t: progress,
-      x: prev.x + (next.x - prev.x) * easedT,
-      y: prev.y + (next.y - prev.y) * easedT,
-      rotate: prev.rotate + (next.rotate - prev.rotate) * easedT,
-    };
-  }
-
-  return path[path.length - 1];
-};
-
-const getNodeFloatVector = (nodeId: string, now: number): NodeFloatVector => {
-  const seed = hashNodeFloatSeed(nodeId);
-  const durationSeconds = 14 + (seed % 8);
-  const durationMs = durationSeconds * 1000;
-  const phaseMs = (seed >>> 4) % durationMs;
-  const amplitudeX = 2 + ((seed >>> 8) % 4);
-  const amplitudeY = 2 + ((seed >>> 12) % 4);
-  const rotationDeg = (18 + ((seed >>> 16) % 16)) / 100;
-  const path = NODE_FLOAT_PATHS[seed % NODE_FLOAT_PATHS.length] ?? NODE_FLOAT_PATHS[0];
-  const progress = durationMs > 0 ? ((now + phaseMs) % durationMs) / durationMs : 0;
-  const sample = sampleNodeFloatPath(path, progress);
-  return {
-    x: sample.x * amplitudeX,
-    y: sample.y * amplitudeY,
-    rotate: sample.rotate * rotationDeg,
-  };
-};
-
-const getNodeFloatMotion = (nodeId: string, now: number): NodeFloatMotion => {
-  const vector = getNodeFloatVector(nodeId, now);
-  return {
-    style: {
-      transform: `translate3d(${vector.x.toFixed(2)}px, ${vector.y.toFixed(2)}px, 0) rotate(${vector.rotate.toFixed(3)}deg)`,
-    },
-  };
-};
-
-const RectangleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
-  const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
-  const isDraft = String(id).startsWith('draft-');
-  const hasImage = Boolean(data.imageSrc && data.imageLoaded);
-  const floatNow = useNodeFloatNow();
-  const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
-  const nodeStyle = !hasImage && data.color ? { backgroundColor: data.color } : undefined;
-  return (
-    <div className={classes.node_rectangle_shell}>
-      <div className={classes.flow_node_float} style={floatMotion.style}>
-        <div className={classes.node_rectangle} style={nodeStyle}>
-          {hasImage ? (
-            <div
-              className={classes.node_image_layer}
-              style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-              aria-hidden="true"
-            />
-          ) : null}
-          {isDraft ? null : <ConnectionHandles shape="rectangle" isConnectable={!data.isLocked} isLocked={Boolean(data.isLocked)} />}
-          {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_rect}`.trim()} aria-hidden="true" /> : null}
-          <svg className={classes.flow_hit_svg} viewBox="0 0 240 80" aria-hidden="true">
-            <rect className={classes.flow_drag_handle} x="0" y="0" width="240" height="80" rx="10" ry="10" />
-          </svg>
-          {data.isLocked ? (
-            <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rectangle}`}>
-              <LockClose />
-            </div>
-          ) : null}
-          <div className={`${classes.node_rectangle_title} ${classes.flow_drag_handle}`.trim()}>{data.title}</div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const RhombusNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
-  const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
-  const isDraft = String(id).startsWith('draft-');
-  const hasImage = Boolean(data.imageSrc && data.imageLoaded);
-  const floatNow = useNodeFloatNow();
-  const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
-  const nodeStyle = !hasImage && data.color ? { backgroundColor: data.color } : undefined;
-  return (
-    <div className={classes.node_rhombus_shell}>
-      <div className={classes.flow_node_float} style={floatMotion.style}>
-        <div className={classes.node_rhombus}>
-          {isDraft ? null : <ConnectionHandles shape="rhombus" isConnectable={!data.isLocked} />}
-          <div
-            className={classes.rhombus_content}
-            style={nodeStyle}
-          >
-            {hasImage ? (
-              <div
-                className={classes.node_image_layer}
-                style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-                aria-hidden="true"
-              />
-            ) : null}
-            {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
-            <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
-              <polygon className={classes.flow_drag_handle} points="60,0 120,60 60,120 0,60" />
-            </svg>
-          </div>
-          {data.isLocked ? (
-            <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_rhombus}`}>
-              <LockClose />
-            </div>
-          ) : null}
-          <span>{data.title}</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const CircleNode: React.FC<NodeProps<FlowNodeData>> = ({ data, id }) => {
-  const showSkeleton = Boolean(data.imageSrc && !data.imageLoaded);
-  const isDraft = String(id).startsWith('draft-');
-  const hasImage = Boolean(data.imageSrc && data.imageLoaded);
-  const floatNow = useNodeFloatNow();
-  const floatMotion = useMemo(() => getNodeFloatMotion(String(id), floatNow), [floatNow, id]);
-  const nodeStyle = !hasImage && data.color ? { backgroundColor: data.color } : undefined;
-  return (
-    <div className={classes.node_circle_shell}>
-      <div className={classes.flow_node_float} style={floatMotion.style}>
-        <div className={`${classes.node_circle} ${data.imageSrc && data.imageLoaded ? classes.node_circle_has_image : ''}`.trim()}>
-          {isDraft ? null : <ConnectionHandles shape="circle" isConnectable={!data.isLocked} />}
-          <div
-            className={classes.circle_content}
-            style={nodeStyle}
-          >
-            {hasImage ? (
-              <div
-                className={classes.node_image_layer}
-                style={{ backgroundImage: `url(${data.imageSrc})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-                aria-hidden="true"
-              />
-            ) : null}
-            {showSkeleton ? <div className={`${classes.node_image_skeleton} ${classes.node_image_skeleton_round}`.trim()} aria-hidden="true" /> : null}
-            <svg className={classes.flow_hit_svg} viewBox="0 0 120 120" aria-hidden="true">
-              <circle className={classes.flow_drag_handle} cx="60" cy="60" r="60" />
-            </svg>
-          </div>
-          {data.isLocked ? (
-            <div className={`${classes.node_lock_overlay} ${classes.node_lock_overlay_circle}`}>
-              <LockClose />
-            </div>
-          ) : null}
-          <span>{data.title}</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const NODE_TYPES = { rectangle: RectangleNode, rhombus: RhombusNode, circle: CircleNode } as const;
-
-const FlowStraightEdge: React.FC<EdgeProps> = (props) => {
-  const { id, source, target, style, markerEnd, sourceX, sourceY, targetX, targetY, data } = props;
-  const rf = useReactFlow();
-  const floatNow = useNodeFloatNow();
-  const isSelected = Boolean((props as unknown as { selected?: boolean })?.selected);
-  const [isHovered, setIsHovered] = useState(false);
-  const isDesktopHover = __PLATFORM__ === 'desktop';
-  const sourceFloat = useMemo(() => getNodeFloatVector(String(source), floatNow), [floatNow, source]);
-  const targetFloat = useMemo(() => getNodeFloatVector(String(target), floatNow), [floatNow, target]);
-
-  const sNode = rf.getNode(source);
-  const tNode = rf.getNode(target);
-  const sRect = getNodeRect(sNode);
-  const tRect = getNodeRect(tNode);
-
-  let sx = sourceX + sourceFloat.x;
-  let sy = sourceY + sourceFloat.y;
-  let tx = targetX + targetFloat.x;
-  let ty = targetY + targetFloat.y;
-
-  const MIN_EDGE_RENDER_LEN_PX = 12;
-  const OVERLAP_HIDE_AABB_PAD_PX = 8;
-
-  if (sRect && tRect) {
-    const sType = (sNode?.type as FlowNodeType | undefined) ?? 'rectangle';
-    const tType = (tNode?.type as FlowNodeType | undefined) ?? 'rectangle';
-    const sourceCx = sRect.cx + sourceFloat.x;
-    const sourceCy = sRect.cy + sourceFloat.y;
-    const targetCx = tRect.cx + targetFloat.x;
-    const targetCy = tRect.cy + targetFloat.y;
-    const dx = targetCx - sourceCx;
-    const dy = targetCy - sourceCy;
-
-    const overlapsOrTouchesAabb =
-      Math.abs(dx) <= sRect.hw + tRect.hw + OVERLAP_HIDE_AABB_PAD_PX &&
-      Math.abs(dy) <= sRect.hh + tRect.hh + OVERLAP_HIDE_AABB_PAD_PX;
-
-    if (overlapsOrTouchesAabb) return null;
-
-    const p1 = getBoundaryPoint(sType, sourceCx, sourceCy, dx, dy, sRect.hw, sRect.hh);
-    const p2 = getBoundaryPoint(tType, targetCx, targetCy, -dx, -dy, tRect.hw, tRect.hh);
-    sx = p1.x;
-    sy = p1.y;
-    tx = p2.x;
-    ty = p2.y;
-  }
-
-  if (Math.hypot(tx - sx, ty - sy) < MIN_EDGE_RENDER_LEN_PX) return null;
-
-  const labelRaw = (data as unknown as { label?: unknown })?.label;
-  const isLabelVisibleRaw = (data as unknown as { isLabelVisible?: unknown })?.isLabelVisible;
-  const isLabelVisible = isLabelVisibleRaw === undefined ? true : Boolean(isLabelVisibleRaw);
-  const label = typeof labelRaw === 'string' ? labelRaw.trim() : '';
-  const shouldRenderLabel = Boolean(label);
-  const labelOpacity = isLabelVisible || isHovered || isSelected ? 1 : 0;
-  const labelClass = classes.flow_edge_label_html;
-  const mx = (sx + tx) / 2;
-  const my = (sy + ty) / 2;
-
-  const dataStyleRaw = (data as unknown as { style?: unknown })?.style;
-  const isArrow =
-    dataStyleRaw === 'arrow' ? true : dataStyleRaw === 'line' ? false : Boolean(markerEnd);
-
-  const dx = tx - sx;
-  const dy = ty - sy;
-  const len = Math.hypot(dx, dy);
-  const ux = Number.isFinite(len) && len > 0.0001 ? dx / len : 0;
-  const uy = Number.isFinite(len) && len > 0.0001 ? dy / len : 0;
-
-  const ARROW_LEN = 16;
-  const ARROW_W = 14;
-
-  const tipX = tx;
-  const tipY = ty;
-  const baseX = tipX - ux * ARROW_LEN;
-  const baseY = tipY - uy * ARROW_LEN;
-
-  const px = -uy;
-  const py = ux;
-
-  const lx = baseX + px * (ARROW_W / 2);
-  const ly = baseY + py * (ARROW_W / 2);
-  const rx = baseX - px * (ARROW_W / 2);
-  const ry = baseY - py * (ARROW_W / 2);
-
-  const lineEndX = isArrow ? baseX : tx;
-  const lineEndY = isArrow ? baseY : ty;
-  const path = `M${sx},${sy}L${lineEndX},${lineEndY}`;
-
-  const renderedStyle = isSelected ? { ...(style ?? {}), stroke: 'var(--white)' } : style;
-  const strokeColor = typeof (renderedStyle as { stroke?: unknown } | undefined)?.stroke === 'string'
-    ? String((renderedStyle as { stroke?: unknown }).stroke)
-    : typeof (style as { stroke?: unknown } | undefined)?.stroke === 'string'
-      ? String((style as { stroke?: unknown }).stroke)
-      : 'var(--pink)';
-
-  const renderedStyleWithCap = isArrow ? { ...(renderedStyle ?? {}), strokeLinecap: 'butt' as const } : renderedStyle;
-
-  const arrowHead = isArrow ? (
-    <path className={classes.flow_edge_arrowhead} d={`M ${tipX} ${tipY} L ${lx} ${ly} L ${rx} ${ry} Z`} fill={strokeColor} />
-  ) : null;
-
-  return (
-    <g
-      onMouseEnter={isDesktopHover ? () => setIsHovered(true) : undefined}
-      onMouseLeave={isDesktopHover ? () => setIsHovered(false) : undefined}
-    >
-      <BaseEdge id={id} path={path} style={renderedStyleWithCap} />
-      {arrowHead}
-      {shouldRenderLabel ? (
-        <EdgeLabelRenderer>
-          <div
-            className={labelClass}
-            style={{
-              opacity: labelOpacity,
-              transform: `translate(-50%, -50%) translate(${mx}px,${my}px)`,
-            }}
-          >
-            {label}
-          </div>
-        </EdgeLabelRenderer>
-      ) : null}
-    </g>
-  );
-};
-
-const EDGE_TYPES = { flowStraight: FlowStraightEdge } as const;
 
 type FlowBoardProps = {
   canEditCards?: boolean;
@@ -1021,11 +171,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
   const [selectedDrawingPaletteDraft, setSelectedDrawingPaletteDraft] = useState<string | null>(null);
   const [selectedDrawingDeleteConfirmOpen, setSelectedDrawingDeleteConfirmOpen] = useState(false);
   const [drawingMutationBusy, setDrawingMutationBusy] = useState(false);
-  const selectedDrawingDragOffsetRef = useRef<{ drawingIds: number[]; dx: number; dy: number; nextPathById: Map<number, string> | null } | null>(null);
   const drawingInteractionRef = useRef<{
     pointerId: number;
     startPoint: ApiBoardDrawingPoint;
     baseSnapshots: DrawingPersistedSnapshot[];
+    currentSnapshots: DrawingPersistedSnapshot[];
+    dx: number;
+    dy: number;
     moved: boolean;
   } | null>(null);
   const [selectionBoxRect, setSelectionBoxRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
@@ -1434,7 +586,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     editingStateRef.current = { isEditing, activeNodeId };
   }, [activeNodeId, isEditing]);
 
-  // РїРѕРєР°Р·С‹РІР°РµРј/СЃРєСЂС‹РІР°РµРј СѓР·Р»С‹ СЃРІСЏР·РµР№ С‡РёСЃС‚Рѕ С‡РµСЂРµР· CSS (selected + "connecting" РєР»Р°СЃСЃ РЅР° РєРѕРЅС‚РµР№РЅРµСЂРµ)
+  // показываем/скрываем узлы связей чисто через CSS (selected + "connecting" класс на контейнере)
 
   useEffect(() => {
     if (isEditing && flowCardSettingsDraft) {
@@ -1584,7 +736,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     () => sortBoardDrawings(drawings.filter((drawing) => selectedDrawingIdSet.has(drawing.id))),
     [drawings, selectedDrawingIdSet]
   );
-  const selectedDrawing = selectedDrawings.length === 1 ? selectedDrawings[0] : null;
   const selectedNodeIds = useMemo(
     () => nodes.filter((node) => Boolean((node as RFNode<FlowNodeData>).selected)).map((node) => String(node.id)),
     [nodes]
@@ -1729,7 +880,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     drawingInteractionRef.current = null;
     selectionBoxSessionRef.current = null;
     setSelectionBoxRect(null);
-    selectedDrawingDragOffsetRef.current = null;
   }, [numericBoardId]);
 
   useEffect(() => {
@@ -1749,7 +899,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     drawingInteractionRef.current = null;
     selectionBoxSessionRef.current = null;
     setSelectionBoxRect(null);
-    selectedDrawingDragOffsetRef.current = null;
   }, [numericBoardId]);
 
   useEffect(() => {
@@ -1964,7 +1113,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         });
         return res.data ?? null;
       } catch {
-        reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕР·РґР°С‚СЊ СЃРІСЏР·СЊ.');
+        reportError('Не удалось создать связь.');
         return null;
       }
     },
@@ -2319,6 +1468,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return;
       if (targetEl?.closest?.('[data-modal-scope="color-palette"]')) return;
       if (targetEl?.closest?.('[data-modal-scope="unsaved-changes"]')) return;
+      if (targetEl?.closest?.('.react-flow__pane')) return;
       const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       const menuEl = boardMenuRef?.current;
       if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
@@ -2349,6 +1499,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return;
       if (targetEl?.closest?.('[data-modal-scope="color-palette"]')) return;
       if (targetEl?.closest?.('[data-modal-scope="unsaved-changes"]')) return;
+      if (targetEl?.closest?.('.react-flow__pane')) return;
       const shouldIgnoreBoardMenuClick = typeof window !== 'undefined' && window.innerWidth >= BOARD_MENU_WIDE_MIN_WIDTH;
       const menuEl = boardMenuRef?.current;
       if (shouldIgnoreBoardMenuClick && menuEl && target && menuEl.contains(target)) return;
@@ -2586,7 +1737,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       syncSavedVisualsToActiveSettings({ imageSrc: nextImageSrc ?? null, color: nextColor });
       applyPreviewToNode(nodeId, { imageSrc: nextImageSrc ?? null, color: nextColor });
     } catch (e) {
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РєР°СЂС‚РѕС‡РєРё.', e);
+      reportError('Не удалось сохранить изображение карточки.', e);
     } finally {
       setImageUploading(false);
     }
@@ -2596,7 +1747,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     if (!activeNodeId) return;
     if (!file) return;
     if (file.size > MAX_CARD_IMAGE_SIZE_BYTES) {
-      showTopAlarm(`Р’РµСЃ СЃР»РёС€РєРѕРј Р±РѕР»СЊС€РѕР№, РІС‹Р±РµСЂРёС‚Рµ РёР·РѕР±СЂР°Р¶РµРЅРёРµ РІРµСЃРѕРј РґРѕ ${MAX_CARD_IMAGE_SIZE_MB} РњР‘.`);
+      showTopAlarm(`Вес слишком большой, выберите изображение весом до ${MAX_CARD_IMAGE_SIZE_MB} МБ.`);
       return;
     }
     setCropSourceFile(file);
@@ -2689,7 +1840,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       closeColorPalette();
     } catch (e) {
       restoreDraftPreview();
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ С†РІРµС‚ РєР°СЂС‚РѕС‡РєРё.', e);
+      reportError('Не удалось сохранить цвет карточки.', e);
     } finally {
       setDraftSaving(false);
     }
@@ -2770,24 +1921,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     await addFavoriteColor(drawPaletteDisplayColor);
   };
 
-  const persistBoardDrawingUpdate = useCallback(
-    async (drawingId: number, patch: { pathD?: string; color?: string; sortOrder?: number; groupKey?: string | null }) => {
-      if (!hasToken) throw new Error('No token');
-      if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) throw new Error('Invalid board');
-
-      const payload: Record<string, unknown> = {};
-      if (typeof patch.pathD === 'string' && patch.pathD) payload.path_d = patch.pathD;
-      if (typeof patch.color === 'string' && patch.color) payload.color = patch.color;
-      if (Number.isInteger(patch.sortOrder) && patch.sortOrder > 0) payload.sort_order = patch.sortOrder;
-      if (patch.groupKey === null || typeof patch.groupKey === 'string') payload.group_key = patch.groupKey;
-      if (!Object.keys(payload).length) throw new Error('Empty drawing patch');
-
-      const res = await axiosInstance.patch<ApiBoardDrawing>(`/api/boards/${numericBoardId}/drawings/${drawingId}`, payload);
-      return res.data;
-    },
-    [hasToken, numericBoardId]
-  );
-
   const persistBoardDrawingsBulkUpdate = useCallback(
     async (
       patches: Array<{
@@ -2849,40 +1982,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     pushDrawingHistoryEntryImpl(entry);
   }
 
-  const saveSelectedDrawingPaletteLegacy = useCallback(async () => {
-    if (!selectedDrawing || drawingMutationBusy) return;
-
-    const nextColor =
-      normalizeHexColor(selectedDrawingPaletteDraft) ?? normalizeHexColor(selectedDrawing.color) ?? DEFAULT_DRAW_COLOR;
-    const prevColor = normalizeHexColor(selectedDrawing.color);
-
-    closeSelectedDrawingPalette();
-    if (nextColor === prevColor) return;
-
-    setDrawingMutationBusy(true);
-    setDrawings((prev) => prev.map((drawing) => (drawing.id === selectedDrawing.id ? { ...drawing, color: nextColor } : drawing)));
-
-    try {
-      const saved = await persistBoardDrawingUpdate(selectedDrawing.id, { color: nextColor });
-      upsertDrawingFromSocket(saved, null);
-    } catch (error) {
-      setDrawings((prev) =>
-        prev.map((drawing) => (drawing.id === selectedDrawing.id ? { ...drawing, color: prevColor ?? drawing.color } : drawing))
-      );
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ С†РІРµС‚ С„РёРіСѓСЂС‹.', error);
-    } finally {
-      setDrawingMutationBusy(false);
-    }
-  }, [
-    closeSelectedDrawingPalette,
-    drawingMutationBusy,
-    persistBoardDrawingUpdate,
-    reportError,
-    selectedDrawing,
-    selectedDrawingPaletteDraft,
-    upsertDrawingFromSocket,
-  ]);
-
   const saveSelectedDrawingPalette = useCallback(async () => {
     if (!selectedDrawings.length || drawingMutationBusy) return;
 
@@ -2903,7 +2002,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       pushDrawingHistoryEntry({ kind: 'update', before: beforeSnapshots, after: afterSnapshots });
     } catch (error) {
       applyDrawingSnapshotsLocally(beforeSnapshots);
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ РёР·РјРµРЅРёС‚СЊ С†РІРµС‚ С„РёРіСѓСЂС‹.', error);
+      reportError('Не удалось изменить цвет фигуры.', error);
     } finally {
       setDrawingMutationBusy(false);
     }
@@ -3063,7 +2162,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         applyDrawingSnapshotsLocally(entry.after);
       }
       setUndoStack((prev) => [...prev, entry]);
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РєР°С‚РёС‚СЊ С€С‚СЂРёС….', error);
+      reportError('Не удалось откатить штрих.', error);
     } finally {
       setHistoryBusy(false);
     }
@@ -3133,7 +2232,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         applyDrawingSnapshotsLocally(entry.before);
       }
       setRedoStack((prev) => [...prev, entry]);
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ РІРµСЂРЅСѓС‚СЊ С€С‚СЂРёС….', error);
+      reportError('Не удалось вернуть штрих.', error);
     } finally {
       setHistoryBusy(false);
     }
@@ -3305,7 +2404,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       });
     } catch (error) {
       setPendingDrawings((prev) => prev.filter((drawing) => drawing.client_draw_id !== pendingDrawing.client_draw_id));
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ С€С‚СЂРёС….', error);
+      reportError('Не удалось сохранить штрих.', error);
     }
   }, [authUserId, nextDrawingSortOrder, numericBoardId, persistBoardDrawingCreate, pushDrawingHistoryEntry, reportError, upsertDrawingFromSocket]);
 
@@ -3666,36 +2765,19 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
       const viewport = getCurrentViewport();
       const zoom = Number.isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1;
-      const dragState = selectedDrawingDragOffsetRef.current;
-
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       drawingCanvasItems.forEach((item) => {
         const drawing = item.drawing;
-        const offset =
-          item.selectable && 'id' in drawing && dragState?.drawingIds.includes(drawing.id)
-            ? dragState
-            : null;
-        const previewPathD = offset && 'id' in drawing ? offset.nextPathById?.get(drawing.id) : null;
-        const pathToStroke = (() => {
-          if (!previewPathD) return item.path;
-          try {
-            return new Path2D(previewPathD);
-          } catch {
-            return item.path;
-          }
-        })();
-
         ctx.save();
         ctx.setTransform(dpr * zoom, 0, 0, dpr * zoom, dpr * viewport.x, dpr * viewport.y);
-        if (offset && !previewPathD) ctx.translate(offset.dx, offset.dy);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.lineWidth = drawing.stroke_width;
         ctx.strokeStyle = drawing.color;
         ctx.globalAlpha = 0.96;
-        ctx.stroke(pathToStroke);
+        ctx.stroke(item.path);
         ctx.restore();
       });
 
@@ -3722,22 +2804,18 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         const selectedItems = drawingCanvasItems.filter(
           (item) => item.selectable && 'id' in item.drawing && selectedDrawingIdSet.has(item.drawing.id)
         );
-        const mergedBounds = mergeDrawingBounds(selectedItems.map((item) => item.bounds));
-        const bounds = getDrawingScreenBounds(mergedBounds, viewport, {
-          offsetX: dragState?.dx ?? 0,
-          offsetY: dragState?.dy ?? 0,
-          pad: 14,
-        });
-
-        if (bounds) {
+        selectedItems.forEach((item) => {
+          const bounds = getDrawingScreenBounds(item.bounds, viewport, { pad: 12 });
+          if (!bounds) return;
           ctx.save();
           ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.setLineDash([6 * dpr, 4 * dpr]);
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.lineWidth = 1.5 * dpr;
+          ctx.strokeStyle = 'rgba(231, 205, 115, 0.9)';
+          ctx.fillStyle = 'rgba(231, 205, 115, 0.12)';
+          ctx.lineWidth = 1 * dpr;
+          ctx.fillRect(bounds.left * dpr, bounds.top * dpr, bounds.width * dpr, bounds.height * dpr);
           ctx.strokeRect(bounds.left * dpr, bounds.top * dpr, bounds.width * dpr, bounds.height * dpr);
           ctx.restore();
-        }
+        });
       }
 
       if (selectionBoxRect) {
@@ -3765,10 +2843,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       if (typeof window === 'undefined') return;
       if (drawingCanvasResizeFrameRef.current !== null) window.cancelAnimationFrame(drawingCanvasResizeFrameRef.current);
       drawingCanvasResizeFrameRef.current = window.requestAnimationFrame(() => {
-        drawingCanvasResizeFrameRef.current = window.requestAnimationFrame(() => {
-          drawingCanvasResizeFrameRef.current = null;
-          scheduleDrawingsCanvasRender();
-        });
+        drawingCanvasResizeFrameRef.current = null;
+        scheduleDrawingsCanvasRender();
       });
     });
 
@@ -3804,7 +2880,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
       const viewport = getCurrentViewport();
       const zoom = Number.isFinite(viewport.zoom) && viewport.zoom > 0 ? viewport.zoom : 1;
-      const dragState = selectedDrawingDragOffsetRef.current;
       const selectedItems = selectedDrawingIds.length
         ? drawingCanvasItems.filter((item) => item.selectable && 'id' in item.drawing && selectedDrawingIdSet.has(item.drawing.id))
         : [];
@@ -3812,20 +2887,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       for (let i = drawingCanvasItems.length - 1; i >= 0; i -= 1) {
         const item = drawingCanvasItems[i];
         if (!item.selectable || !('id' in item.drawing)) continue;
-
-        const offset = dragState?.drawingIds.includes(item.drawing.id) ? dragState : null;
-        const previewPathD = offset?.nextPathById?.get(item.drawing.id) ?? (offset ? translateDrawingPath(item.drawing.path_d, offset.dx, offset.dy) : item.drawing.path_d);
-        if (!previewPathD) continue;
-        if (isPointNearDrawingPath(previewPathD, flowPoint, item.drawing.stroke_width / 2 + 14 / zoom)) return item;
+        if (isPointNearDrawingPath(item.drawing.path_d, flowPoint, item.drawing.stroke_width / 2 + 14 / zoom)) return item;
       }
 
-      if (selectedItems.length) {
-        const selectionRect = getDrawingScreenBounds(mergeDrawingBounds(selectedItems.map((item) => item.bounds)), viewport, {
-          offsetX: dragState?.dx ?? 0,
-          offsetY: dragState?.dy ?? 0,
-          pad: 14,
-        });
-        if (isPointInRect(point.x, point.y, selectionRect)) return selectedItems[selectedItems.length - 1];
+      for (let i = selectedItems.length - 1; i >= 0; i -= 1) {
+        const item = selectedItems[i];
+        const selectionRect = getDrawingScreenBounds(item.bounds, viewport, { pad: 12 });
+        if (isPointInRect(point.x, point.y, selectionRect)) return item;
       }
 
       return null;
@@ -3991,38 +3059,43 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     ]
   );
 
-  const finishSelectedDrawingDrag = useCallback(
-    async (params: { baseSnapshots: DrawingPersistedSnapshot[]; dx: number; dy: number; nextPathById: Map<number, string> | null }) => {
-      const { baseSnapshots, dx, dy, nextPathById } = params;
-      const afterSnapshots = baseSnapshots
+  const buildDraggedDrawingSnapshots = useCallback(
+    (baseSnapshots: DrawingPersistedSnapshot[], dx: number, dy: number) =>
+      baseSnapshots
         .map((snapshot) => {
-          const nextPathD = nextPathById?.get(snapshot.id) ?? translateDrawingPath(snapshot.path_d, dx, dy);
-          if (!nextPathD || nextPathD === snapshot.path_d) return null;
+          const nextPathD = translateDrawingPath(snapshot.path_d, dx, dy);
+          if (!nextPathD) return null;
           return { ...snapshot, path_d: nextPathD };
         })
-        .filter(Boolean) as DrawingPersistedSnapshot[];
-      if (!afterSnapshots.length) {
-        selectedDrawingDragOffsetRef.current = null;
+        .filter(Boolean) as DrawingPersistedSnapshot[],
+    []
+  );
+
+  const finishSelectedDrawingDrag = useCallback(
+    async (params: { baseSnapshots: DrawingPersistedSnapshot[]; afterSnapshots: DrawingPersistedSnapshot[] }) => {
+      const { baseSnapshots, afterSnapshots } = params;
+      const changedSnapshots = afterSnapshots.filter((snapshot, index) => snapshot.path_d !== baseSnapshots[index]?.path_d);
+      const normalizedAfterSnapshots = changedSnapshots.length ? changedSnapshots : afterSnapshots;
+
+      const hasChanged = normalizedAfterSnapshots.some((snapshot) => {
+        const baseSnapshot = baseSnapshots.find((item) => item.id === snapshot.id);
+        return baseSnapshot && baseSnapshot.path_d !== snapshot.path_d;
+      });
+
+      if (!hasChanged) {
+        flushSync(() => {
+          applyDrawingSnapshotsLocally(baseSnapshots);
+        });
         scheduleDrawingsCanvasRender();
         return;
       }
 
       setDrawingMutationBusy(true);
-      selectedDrawingDragOffsetRef.current = {
-        drawingIds: baseSnapshots.map((snapshot) => snapshot.id),
-        dx: 0,
-        dy: 0,
-        nextPathById: new Map(afterSnapshots.map((snapshot) => [snapshot.id, snapshot.path_d])),
-      };
-      flushSync(() => {
-        applyDrawingSnapshotsLocally(afterSnapshots);
-      });
-      selectedDrawingDragOffsetRef.current = null;
       scheduleDrawingsCanvasRender();
 
       try {
         const saved = await persistBoardDrawingsBulkUpdate(
-          afterSnapshots.map((snapshot) => ({
+          normalizedAfterSnapshots.map((snapshot) => ({
             id: snapshot.id,
             pathD: snapshot.path_d,
           }))
@@ -4032,7 +3105,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         pushDrawingHistoryEntry({ kind: 'update', before: baseSnapshots, after: savedSnapshots });
       } catch (error) {
         applyDrawingSnapshotsLocally(baseSnapshots);
-        reportError('РќРµ СѓРґР°Р»РѕСЃСЊ РїРµСЂРµРјРµСЃС‚РёС‚СЊ С„РёРіСѓСЂСѓ.', error);
+        reportError('Не удалось переместить фигуру.', error);
       } finally {
         setDrawingMutationBusy(false);
       }
@@ -4057,7 +3130,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     } catch (error) {
       applyDrawingSnapshotsLocally(snapshots);
       replaceDrawingSelection(drawingIds);
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ С„РёРіСѓСЂСѓ.', error);
+      reportError('Не удалось удалить фигуру.', error);
     } finally {
       setDrawingMutationBusy(false);
     }
@@ -4092,7 +3165,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       pushDrawingHistoryEntry({ kind: 'update', before: beforeSnapshots, after: savedSnapshots });
     } catch (error) {
       applyDrawingSnapshotsLocally(beforeSnapshots);
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРіСЂСѓРїРїРёСЂРѕРІР°С‚СЊ С„РёРіСѓСЂС‹.', error);
+      reportError('Не удалось сгруппировать фигуры.', error);
     } finally {
       setDrawingMutationBusy(false);
     }
@@ -4124,7 +3197,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       pushDrawingHistoryEntry({ kind: 'update', before: beforeSnapshots, after: savedSnapshots });
     } catch (error) {
       applyDrawingSnapshotsLocally(beforeSnapshots);
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СЂР°Р·РіСЂСѓРїРїРёСЂРѕРІР°С‚СЊ С„РёРіСѓСЂС‹.', error);
+      reportError('Не удалось разгруппировать фигуры.', error);
     } finally {
       setDrawingMutationBusy(false);
     }
@@ -4183,7 +3256,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         pushDrawingHistoryEntry({ kind: 'update', before: beforeSnapshots, after: afterSnapshots });
       } catch (error) {
         applyDrawingSnapshotsLocally(beforeSnapshots);
-        reportError(direction === 'up' ? 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРЅСЏС‚СЊ С„РёРіСѓСЂСѓ РІС‹С€Рµ.' : 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕРїСѓСЃС‚РёС‚СЊ С„РёРіСѓСЂСѓ РЅРёР¶Рµ.', error);
+        reportError(direction === 'up' ? 'Не удалось поднять фигуру выше.' : 'Не удалось опустить фигуру ниже.', error);
       } finally {
         setDrawingMutationBusy(false);
       }
@@ -4237,6 +3310,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
       const isAdditive = Boolean(event.ctrlKey || event.metaKey);
       const hitDrawingId = hit.drawing.id;
+      suppressDrawingClickRef.current = true;
       const nextSelectionIds = isAdditive
         ? toggleDrawingSelection(hitDrawingId)
         : selectedDrawingIdSet.has(hitDrawingId)
@@ -4262,13 +3336,10 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         pointerId: event.pointerId,
         startPoint,
         baseSnapshots,
-        moved: false,
-      };
-      selectedDrawingDragOffsetRef.current = {
-        drawingIds: dragIds,
+        currentSnapshots: baseSnapshots,
         dx: 0,
         dy: 0,
-        nextPathById: new Map(baseSnapshots.map((snapshot) => [snapshot.id, snapshot.path_d])),
+        moved: false,
       };
       suppressDrawingClickRef.current = true;
 
@@ -4320,23 +3391,25 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
       const dx = roundDrawingCoord(point.x - interaction.startPoint.x);
       const dy = roundDrawingCoord(point.y - interaction.startPoint.y);
-      selectedDrawingDragOffsetRef.current = {
-        drawingIds: interaction.baseSnapshots.map((snapshot) => snapshot.id),
-        dx,
-        dy,
-        nextPathById: new Map(
-          interaction.baseSnapshots.map((snapshot) => [snapshot.id, translateDrawingPath(snapshot.path_d, dx, dy) ?? snapshot.path_d])
-        ),
-      };
+      if (dx === interaction.dx && dy === interaction.dy) return true;
 
-      if (Math.hypot(dx, dy) >= 0.8) interaction.moved = true;
+      const hasMoved = Math.hypot(dx, dy) >= 0.8;
+      const nextSnapshots = hasMoved ? buildDraggedDrawingSnapshots(interaction.baseSnapshots, dx, dy) : interaction.baseSnapshots;
+      interaction.dx = dx;
+      interaction.dy = dy;
+      interaction.currentSnapshots = nextSnapshots.length ? nextSnapshots : interaction.baseSnapshots;
+      interaction.moved = hasMoved;
+
+      flushSync(() => {
+        applyDrawingSnapshotsLocally(interaction.currentSnapshots);
+      });
 
       event.preventDefault();
       event.stopPropagation();
       scheduleDrawingsCanvasRender();
       return true;
     },
-    [getProjectedPointFromClient, scheduleDrawingsCanvasRender]
+    [applyDrawingSnapshotsLocally, buildDraggedDrawingSnapshots, getProjectedPointFromClient, scheduleDrawingsCanvasRender]
   );
 
   const handleDrawingPointerEndCapture = useCallback(
@@ -4345,7 +3418,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       if (!interaction || interaction.pointerId !== event.pointerId) return false;
 
       drawingInteractionRef.current = null;
-      const offset = selectedDrawingDragOffsetRef.current;
 
       try {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -4356,22 +3428,23 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       event.preventDefault();
       event.stopPropagation();
 
-      if (interaction.moved && offset && Math.hypot(offset.dx, offset.dy) >= 0.8) {
+      if (interaction.moved) {
+        scheduleDrawingsCanvasRender();
         void finishSelectedDrawingDrag({
           baseSnapshots: interaction.baseSnapshots,
-          dx: offset.dx,
-          dy: offset.dy,
-          nextPathById: offset.nextPathById,
+          afterSnapshots: interaction.currentSnapshots,
         });
         return true;
       }
 
-      selectedDrawingDragOffsetRef.current = null;
+      flushSync(() => {
+        applyDrawingSnapshotsLocally(interaction.baseSnapshots);
+      });
       scheduleDrawingsCanvasRender();
 
       return true;
     },
-    [finishSelectedDrawingDrag, scheduleDrawingsCanvasRender]
+    [applyDrawingSnapshotsLocally, finishSelectedDrawingDrag, scheduleDrawingsCanvasRender]
   );
 
   const handleDrawingClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -4402,7 +3475,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       setDeleteConfirmOpen(false);
       closeFlowCardSettings();
     } catch (e) {
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СѓРґР°Р»РёС‚СЊ РєР°СЂС‚РѕС‡РєСѓ.', e);
+      reportError('Не удалось удалить карточку.', e);
     }
   };
 
@@ -4508,7 +3581,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
       closeFlowCardSettings();
     } catch (e) {
-      reportError('РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ РёР·РјРµРЅРµРЅРёСЏ РєР°СЂС‚РѕС‡РєРё.', e);
+      reportError('Не удалось сохранить изменения карточки.', e);
     } finally {
       setImageUploading(false);
       setDraftSaving(false);
@@ -4606,8 +3679,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     closeBoardDrawPanel();
   }, [closeBoardDrawPanel]);
 
-  const canUndoDrawing = Boolean(canEditCards && !historyBusy && !pendingDrawings.length && undoStack.length);
-  const canRedoDrawing = Boolean(canEditCards && !historyBusy && !pendingDrawings.length && redoStack.length);
+  const canUndoDrawing = Boolean(canEditCards && undoStack.length);
+  const canRedoDrawing = Boolean(canEditCards && redoStack.length);
   const canShowSelectedDrawingToolbar = Boolean(!isDrawMode && canEditCards && selectedDrawings.length && !selectedNodeIds.length);
 
   return (
@@ -4899,180 +3972,42 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         onPointerCancel={handleDrawPointerCancel}
       />
       {isDrawMode ? (
-        <div ref={drawToolbarRef} className={classes.draw_toolbar}>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_icon_btn} ${canUndoDrawing ? '' : classes.draw_toolbar_icon_btn_disabled}`.trim()}
-            onClick={() => void handleDrawUndo()}
-            disabled={!canUndoDrawing}
-            aria-label={"\u041e\u0442\u043a\u0430\u0442\u0438\u0442\u044c \u0448\u0442\u0440\u0438\u0445"}
-          >
-            <BackIcon />
-          </button>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_icon_btn} ${canRedoDrawing ? '' : classes.draw_toolbar_icon_btn_disabled}`.trim()}
-            onClick={() => void handleDrawRedo()}
-            disabled={!canRedoDrawing}
-            aria-label={"\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0448\u0442\u0440\u0438\u0445"}
-          >
-            <span className={classes.draw_toolbar_icon_btn_flip}>
-              <BackIcon />
-            </span>
-          </button>
-          <label className={classes.draw_toolbar_slider}>
-            <span className={classes.draw_toolbar_slider_label}>{"\u041a\u0438\u0441\u0442\u044c"}</span>
-            <input
-              type="range"
-              min="2"
-              max="24"
-              step="1"
-              value={drawStrokeWidth}
-              onChange={(event) => setDrawStrokeWidth(clampDrawingStrokeWidth(event.currentTarget.value))}
-            />
-            <span className={classes.draw_toolbar_slider_value}>{drawStrokeWidth}px</span>
-          </label>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_palette_btn} ${drawPaletteDisplayColor ? classes.draw_toolbar_palette_btn_active : ''}`.trim()}
-            onClick={(event) => {
-              event.stopPropagation();
-              openDrawPalette();
-            }}
-            aria-label={"\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0446\u0432\u0435\u0442 \u043a\u0438\u0441\u0442\u0438"}
-          >
-            <span className={classes.color_palette_trigger_inner}>
-              <ColorIcon />
-              <span
-                className={`${classes.color_palette_trigger_swatch} ${drawColor ? '' : classes.color_palette_trigger_swatch_default}`.trim()}
-                style={drawColor ? { backgroundColor: drawColor } : undefined}
-              />
-            </span>
-          </button>
-          <button
-            type="button"
-            className={classes.draw_toolbar_text_btn}
-            onClick={exitDrawMode}
-          >
-            {"\u0413\u043e\u0442\u043e\u0432\u043e"}
-          </button>
-        </div>
+        <FlowDrawingToolbar
+          mode="draw"
+          toolbarRef={drawToolbarRef}
+          canUndo={canUndoDrawing}
+          canRedo={canRedoDrawing}
+          onUndo={() => void handleDrawUndo()}
+          onRedo={() => void handleDrawRedo()}
+          strokeWidth={drawStrokeWidth}
+          paletteColor={drawColor}
+          paletteActive={Boolean(drawPaletteDisplayColor)}
+          onStrokeWidthChange={(value) => setDrawStrokeWidth(clampDrawingStrokeWidth(value))}
+          onOpenPalette={openDrawPalette}
+          onDone={exitDrawMode}
+        />
       ) : canShowSelectedDrawingToolbar ? (
-        <div ref={drawToolbarRef} className={classes.draw_toolbar}>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_icon_btn} ${canUndoDrawing ? '' : classes.draw_toolbar_icon_btn_disabled}`.trim()}
-            onClick={() => void handleDrawUndo()}
-            disabled={!canUndoDrawing}
-            aria-label={"\u041e\u0442\u043a\u0430\u0442\u0438\u0442\u044c \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0440\u0438\u0441\u043e\u0432\u0430\u043d\u0438\u044f"}
-          >
-            <BackIcon />
-          </button>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_icon_btn} ${canRedoDrawing ? '' : classes.draw_toolbar_icon_btn_disabled}`.trim()}
-            onClick={() => void handleDrawRedo()}
-            disabled={!canRedoDrawing}
-            aria-label={"\u0412\u0435\u0440\u043d\u0443\u0442\u044c \u0434\u0435\u0439\u0441\u0442\u0432\u0438\u0435 \u0440\u0438\u0441\u043e\u0432\u0430\u043d\u0438\u044f"}
-          >
-            <span className={classes.draw_toolbar_icon_btn_flip}>
-              <BackIcon />
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_icon_btn} ${drawingMutationBusy ? classes.draw_toolbar_icon_btn_disabled : ''}`.trim()}
-            onClick={() => void moveSelectedDrawingsLayer('down')}
-            disabled={drawingMutationBusy}
-            aria-label={"\u041e\u043f\u0443\u0441\u0442\u0438\u0442\u044c \u0444\u0438\u0433\u0443\u0440\u0443 \u043d\u0438\u0436\u0435"}
-          >
-            <span className={`${classes.draw_toolbar_icon_btn_rotate} ${classes.draw_toolbar_icon_btn_rotate_down}`.trim()}>
-              <BackIcon />
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_icon_btn} ${drawingMutationBusy ? classes.draw_toolbar_icon_btn_disabled : ''}`.trim()}
-            onClick={() => void moveSelectedDrawingsLayer('up')}
-            disabled={drawingMutationBusy}
-            aria-label={"\u041f\u043e\u0434\u043d\u044f\u0442\u044c \u0444\u0438\u0433\u0443\u0440\u0443 \u0432\u044b\u0448\u0435"}
-          >
-            <span className={`${classes.draw_toolbar_icon_btn_rotate} ${classes.draw_toolbar_icon_btn_rotate_up}`.trim()}>
-              <BackIcon />
-            </span>
-          </button>
-          <DropdownWrapper
-            upDel
-            closeOnClick={false}
-            isOpen={selectedDrawingDeleteConfirmOpen}
-            onClose={() => setSelectedDrawingDeleteConfirmOpen(false)}
-          >
-            {[
-              <button
-                key="trigger"
-                type="button"
-                className={`${classes.draw_toolbar_icon_btn} ${drawingMutationBusy ? classes.draw_toolbar_icon_btn_disabled : ''}`.trim()}
-                onClick={() => setSelectedDrawingDeleteConfirmOpen((prev) => !prev)}
-                disabled={drawingMutationBusy}
-                aria-label={"\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u0444\u0438\u0433\u0443\u0440\u0443"}
-              >
-                <DeleteIcon />
-              </button>,
-              <div key="menu">
-                <button
-                  type="button"
-                  data-dropdown-class={classes.confirm_danger}
-                  onClick={() => void handleSelectedDrawingDelete()}
-                  disabled={drawingMutationBusy}
-                >
-                  {"\u0414\u0430, \u0443\u0434\u0430\u043b\u0438\u0442\u044c"}
-                </button>
-                <button
-                  type="button"
-                  data-dropdown-class={classes.confirm_cancel}
-                  onClick={() => setSelectedDrawingDeleteConfirmOpen(false)}
-                  disabled={drawingMutationBusy}
-                >
-                  {"\u041e\u0442\u043c\u0435\u043d\u0430"}
-                </button>
-              </div>,
-            ]}
-          </DropdownWrapper>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_palette_btn} ${selectedDrawingPaletteDisplayColor ? classes.draw_toolbar_palette_btn_active : ''}`.trim()}
-            onClick={(event) => {
-              event.stopPropagation();
-              openSelectedDrawingPalette();
-            }}
-            disabled={drawingMutationBusy}
-            aria-label={"\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c \u0446\u0432\u0435\u0442 \u0444\u0438\u0433\u0443\u0440\u044b"}
-          >
-            <span className={classes.color_palette_trigger_inner}>
-              <ColorIcon />
-              <span
-                className={`${classes.color_palette_trigger_swatch} ${selectedDrawings[0]?.color ? '' : classes.color_palette_trigger_swatch_default}`.trim()}
-                style={selectedDrawings[0]?.color ? { backgroundColor: selectedDrawings[0].color } : undefined}
-              />
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_text_btn} ${canGroupSelectedDrawings && !drawingMutationBusy ? '' : classes.draw_toolbar_icon_btn_disabled}`.trim()}
-            onClick={() => void handleSelectedDrawingsGroup()}
-            disabled={drawingMutationBusy || !canGroupSelectedDrawings}
-          >
-            {"\u0413\u0440\u0443\u043f\u043f\u0430"}
-          </button>
-          <button
-            type="button"
-            className={`${classes.draw_toolbar_text_btn} ${canUngroupSelectedDrawings && !drawingMutationBusy ? '' : classes.draw_toolbar_icon_btn_disabled}`.trim()}
-            onClick={() => void handleSelectedDrawingsUngroup()}
-            disabled={drawingMutationBusy || !canUngroupSelectedDrawings}
-          >
-            {"\u0420\u0430\u0437\u0433\u0440\u0443\u043f."}
-          </button>
-        </div>
+        <FlowDrawingToolbar
+          mode="selection"
+          toolbarRef={drawToolbarRef}
+          canUndo={canUndoDrawing}
+          canRedo={canRedoDrawing}
+          onUndo={() => void handleDrawUndo()}
+          onRedo={() => void handleDrawRedo()}
+          selectedCount={selectedDrawings.length}
+          paletteColor={selectedDrawings[0]?.color ?? null}
+          paletteActive={Boolean(selectedDrawingPaletteDisplayColor)}
+          deleteConfirmOpen={selectedDrawingDeleteConfirmOpen}
+          showGroupAction={canGroupSelectedDrawings}
+          showUngroupAction={canUngroupSelectedDrawings}
+          onOpenPalette={openSelectedDrawingPalette}
+          onMoveLayer={(direction) => void moveSelectedDrawingsLayer(direction)}
+          onToggleDeleteConfirm={() => setSelectedDrawingDeleteConfirmOpen((prev) => !prev)}
+          onCloseDeleteConfirm={() => setSelectedDrawingDeleteConfirmOpen(false)}
+          onDelete={() => void handleSelectedDrawingDelete()}
+          onGroup={() => void handleSelectedDrawingsGroup()}
+          onUngroup={() => void handleSelectedDrawingsUngroup()}
+        />
       ) : null}
       <FlowLinkModeAlarm step={linkModeStep} onCancel={cancelLinkMode} />
       {contextMenu.isOpen && (
@@ -5086,7 +4021,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
           }}
         >
           <button type="button" className={classes.context_menu_item} onClick={createDraftNode}>
-            РЎРѕР·РґР°С‚СЊ Р·Р°РїРёСЃСЊ
+            Создать запись
           </button>
         </div>
       )}
@@ -5099,7 +4034,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         }}
       >
         <div className={classes.create_panel_header}>
-          <div className={classes.create_panel_title}>РќР°СЃС‚СЂРѕР№С‚Рµ РІРёРґ Р·Р°РїРёСЃРё:</div>
+          <div className={classes.create_panel_title}>Настройте вид записи:</div>
           <div className={classes.create_panel_actions}>
             <Mainbtn
               variant="mini"
@@ -5215,26 +4150,26 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
           <div className={classes.create_panel_form}>
             <div className={classes.form_field}>
-              <div className={classes.form_label}>{'РќР°Р·РІР°РЅРёРµ'}</div>
+              <div className={classes.form_label}>{'Название'}</div>
               <input
                 className={classes.create_panel_input}
                 ref={titleInputRef}
                 value={displayTitle}
                 onChange={e => setDraftTitleLive(e.target.value)}
-                placeholder={visualEditing ? 'РќР°Р·РІР°РЅРёРµ' : 'Р’С‹Р±РµСЂРёС‚Рµ Р·Р°РїРёСЃСЊ'}
+                placeholder={visualEditing ? 'Название' : 'Выберите запись'}
                 maxLength={50}
                 disabled={!isEditing}
               />
             </div>
 
             <div className={classes.form_field}>
-              <div className={classes.form_label}>{'РР·РѕР±СЂР°Р¶РµРЅРёРµ'}</div>
+              <div className={classes.form_label}>{'Изображение'}</div>
               <div className={classes.form_row}>
                 <Mainbtn
                   variant="mini"
                   kind="button"
                   type="button"
-                  text={'Р’С‹Р±СЂР°С‚СЊ'}
+                  text={'Выбрать'}
                   onClick={() => imageInputRef.current?.click()}
                   disabled={!isEditing || draftSaving || imageUploading}
                 />
@@ -5294,13 +4229,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                         </div>
 
                         <div className={classes.color_palette_current}>
-                          <div className={classes.color_palette_current_label}>РўРµРєСѓС‰РёР№ С†РІРµС‚</div>
+                          <div className={classes.color_palette_current_label}>Текущий цвет</div>
                           <div className={classes.color_palette_current_value_row}>
                             <span
                               className={`${classes.color_palette_current_swatch} ${displayColor ? '' : classes.color_palette_current_swatch_default}`.trim()}
                               style={displayColor ? { backgroundColor: displayColor } : undefined}
                             />
-                            <span className={classes.color_palette_current_value}>{displayColor ?? 'РЎС‚Р°РЅРґР°СЂС‚РЅС‹Р№'}</span>
+                            <span className={classes.color_palette_current_value}>{displayColor ?? 'Стандартный'}</span>
                           </div>
                           <button
                             type="button"
@@ -5308,12 +4243,12 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                             onClick={() => void toggleCurrentColorFavorite()}
                             disabled={!displayColor || favoritesLoading}
                           >
-                            {isDisplayColorFavorite ? 'РЈР±СЂР°С‚СЊ РёР· РёР·Р±СЂР°РЅРЅРѕРіРѕ' : 'Р’ РёР·Р±СЂР°РЅРЅРѕРµ'}
+                            {isDisplayColorFavorite ? 'Убрать из избранного' : 'В избранное'}
                           </button>
                         </div>
 
                         <div className={classes.color_palette_section}>
-                          <div className={classes.color_palette_section_title}>Р‘Р°Р·РѕРІС‹Рµ С†РІРµС‚Р°</div>
+                          <div className={classes.color_palette_section_title}>Базовые цвета</div>
                           <div className={classes.color_palette_swatch_grid}>
                             {PRESET_CARD_COLORS.map((color) => (
                               <button
@@ -5322,14 +4257,14 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                                 className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
                                 style={{ backgroundColor: color }}
                                 onClick={() => setDraftColorLive(color)}
-                                aria-label={`Р’С‹Р±СЂР°С‚СЊ С†РІРµС‚ ${color}`}
+                                aria-label={`Выбрать цвет ${color}`}
                               />
                             ))}
                           </div>
                         </div>
 
                         <div className={classes.color_palette_section}>
-                          <div className={classes.color_palette_section_title}>Р¦РІРµС‚Р° РЅР° РґРѕСЃРєРµ</div>
+                          <div className={classes.color_palette_section_title}>Цвета на доске</div>
                           {boardColorOptions.length ? (
                             <div className={classes.color_palette_swatch_grid}>
                               {boardColorOptions.map((color) => (
@@ -5339,17 +4274,17 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                                   className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
                                   style={{ backgroundColor: color }}
                                   onClick={() => setDraftColorLive(color)}
-                                  aria-label={`Р’С‹Р±СЂР°С‚СЊ С†РІРµС‚ ${color}`}
+                                  aria-label={`Выбрать цвет ${color}`}
                                 />
                               ))}
                             </div>
                           ) : (
-                            <div className={classes.color_palette_empty}>РџРѕРєР° РЅРµС‚ С†РІРµС‚РЅС‹С… РЅРѕРґРѕРІ.</div>
+                            <div className={classes.color_palette_empty}>Пока нет цветных нодов.</div>
                           )}
                         </div>
 
                         <div className={classes.color_palette_section}>
-                          <div className={classes.color_palette_section_title}>РР·Р±СЂР°РЅРЅС‹Рµ С†РІРµС‚Р°</div>
+                          <div className={classes.color_palette_section_title}>Избранные цвета</div>
                           {favoriteColors.length ? (
                             <div className={classes.color_palette_swatch_grid}>
                               {favoriteColors.map((color) => (
@@ -5359,13 +4294,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                                   className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
                                   style={{ backgroundColor: color }}
                                   onClick={() => setDraftColorLive(color)}
-                                  aria-label={`Р’С‹Р±СЂР°С‚СЊ С†РІРµС‚ ${color}`}
+                                  aria-label={`Выбрать цвет ${color}`}
                                 />
                               ))}
                             </div>
                           ) : (
                             <div className={classes.color_palette_empty}>
-                              {favoritesLoading ? 'Р—Р°РіСЂСѓР·РєР°...' : 'РР·Р±СЂР°РЅРЅС‹С… С†РІРµС‚РѕРІ РїРѕРєР° РЅРµС‚.'}
+                              {favoritesLoading ? 'Загрузка...' : 'Избранных цветов пока нет.'}
                             </div>
                           )}
                         </div>
@@ -5416,9 +4351,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                     className={classes.danger_action_trigger}
                     onClick={() => setDeleteConfirmOpen((prev) => !prev)}
                     disabled={!isEditing || draftSaving || imageUploading}
-                    aria-label={'РЈРґР°Р»РёС‚СЊ Р·Р°РїРёСЃСЊ'}
+                    aria-label={'Удалить запись'}
                   >
-                    {'РЈРґР°Р»РёС‚СЊ'}
+                    {'Удалить'}
                   </button>,
                   <div key="menu">
                     <button
@@ -5427,7 +4362,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                       onClick={() => void deleteActive()}
                       disabled={!isEditing || draftSaving || imageUploading}
                     >
-                      Р”Р°, СѓРґР°Р»РёС‚СЊ
+                      Да, удалить
                     </button>
                     <button
                       type="button"
@@ -5435,7 +4370,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                       onClick={() => setDeleteConfirmOpen(false)}
                       disabled={!isEditing || draftSaving || imageUploading}
                     >
-                      РћС‚РјРµРЅР°
+                      Отмена
                     </button>
                   </div>,
                 ]}
@@ -5448,7 +4383,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                 variant="mini"
                 kind="button"
                 type="button"
-                text="РЎРѕС…СЂР°РЅРёС‚СЊ"
+                text="Сохранить"
                 onClick={() => {
                   if (!isEditing || draftSaving || imageUploading) return;
                   if (!displayTitle.trim()) {
@@ -5464,7 +4399,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                 variant="mini"
                 kind="button"
                 type="button"
-                text="РћС‚РјРµРЅР°"
+                text="Отмена"
                 onClick={cancelCardSettings}
                 disabled={!isEditing || draftSaving}
               />
@@ -5486,139 +4421,39 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         onContinueEditing={() => setCardCloseConfirmOpen(false)}
       />
       {colorPaletteOpen && isEditing ? (
-        <div
-          ref={colorPaletteRef}
-          className={`${classes.color_palette_modal} ${isColorPaletteConstrained ? classes.color_palette_modal_constrained : classes.color_palette_modal_expanded}`.trim()}
-          data-modal-scope="color-palette"
+        <FlowColorPaletteModal
+          title="Цвет записи"
+          ariaLabel="Выбор цвета записи"
+          currentColor={paletteDisplayColor}
+          pickerColorValue={palettePickerColorValue}
+          presetColors={PRESET_CARD_COLORS}
+          boardColorOptions={boardColorOptions}
+          boardColorsEmptyLabel="Пока нет цветных нодов."
+          favoriteColors={favoriteColors}
+          favoritesLoading={favoritesLoading}
+          isCurrentColorFavorite={isPaletteColorFavorite}
+          isConstrained={isColorPaletteConstrained}
           style={colorPaletteStyle}
-          role="dialog"
-          aria-modal="true"
-          aria-label={'Р’С‹Р±РѕСЂ С†РІРµС‚Р° Р·Р°РїРёСЃРё'}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className={classes.color_palette_modal_header}>
-            {'Р¦РІРµС‚ Р·Р°РїРёСЃРё'}
-          </div>
-          <div ref={colorPaletteBodyRef} className={classes.color_palette_modal_body}>
-            <div className={classes.color_palette_modal_primary}>
-              <div className={classes.color_palette_picker}>
-                <HexColorPicker color={palettePickerColorValue} onChange={setPaletteColorLive} />
-              </div>
-              <button
-                type="button"
-                className={classes.color_palette_favorite_btn}
-                onClick={() => void toggleCurrentColorFavorite()}
-                disabled={!paletteDisplayColor || favoritesLoading}
-              >
-                {isPaletteColorFavorite
-                  ? 'РЈР±СЂР°С‚СЊ РёР· РёР·Р±СЂР°РЅРЅРѕРіРѕ'
-                  : 'Р”РѕР±Р°РІРёС‚СЊ РІ РёР·Р±СЂР°РЅРЅРѕРµ'}
-              </button>
-            </div>
-
-            <div className={classes.color_palette_modal_secondary}>
-              <div className={classes.color_palette_current}>
-                <div className={classes.color_palette_current_label}>{'РўРµРєСѓС‰РёР№ С†РІРµС‚'}</div>
-                <div className={classes.color_palette_current_value_row}>
-                  <span
-                    className={`${classes.color_palette_current_swatch} ${paletteDisplayColor ? '' : classes.color_palette_current_swatch_default}`.trim()}
-                    style={paletteDisplayColor ? { backgroundColor: paletteDisplayColor } : undefined}
-                  />
-                  <span className={classes.color_palette_current_value}>
-                    {paletteDisplayColor ?? 'РЎС‚Р°РЅРґР°СЂС‚РЅС‹Р№'}
-                  </span>
-                </div>
-              </div>
-
-              <div className={classes.color_palette_section}>
-                <div className={classes.color_palette_section_title}>{'Р‘Р°Р·РѕРІС‹Рµ С†РІРµС‚Р°'}</div>
-                <div className={classes.color_palette_swatch_grid}>
-                  {PRESET_CARD_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className={`${classes.color_palette_swatch_btn} ${paletteDisplayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
-                      style={{ backgroundColor: color }}
-                      onClick={() => setPaletteColorLive(color)}
-                      aria-label={`Р’С‹Р±СЂР°С‚СЊ С†РІРµС‚ ${color}`}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              <div className={classes.color_palette_section}>
-                <div className={classes.color_palette_section_title}>{'Р¦РІРµС‚Р° РЅР° РґРѕСЃРєРµ'}</div>
-                {boardColorOptions.length ? (
-                  <div className={classes.color_palette_swatch_grid}>
-                    {boardColorOptions.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        className={`${classes.color_palette_swatch_btn} ${paletteDisplayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
-                        style={{ backgroundColor: color }}
-                        onClick={() => setPaletteColorLive(color)}
-                        aria-label={`Р’С‹Р±СЂР°С‚СЊ С†РІРµС‚ ${color}`}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className={classes.color_palette_empty}>{'РџРѕРєР° РЅРµС‚ С†РІРµС‚РЅС‹С… РЅРѕРґРѕРІ.'}</div>
-                )}
-              </div>
-
-              <div className={classes.color_palette_section}>
-                <div className={classes.color_palette_section_title}>{'РР·Р±СЂР°РЅРЅС‹Рµ С†РІРµС‚Р°'}</div>
-                {favoriteColors.length ? (
-                  <div className={classes.color_palette_swatch_grid}>
-                    {favoriteColors.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        className={`${classes.color_palette_swatch_btn} ${paletteDisplayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
-                        style={{ backgroundColor: color }}
-                        onClick={() => setPaletteColorLive(color)}
-                        aria-label={`Р’С‹Р±СЂР°С‚СЊ С†РІРµС‚ ${color}`}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div className={classes.color_palette_empty}>
-                    {favoritesLoading ? 'Р—Р°РіСЂСѓР·РєР°...' : 'РР·Р±СЂР°РЅРЅС‹С… С†РІРµС‚РѕРІ РїРѕРєР° РЅРµС‚.'}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className={classes.color_palette_modal_actions}>
-            <Mainbtn
-              variant="mini"
-              kind="button"
-              type="button"
-              text={'РћС‚РјРµРЅР°'}
-              onClick={cancelColorPalette}
-              disabled={draftSaving || imageUploading}
-            />
-            <Mainbtn
-              variant="mini"
-              kind="button"
-              type="button"
-              text={'РЎРѕС…СЂР°РЅРёС‚СЊ'}
-              onClick={saveColorPalette}
-              disabled={draftSaving || imageUploading}
-            />
-          </div>
-        </div>
+          paletteRef={colorPaletteRef}
+          bodyRef={colorPaletteBodyRef}
+          onColorChange={setPaletteColorLive}
+          onToggleFavorite={() => void toggleCurrentColorFavorite()}
+          onCancel={cancelColorPalette}
+          onSave={saveColorPalette}
+          saveDisabled={draftSaving || imageUploading}
+          cancelDisabled={draftSaving || imageUploading}
+          favoriteDisabled={!paletteDisplayColor || favoritesLoading}
+        />
       ) : null}
       {drawPaletteOpen && isDrawMode ? (
         <FlowColorPaletteModal
-          title="Р¦РІРµС‚ РєРёСЃС‚Рё"
-          ariaLabel="Р’С‹Р±РѕСЂ С†РІРµС‚Р° РєРёСЃС‚Рё"
+          title="Цвет кисти"
+          ariaLabel="Выбор цвета кисти"
           currentColor={drawPaletteDisplayColor}
           pickerColorValue={drawPalettePickerColorValue}
           presetColors={PRESET_CARD_COLORS}
           boardColorOptions={boardColorOptions}
-          boardColorsEmptyLabel="РџРѕРєР° РЅР° РґРѕСЃРєРµ РЅРµС‚ С†РІРµС‚РЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ."
+          boardColorsEmptyLabel="Пока на доске нет цветных элементов."
           favoriteColors={favoriteColors}
           favoritesLoading={favoritesLoading}
           isCurrentColorFavorite={isDrawPaletteColorFavorite}
@@ -5633,13 +4468,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       ) : null}
       {selectedDrawingPaletteOpen && selectedDrawings.length ? (
         <FlowColorPaletteModal
-          title="Р¦РІРµС‚ С„РёРіСѓСЂС‹"
-          ariaLabel="Р’С‹Р±РѕСЂ С†РІРµС‚Р° С„РёРіСѓСЂС‹"
+          title="Цвет фигуры"
+          ariaLabel="Выбор цвета фигуры"
           currentColor={selectedDrawingPaletteDisplayColor}
           pickerColorValue={selectedDrawingPalettePickerColorValue}
           presetColors={PRESET_CARD_COLORS}
           boardColorOptions={boardColorOptions}
-          boardColorsEmptyLabel="РџРѕРєР° РЅР° РґРѕСЃРєРµ РЅРµС‚ С†РІРµС‚РЅС‹С… СЌР»РµРјРµРЅС‚РѕРІ."
+          boardColorsEmptyLabel="Пока на доске нет цветных элементов."
           favoriteColors={favoriteColors}
           favoritesLoading={favoritesLoading}
           isCurrentColorFavorite={isSelectedDrawingPaletteColorFavorite}
@@ -5658,5 +4493,3 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 });
 
 export default FlowBoard;
-
-
