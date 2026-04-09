@@ -74,6 +74,7 @@ const Board = () => {
     const toggleBoardMenu = useUIStore((s) => s.toggleBoardMenu);
     const openBoardMenu = useUIStore((s) => s.openBoardMenu);
     const closeBoardMenu = useUIStore((s) => s.closeBoardMenu);
+    const boardEditMode = useUIStore((s) => s.boardEditMode);
     const boardMenuView = useUIStore((s) => s.boardMenuView);
     const selectedLink = useUIStore((s) => s.selectedLink);
     const selectedLinkDraft = useUIStore((s) => s.selectedLinkDraft);
@@ -833,6 +834,7 @@ const Board = () => {
                 </div>            <BoardRightMenu
                 boardInfo={boardInfo}
                 boardMenuRef={boardMenuRef}
+                boardEditMode={boardEditMode}
                 boardMenuView={boardMenuView}
                 canEditCards={canEditCards}
                 canManageParticipants={canManageParticipants}
@@ -864,6 +866,8 @@ const Board = () => {
                     setBoardSettingsModalParticipantsInnerViewNext(view);
                     openBoardSettingsModal('participants');
                 }}
+                onStartDrawMode={() => flowBoardRef.current?.startDrawMode()}
+                onStartSelectMode={() => flowBoardRef.current?.startSelectMode()}
                 onStartLinkMode={() => flowBoardRef.current?.startLinkMode()}
                 onToggleBoardMenu={() => {
                     if (effectiveBoardMenuOpen && boardMenuView === 'link') {

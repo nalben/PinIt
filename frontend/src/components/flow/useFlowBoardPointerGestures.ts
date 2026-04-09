@@ -3,6 +3,7 @@ import type { ReactFlowInstance } from 'reactflow';
 
 export const useFlowBoardPointerGestures = (params: {
   canEditCards: boolean;
+  suspended?: boolean;
   reactFlow: ReactFlowInstance | null;
   containerRef: React.RefObject<HTMLDivElement | null>;
   contextMenuRef: React.RefObject<HTMLDivElement | null>;
@@ -16,6 +17,7 @@ export const useFlowBoardPointerGestures = (params: {
 }) => {
   const {
     canEditCards,
+    suspended = false,
     reactFlow,
     containerRef,
     contextMenuRef,
@@ -52,6 +54,7 @@ export const useFlowBoardPointerGestures = (params: {
 
   const handlePointerDownCapture = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (suspended) return;
       if (!reactFlow) return;
       if (!e.isPrimary) return;
       if (e.pointerType === 'mouse') return;
@@ -82,11 +85,12 @@ export const useFlowBoardPointerGestures = (params: {
       e.preventDefault();
       e.stopPropagation();
     },
-    [closeContextMenu, containerRef, contextMenuRef, createPanelRef, dragHandleSelector, nodeRectangleSelector, reactFlow]
+    [closeContextMenu, containerRef, contextMenuRef, createPanelRef, dragHandleSelector, nodeRectangleSelector, reactFlow, suspended]
   );
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (suspended) return;
       if (e.pointerType !== 'touch') return;
       if (!e.isPrimary) return;
       if (!canEditCards) return;
@@ -111,11 +115,12 @@ export const useFlowBoardPointerGestures = (params: {
         openContextMenuAt(start.clientX, start.clientY);
       }, 450);
     },
-    [canEditCards, cancelLongPress, contextMenuRef, createPanelRef, openContextMenuAt]
+    [canEditCards, cancelLongPress, contextMenuRef, createPanelRef, openContextMenuAt, suspended]
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (suspended) return;
       const pan = manualPanRef.current;
       if (pan && e.pointerId === pan.pointerId) {
         const dx = e.clientX - pan.clientX;
@@ -131,11 +136,12 @@ export const useFlowBoardPointerGestures = (params: {
       if (e.pointerId !== start.pointerId) return;
       if (Math.hypot(e.clientX - start.clientX, e.clientY - start.clientY) > 10) cancelLongPress();
     },
-    [cancelLongPress, reactFlow]
+    [cancelLongPress, reactFlow, suspended]
   );
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (suspended) return;
       const pan = manualPanRef.current;
       if (pan && e.pointerId === pan.pointerId) {
         manualPanRef.current = null;
@@ -159,11 +165,12 @@ export const useFlowBoardPointerGestures = (params: {
       if (e.pointerId !== start.pointerId) return;
       cancelLongPress();
     },
-    [cancelCardSettings, cancelLongPress, closeContextMenu, containerRef, flowCardSettingsOpen]
+    [cancelCardSettings, cancelLongPress, closeContextMenu, containerRef, flowCardSettingsOpen, suspended]
   );
 
   const handlePointerCancel = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (suspended) return;
       const pan = manualPanRef.current;
       if (pan && e.pointerId === pan.pointerId) {
         manualPanRef.current = null;
@@ -176,7 +183,7 @@ export const useFlowBoardPointerGestures = (params: {
       }
       cancelLongPress();
     },
-    [cancelLongPress, containerRef]
+    [cancelLongPress, containerRef, suspended]
   );
 
   const handleClickCapture = useCallback(

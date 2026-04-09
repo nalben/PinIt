@@ -49,6 +49,7 @@ router.get('/public/:board_id', optionalAuth, boardsController.getPublicBoardByI
 router.get('/public/:board_id/cards', optionalAuth, boardsController.getPublicBoardCards);
 router.get('/public/:board_id/cards/:card_id/details', optionalAuth, boardsController.getPublicCardDetails);
 router.get('/public/:board_id/links', optionalAuth, boardsController.getPublicBoardLinks);
+router.get('/public/:board_id/drawings', optionalAuth, boardsController.getPublicBoardDrawings);
 router.get('/invite-link/resolve', boardsController.resolveBoardInviteLink);
 router.get('/invite-link/preview', boardsController.previewBoardInviteLink);
 
@@ -104,6 +105,11 @@ router.post('/:board_id/links', boardsController.createCardLink);
 router.patch('/:board_id/links/:link_id', boardsController.updateCardLink);
 router.patch('/:board_id/links/:link_id/flip', boardsController.flipCardLinkDirection);
 router.delete('/:board_id/links/:link_id', boardsController.deleteCardLink);
+router.get('/:board_id/drawings', boardsController.getBoardDrawings);
+router.post('/:board_id/drawings', boardsController.createBoardDrawing);
+router.patch('/:board_id/drawings/bulk', boardsController.bulkUpdateBoardDrawings);
+router.patch('/:board_id/drawings/:drawing_id', boardsController.updateBoardDrawing);
+router.delete('/:board_id/drawings/:drawing_id', boardsController.deleteBoardDrawing);
 router.get('/:board_id/participants', boardsController.getBoardParticipants);
 router.get('/:board_id/full', boardsController.getBoardFull);
 router.get('/:board_id', boardsController.getBoardById);

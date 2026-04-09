@@ -35,3 +35,21 @@ export type ApiCardLink = {
   is_label_visible: number | boolean | null;
   created_at: string;
 };
+
+export type ApiBoardDrawingPoint = {
+  x: number;
+  y: number;
+};
+
+export type ApiBoardDrawing = {
+  id: number;
+  board_id: number;
+  user_id: number;
+  color: string;
+  stroke_width: number;
+  path_d: string;
+  sort_order: number;
+  group_key: string | null;
+  created_at: string;
+  client_draw_id?: string | null;
+};

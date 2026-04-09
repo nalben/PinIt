@@ -13,7 +13,8 @@ export type BoardSettingsModalView = 'settings' | 'participants';
 export type BoardSettingsParticipantsInnerView = 'friends' | 'guests';
 export type FlowCardShape = 'rectangle' | 'rhombus' | 'circle';
 export type FlowLinkStyle = 'line' | 'arrow';
-export type BoardMenuView = 'board' | 'link' | 'card';
+export type BoardEditMode = 'none' | 'draw' | 'select';
+export type BoardMenuView = 'board' | 'link' | 'card' | 'draw';
 export type SelectedLinkSnapshot = {
   linkId: number;
   boardId: number;
@@ -73,6 +74,7 @@ interface UIState {
   friendsModalOpen: boolean;
   friendsModalView: FriendsModalView;
   isBoardMenuOpen: boolean;
+  boardEditMode: BoardEditMode;
   boardMenuView: BoardMenuView;
   selectedLink: SelectedLinkSnapshot | null;
   selectedLinkDraft: SelectedLinkDraft | null;
@@ -102,6 +104,10 @@ interface UIState {
   openBoardMenu: () => void;
   closeBoardMenu: () => void;
   toggleBoardMenu: () => void;
+  openBoardDrawPanel: () => void;
+  closeBoardDrawPanel: () => void;
+  openBoardSelectMode: () => void;
+  closeBoardSelectMode: () => void;
   openLinkInspector: (snapshot: SelectedLinkSnapshot) => void;
   closeLinkInspector: () => void;
   patchSelectedLinkDraft: (patch: Partial<SelectedLinkDraft>) => void;
@@ -192,6 +198,7 @@ export const useUIStore = create<UIState>((set, get) => {
   friendsModalOpen: false,
   friendsModalView: 'list',
   isBoardMenuOpen: false,
+  boardEditMode: 'none',
   boardMenuView: 'board',
   selectedLink: null,
   selectedLinkDraft: null,
@@ -232,7 +239,7 @@ export const useUIStore = create<UIState>((set, get) => {
         clearBoardMenuCloseTimer();
         return {
           isBoardMenuOpen: false,
-          boardMenuView: s.boardMenuView === 'link' || s.boardMenuView === 'card' ? 'board' : s.boardMenuView,
+          boardMenuView: s.boardMenuView === 'link' || s.boardMenuView === 'card' || s.boardMenuView === 'draw' ? 'board' : s.boardMenuView,
           selectedLink: s.boardMenuView === 'link' ? null : s.selectedLink,
           selectedLinkDraft: s.boardMenuView === 'link' ? null : s.selectedLinkDraft,
           selectedCardDetails: s.boardMenuView === 'card' ? null : s.selectedCardDetails,
@@ -247,6 +254,12 @@ export const useUIStore = create<UIState>((set, get) => {
             ...buildBoardMenuResetState(),
           });
         });
+      } else if (s.boardMenuView === 'draw') {
+        clearBoardMenuCloseTimer();
+        return {
+          isBoardMenuOpen: false,
+          boardMenuView: 'board',
+        };
       } else {
         clearBoardMenuCloseTimer();
       }
@@ -263,6 +276,12 @@ export const useUIStore = create<UIState>((set, get) => {
               ...buildBoardMenuResetState(),
             });
           });
+        } else if (s.boardMenuView === 'draw') {
+          clearBoardMenuCloseTimer();
+          return {
+            isBoardMenuOpen: false,
+            boardMenuView: 'board',
+          };
         } else {
           clearBoardMenuCloseTimer();
         }
@@ -273,12 +292,53 @@ export const useUIStore = create<UIState>((set, get) => {
       clearBoardMenuCloseTimer();
       return { isBoardMenuOpen: true };
     }),
+  openBoardDrawPanel: () =>
+    set(() => {
+      clearBoardMenuCloseTimer();
+      return {
+        boardEditMode: 'draw',
+        boardMenuView: 'board',
+        selectedLink: null,
+        selectedLinkDraft: null,
+        selectedCardDetails: null,
+        linkInspectorPrevMenuOpen: null,
+        cardDetailsPrevMenuOpen: null,
+      };
+    }),
+  closeBoardDrawPanel: () =>
+    set((s) => {
+      clearBoardMenuCloseTimer();
+      return {
+        boardEditMode: s.boardEditMode === 'draw' ? 'none' : s.boardEditMode,
+      };
+    }),
+  openBoardSelectMode: () =>
+    set(() => {
+      clearBoardMenuCloseTimer();
+      return {
+        boardEditMode: 'select',
+        boardMenuView: 'board',
+        selectedLink: null,
+        selectedLinkDraft: null,
+        selectedCardDetails: null,
+        linkInspectorPrevMenuOpen: null,
+        cardDetailsPrevMenuOpen: null,
+      };
+    }),
+  closeBoardSelectMode: () =>
+    set((s) => {
+      clearBoardMenuCloseTimer();
+      return {
+        boardEditMode: s.boardEditMode === 'select' ? 'none' : s.boardEditMode,
+      };
+    }),
 
   openLinkInspector: (snapshot) =>
     set((s) => {
       clearBoardMenuCloseTimer();
       return ({
       isBoardMenuOpen: true,
+      boardEditMode: 'none',
       boardMenuView: 'link',
       selectedLink: snapshot,
       selectedLinkDraft: {
@@ -313,6 +373,7 @@ export const useUIStore = create<UIState>((set, get) => {
       clearBoardMenuCloseTimer();
       return ({
       isBoardMenuOpen: options?.openMenu === false ? s.isBoardMenuOpen : true,
+      boardEditMode: 'none',
       boardMenuView: 'card',
       selectedCardDetails: snapshot,
       selectedLink: null,
@@ -368,6 +429,7 @@ export const useUIStore = create<UIState>((set, get) => {
       clearBoardMenuCloseTimer();
       return ({
         flowCardSettingsOpen: true,
+        boardEditMode: 'none',
         flowCardSettings: snapshot,
         flowCardSettingsDraft: {
           type: snapshot.type,

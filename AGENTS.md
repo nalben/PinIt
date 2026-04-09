@@ -1505,3 +1505,57 @@ Update (2026-04-06)
 Update (2026-04-07)
 
 - Auth cookie helper added in `api/utils/authCookieOptions.js`; `authController` and `authMiddleware` now set/sync `pinit_token` with `domain=pin-it.ru` when the request host is `pin-it.ru` or `www.pin-it.ru`, so the same login cookie is shared across apex and `www` hosts.
+
+Update (2026-04-08)
+
+- Added persisted board freehand drawings via DB migration `api/sql/2026-04-08-board-drawings.sql`:
+  - new table `boarddrawings (id, board_id, user_id, color, stroke_width, path_d, created_at)`.
+- New board drawings endpoints in `api/routes/boardsRouter.js` / `api/controllers/boardsController.js`:
+  - `GET /api/boards/:board_id/drawings` — list saved board drawings for authorized users.
+  - `GET /api/boards/public/:board_id/drawings` — list saved board drawings for public boards (optional auth; blocked users filtered the same way as other public board resources).
+  - `POST /api/boards/:board_id/drawings` — create a drawing from validated points payload, stores SVG `path_d` (owner/`editer` only).
+  - `DELETE /api/boards/:board_id/drawings/:drawing_id` — delete a saved drawing (owner/`editer` only).
+- `boards:updated` now also carries drawing-level commands:
+  - `reason: 'drawing_created'` with `drawing_id`, `user_id`, `color`, `stroke_width`, `path_d` and optional `client_draw_id`.
+  - `reason: 'drawing_deleted'` with `drawing_id`.
+- `frontend/src/store/uiStore.ts` now supports board right-menu draw view:
+  - `boardMenuView: 'draw'`
+  - `openBoardDrawPanel()` / `closeBoardDrawPanel()`
+- `frontend/src/pages/board/BoardRightMenu.tsx` adds a pencil bookmark button for draw mode and renders a dedicated draw panel in the right menu.
+- `frontend/src/components/flow/FlowBoard.tsx` now renders persisted freehand drawings as SVG paths over the board and adds draw mode:
+  - draw mode disables normal node/link interactions while active;
+  - bottom toolbar includes undo/redo buttons, brush-width slider, and palette button;
+  - draw palette reuses the same preset colors / board colors / favorite colors sources as node color picking;
+  - drawing create/delete syncs through the existing `boards:updated` socket flow, while non-auth public viewers refresh drawings via the same 10s polling pattern used for public cards/links.
+
+Update (2026-04-08, drawing editing follow-up)
+
+- Added authenticated drawing update endpoint:
+  - `PATCH /api/boards/:board_id/drawings/:drawing_id` — updates saved drawing `path_d` and/or `color` (owner/`editer` only).
+- `boards:updated` now also supports `reason: 'drawing_updated'` with `drawing_id`, `user_id`, `color`, `stroke_width`, `path_d`.
+- `frontend/src/components/flow/FlowBoard.tsx` drawing overlay now uses a canvas renderer tied to the current ReactFlow viewport without React state updates on every pan/zoom.
+- In normal board mode, saved drawings can be selected by click, show a square selection frame, and support move/delete/recolor from the bottom toolbar.
+
+Update (2026-04-08, drawing grouping + select mode)
+
+- Added drawing ordering/grouping migration `api/sql/2026-04-08-board-drawings-group-order.sql`:
+  - `boarddrawings.sort_order INT UNSIGNED NOT NULL DEFAULT 0`
+  - `boarddrawings.group_key CHAR(36) NULL`
+- Drawing reads/writes now include ordering/group metadata:
+  - `GET /api/boards/:board_id/drawings` and `GET /api/boards/public/:board_id/drawings` return `sort_order` / `group_key` ordered by `sort_order ASC, id ASC`.
+  - `POST /api/boards/:board_id/drawings` accepts optional `sort_order` / `group_key`.
+  - `PATCH /api/boards/:board_id/drawings/:drawing_id` can update `sort_order` / `group_key` in addition to `path_d` / `color`.
+  - New authenticated bulk endpoint: `PATCH /api/boards/:board_id/drawings/bulk` updates multiple drawings (`path_d`, `color`, `sort_order`, `group_key`) in one request.
+- `boards:updated` now also carries drawing ordering/group invalidation:
+  - `reason: 'drawing_created' | 'drawing_updated'` now includes `sort_order` and `group_key`.
+  - New `reason: 'drawings_updated'` sends an array of updated drawings for bulk reorder/group/color/move changes.
+- `frontend/src/store/uiStore.ts` now separates board edit mode from right-menu content:
+  - `boardEditMode: 'none' | 'draw' | 'select'`
+  - `openBoardDrawPanel()` / `closeBoardDrawPanel()` toggle draw edit mode only.
+  - `openBoardSelectMode()` / `closeBoardSelectMode()` toggle the new select edit mode.
+- `frontend/src/pages/board/BoardRightMenu.tsx` adds `select.svg` as a new board tool button; draw/select modes no longer open a dedicated right-menu panel.
+- `frontend/src/components/flow/FlowBoard.tsx` drawing tools now support:
+  - wheel zoom on desktop and two-finger pinch zoom on touch while draw mode is active; one-finger touch still draws;
+  - select mode box-selection on desktop: if the marquee touches any node, only nodes are selected; otherwise it selects drawings;
+  - ctrl/cmd multi-select for drawings, mutual exclusivity between node and drawing selection, and group-aware selection expansion;
+  - drawing group/ungroup, z-order move up/down, multi-drawing recolor/delete, and undo/redo for create/delete/move/color/group/order changes.

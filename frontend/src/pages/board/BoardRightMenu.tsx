@@ -5,6 +5,7 @@ import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import type {
+  BoardEditMode,
   BoardMenuView,
   SelectedCardDetailsSnapshot,
   SelectedLinkDraft,
@@ -20,6 +21,8 @@ import Members from '@/assets/icons/monochrome/members.svg';
 import SwitchIcon from '@/assets/icons/monochrome/switch.svg';
 import Plus from '@/assets/icons/monochrome/plus.svg';
 import LinkIcon from '@/assets/icons/monochrome/link.svg';
+import PencilIcon from '@/assets/icons/monochrome/pencil.svg';
+import SelectIcon from '@/assets/icons/monochrome/select.svg';
 import { BoardRightMenuCardDetails } from './BoardRightMenuCardDetails';
 
 type BoardInfoViewModel = {
@@ -32,6 +35,7 @@ type BoardInfoViewModel = {
 type BoardRightMenuProps = {
   boardInfo: BoardInfoViewModel | null;
   boardMenuRef: React.RefObject<HTMLDivElement | null>;
+  boardEditMode: BoardEditMode;
   boardMenuView: BoardMenuView;
   canEditCards: boolean;
   canManageParticipants: boolean;
@@ -60,6 +64,8 @@ type BoardRightMenuProps = {
   onCreateNode: () => void;
   onOpenBoardSettings: () => void;
   onOpenParticipantsSettings: (view: 'friends' | 'guests') => void;
+  onStartDrawMode: () => void;
+  onStartSelectMode: () => void;
   onStartLinkMode: () => void;
   onToggleBoardMenu: () => void;
   ownerAvatarSrc: string | null;
@@ -91,6 +97,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
   const {
     boardInfo,
     boardMenuRef,
+    boardEditMode,
     boardMenuView,
     canEditCards,
     canManageParticipants,
@@ -119,6 +126,8 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
     onCreateNode,
     onOpenBoardSettings,
     onOpenParticipantsSettings,
+    onStartDrawMode,
+    onStartSelectMode,
     onStartLinkMode,
     onToggleBoardMenu,
     ownerAvatarSrc,
@@ -175,6 +184,32 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
             aria-label="Связать записи"
           >
             <LinkIcon />
+          </button>
+        ) : null}
+        {canEditCards ? (
+          <button
+            className={`${classes.left_menu_btn} ${classes.left_menu_btn_create_node} ${boardEditMode === 'draw' ? classes.left_menu_btn_active : ''}`.trim()}
+            type="button"
+            onClick={(e) => {
+              onStartDrawMode();
+              e.currentTarget.blur();
+            }}
+            aria-label="Рисовать на поле"
+          >
+            <PencilIcon />
+          </button>
+        ) : null}
+        {canEditCards ? (
+          <button
+            className={`${classes.left_menu_btn} ${classes.left_menu_btn_create_node} ${boardEditMode === 'select' ? classes.left_menu_btn_active : ''}`.trim()}
+            type="button"
+            onClick={(e) => {
+              onStartSelectMode();
+              e.currentTarget.blur();
+            }}
+            aria-label="Выделение"
+          >
+            <SelectIcon />
           </button>
         ) : null}
       </div>

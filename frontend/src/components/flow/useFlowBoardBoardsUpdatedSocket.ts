@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type React from 'react';
 import type { Edge, Node as RFNode } from 'reactflow';
 import { connectSocket } from '@/services/socketManager';
-import type { ApiCardLink, ApiLinkStyle, FlowNodeData, FlowNodeType } from './flowBoardModel';
+import type { ApiBoardDrawing, ApiCardLink, ApiLinkStyle, FlowNodeData, FlowNodeType } from './flowBoardModel';
 import { buildEdgeFromLink, resolveImageSrc } from './flowBoardUtils';
 import { parseLinkFromBoardsUpdated } from '@/components/flowboard/utils/linkSocketPayload';
 
@@ -23,6 +23,14 @@ type BoardsUpdatedCmd = {
   style?: unknown;
   label?: unknown;
   is_label_visible?: unknown;
+  user_id?: unknown;
+  drawing_id?: unknown;
+  stroke_width?: unknown;
+  path_d?: unknown;
+  client_draw_id?: unknown;
+  sort_order?: unknown;
+  group_key?: unknown;
+  drawings?: unknown;
 };
 
 export const useFlowBoardBoardsUpdatedSocket = (params: {
@@ -37,6 +45,8 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
   setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
   setReloadSeq: React.Dispatch<React.SetStateAction<number>>;
   addEdgeFromLink: (link: ApiCardLink) => void;
+  upsertDrawingFromSocket: (drawing: ApiBoardDrawing, clientDrawId: string | null) => void;
+  removeDrawingFromSocket: (drawingId: number) => void;
 }) => {
   const {
     numericBoardId,
@@ -50,6 +60,8 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
     setEdges,
     setReloadSeq,
     addEdgeFromLink,
+    upsertDrawingFromSocket,
+    removeDrawingFromSocket,
   } = params;
 
   useEffect(() => {
@@ -209,6 +221,86 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
           setEdges((prev) => prev.filter((e) => String(e.id) !== id));
           return;
         }
+
+        if (reason === 'drawing_created' || reason === 'drawing_updated') {
+          const drawingIdRaw = cmd?.drawing_id;
+          const drawingId = typeof drawingIdRaw === 'number' ? drawingIdRaw : Number(drawingIdRaw);
+          const authorIdRaw = cmd?.user_id;
+          const user_id = typeof authorIdRaw === 'number' ? authorIdRaw : Number(authorIdRaw);
+          const color = typeof cmd?.color === 'string' ? cmd.color : null;
+          const stroke_width = Number(cmd?.stroke_width);
+          const path_d = typeof cmd?.path_d === 'string' ? cmd.path_d : null;
+          const client_draw_id = typeof cmd?.client_draw_id === 'string' ? cmd.client_draw_id : null;
+          const sort_order = Number(cmd?.sort_order);
+          const group_key = typeof cmd?.group_key === 'string' && cmd.group_key.trim() ? cmd.group_key.trim().toLowerCase() : null;
+
+          if (!Number.isFinite(drawingId) || drawingId <= 0) return;
+          if (!Number.isFinite(user_id) || user_id <= 0) return;
+          if (!color || !Number.isFinite(stroke_width) || !path_d || !Number.isFinite(sort_order) || sort_order <= 0) return;
+
+          upsertDrawingFromSocket(
+            {
+              id: drawingId,
+              board_id: numericBoardId,
+              user_id,
+              color,
+              stroke_width,
+              path_d,
+              sort_order,
+              group_key,
+              created_at: '',
+              client_draw_id,
+            },
+            client_draw_id
+          );
+          return;
+        }
+
+        if (reason === 'drawings_updated') {
+          const drawings = Array.isArray(cmd?.drawings) ? cmd.drawings : null;
+          if (!drawings?.length) return;
+
+          drawings.forEach((item) => {
+            const drawingId = Number((item as { id?: unknown })?.id);
+            const user_id = Number((item as { user_id?: unknown })?.user_id);
+            const color = typeof (item as { color?: unknown })?.color === 'string' ? String((item as { color?: unknown }).color) : null;
+            const stroke_width = Number((item as { stroke_width?: unknown })?.stroke_width);
+            const path_d = typeof (item as { path_d?: unknown })?.path_d === 'string' ? String((item as { path_d?: unknown }).path_d) : null;
+            const sort_order = Number((item as { sort_order?: unknown })?.sort_order);
+            const group_key =
+              typeof (item as { group_key?: unknown })?.group_key === 'string' && String((item as { group_key?: unknown }).group_key).trim()
+                ? String((item as { group_key?: unknown }).group_key).trim().toLowerCase()
+                : null;
+
+            if (!Number.isFinite(drawingId) || drawingId <= 0) return;
+            if (!Number.isFinite(user_id) || user_id <= 0) return;
+            if (!color || !Number.isFinite(stroke_width) || !path_d || !Number.isFinite(sort_order) || sort_order <= 0) return;
+
+            upsertDrawingFromSocket(
+              {
+                id: drawingId,
+                board_id: numericBoardId,
+                user_id,
+                color,
+                stroke_width,
+                path_d,
+                sort_order,
+                group_key,
+                created_at: '',
+              },
+              null
+            );
+          });
+          return;
+        }
+
+        if (reason === 'drawing_deleted') {
+          const drawingIdRaw = cmd?.drawing_id;
+          const drawingId = typeof drawingIdRaw === 'number' ? drawingIdRaw : Number(drawingIdRaw);
+          if (!Number.isFinite(drawingId) || drawingId <= 0) return;
+          removeDrawingFromSocket(drawingId);
+          return;
+        }
       },
     });
 
@@ -225,5 +317,7 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
     setNodes,
     setReloadSeq,
     suppressSocketReloadByCardIdRef,
+    removeDrawingFromSocket,
+    upsertDrawingFromSocket,
   ]);
 };

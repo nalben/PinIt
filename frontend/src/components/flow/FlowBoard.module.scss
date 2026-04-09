@@ -14,6 +14,16 @@ $board-menu-wide-min: 1700px;
 
 .space_container_connecting{}
 
+.space_container_drawing{
+    :global(.react-flow__pane){
+        cursor: crosshair;
+    }
+
+    :global(.react-flow__node){
+        cursor: crosshair;
+    }
+}
+
 .space_container_selecting{
     :global(.react-flow__pane){
         cursor: crosshair;
@@ -32,6 +42,257 @@ $board-menu-wide-min: 1700px;
 :global(.react-flow__selection){
     border: 1px solid rgba(231, 205, 115, 0.9) !important;
     background: rgba(231, 205, 115, 0.12) !important;
+}
+
+.drawings_overlay{
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 0;
+    pointer-events: none;
+}
+
+.drawings_overlay_active{
+    z-index: 3;
+    pointer-events: auto;
+    touch-action: none;
+    cursor: crosshair;
+}
+
+.drawings_svg{
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.drawings_path{
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    opacity: 0.96;
+}
+
+.drawings_path_active{
+    filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.22));
+}
+
+.draw_toolbar{
+    position: absolute;
+    left: 50%;
+    bottom: 18px;
+    transform: translateX(-50%);
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: var(--border);
+    border-color: rgba(231, 205, 115, 0.55);
+    background: rgba(0, 0, 0, 0.72);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.42);
+    min-width: min(720px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.draw_toolbar_icon_btn{
+    width: 42px;
+    height: 42px;
+    border: var(--border);
+    background: transparent;
+    color: var(--pink);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+
+    & svg{
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
+        color: currentColor;
+    }
+
+    .space_container_desktop &:hover{
+        background: rgba(255, 255, 255, 0.06);
+    }
+}
+
+.draw_toolbar_icon_btn_disabled{
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.draw_toolbar_icon_btn_flip{
+    display: inline-flex;
+    transform: rotate(180deg);
+}
+
+.draw_toolbar_icon_btn_rotate{
+    display: inline-flex;
+}
+
+.draw_toolbar_icon_btn_rotate_up{
+    transform: rotate(90deg);
+}
+
+.draw_toolbar_icon_btn_rotate_down{
+    transform: rotate(-90deg);
+}
+
+.draw_toolbar_slider{
+    min-width: 0;
+    flex: 1;
+    display: grid;
+    grid-template-columns: auto minmax(140px, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    color: var(--cyan);
+}
+
+.draw_toolbar_slider_label,
+.draw_toolbar_slider_value{
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.draw_toolbar_slider_value{
+    width: 6.5ch;
+    min-width: 6.5ch;
+    display: inline-flex;
+    justify-content: flex-end;
+    font-variant-numeric: tabular-nums;
+}
+
+.draw_toolbar_slider input{
+    width: 100%;
+    height: 18px;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+}
+
+.draw_toolbar_slider input::-webkit-slider-runnable-track{
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.draw_toolbar_slider input::-webkit-slider-thumb{
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 0;
+    margin-top: -5px;
+    background: var(--pink);
+}
+
+.draw_toolbar_slider input::-moz-range-track{
+    height: 4px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.28);
+}
+
+.draw_toolbar_slider input::-moz-range-thumb{
+    width: 14px;
+    height: 14px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--pink);
+}
+
+.draw_toolbar_text_btn{
+    height: 42px;
+    padding: 0 12px;
+    border: var(--border);
+    background: transparent;
+    color: var(--cyan);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+
+    .space_container_desktop &:hover{
+        background: rgba(255, 255, 255, 0.06);
+    }
+}
+
+.draw_toolbar_palette_btn{
+    min-width: 54px;
+    height: 42px;
+    border: var(--border);
+    background: transparent;
+    color: var(--pink);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+
+    .space_container_desktop &:hover{
+        background: rgba(255, 255, 255, 0.06);
+    }
+
+    .color_palette_trigger_inner{
+        width: 22px;
+        height: 22px;
+        flex-shrink: 0;
+    }
+
+    svg{
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        fill: currentColor;
+        color: currentColor;
+    }
+
+    .color_palette_trigger_swatch{
+        width: 12px;
+        height: 12px;
+        right: -1px;
+        bottom: -1px;
+    }
+}
+
+.draw_toolbar_palette_btn_active{
+    border-color: var(--pink);
+}
+
+@media (max-width: 900px){
+    .draw_toolbar{
+        min-width: 0;
+        width: calc(100vw - 24px);
+        padding: 10px;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .draw_toolbar_slider{
+        grid-template-columns: 1fr;
+        gap: 6px;
+    }
+
+    .draw_toolbar_slider_value{
+        justify-self: end;
+    }
 }
 
 .flow_node_selected{
@@ -325,6 +586,18 @@ $board-menu-wide-min: 1700px;
 :global(.react-flow__node.selecting) .flow_node_float{
     animation: none;
     transform: translate3d(0, 0, 0) rotate(0deg);
+}
+
+:global(.react-flow__node.dragging) .node_rectangle,
+:global(.react-flow__node.dragging) .rhombus_content,
+:global(.react-flow__node.dragging) .circle_content,
+:global(.react-flow__node.dragging) .node_rectangle_title,
+:global(.react-flow__node.dragging) .node_rhombus span,
+:global(.react-flow__node.dragging) .node_circle span{
+    transition: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -1144,12 +1417,14 @@ $board-menu-wide-min: 1700px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    background: rgba(0, 0, 0, 0.45);
-    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.58);
     border-radius: 10px;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
     position: relative;
     z-index: 11;
+    backface-visibility: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
 }
 
 .node_rhombus{
@@ -1174,7 +1449,10 @@ $board-menu-wide-min: 1700px;
         color: var(--cyan);
         font-size: 18px;
         font-weight: 600;
-        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+        backface-visibility: hidden;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
     }
 }
 
@@ -1230,7 +1508,10 @@ $board-menu-wide-min: 1700px;
         color: var(--cyan);
         font-size: 18px;
         font-weight: 600;
-        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.9);
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+        backface-visibility: hidden;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
     }
 }
 
@@ -1293,6 +1574,11 @@ $board-menu-wide-min: 1700px;
         height: fluid-prop(150, 100, 1920, 320);
         width: auto;
     }
+}
+
+:global(.react-flow__minimap){
+    z-index: 9 !important;
+    pointer-events: auto !important;
 }
 
 .node_circle_has_image{

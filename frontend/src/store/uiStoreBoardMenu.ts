@@ -1,4 +1,4 @@
-export type BoardMenuTransitionView = 'board' | 'link' | 'card';
+export type BoardMenuTransitionView = 'board' | 'link' | 'card' | 'draw';
 
 export type BoardMenuTransitionState = {
   isBoardMenuOpen: boolean;

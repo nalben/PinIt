@@ -91,6 +91,133 @@ const normalizeHexColor = value => {
   return { ok: true, value: color.toUpperCase() };
 };
 
+const roundDrawingCoord = value => Math.round(value * 100) / 100;
+
+const clampDrawingStrokeWidth = value => {
+  const width = Number(value);
+  if (!Number.isFinite(width)) return null;
+  return Math.min(24, Math.max(2, Math.round(width * 2) / 2));
+};
+
+const normalizeBoardDrawingPoints = value => {
+  if (!Array.isArray(value) || value.length < 2 || value.length > 1500) {
+    return { ok: false };
+  }
+
+  const result = [];
+  let lastPoint = null;
+
+  for (const item of value) {
+    const x = roundDrawingCoord(Number(item?.x));
+    const y = roundDrawingCoord(Number(item?.y));
+
+    if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1_000_000 || Math.abs(y) > 1_000_000) {
+      return { ok: false };
+    }
+
+    if (lastPoint && Math.hypot(x - lastPoint.x, y - lastPoint.y) < 0.35) {
+      continue;
+    }
+
+    const point = { x, y };
+    result.push(point);
+    lastPoint = point;
+  }
+
+  if (result.length < 2) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: result };
+};
+
+const buildBoardDrawingPath = points => {
+  if (!Array.isArray(points) || points.length < 2) return '';
+
+  if (points.length === 2) {
+    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+  }
+
+  let pathD = `M ${points[0].x} ${points[0].y}`;
+
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const current = points[i];
+    const next = points[i + 1];
+    const midpointX = roundDrawingCoord((current.x + next.x) / 2);
+    const midpointY = roundDrawingCoord((current.y + next.y) / 2);
+    pathD += ` Q ${current.x} ${current.y} ${midpointX} ${midpointY}`;
+  }
+
+  const last = points[points.length - 1];
+  pathD += ` L ${last.x} ${last.y}`;
+  return pathD;
+};
+
+const normalizeBoardDrawingPath = value => {
+  if (typeof value !== 'string') return { ok: false };
+
+  const path = value.trim();
+  if (!path || path.length > 120000) return { ok: false };
+
+  const tokens = path.match(/[MLQ]|-?\d+(?:\.\d+)?/g);
+  if (!tokens?.length) return { ok: false };
+
+  const normalizedTokens = [];
+  let index = 0;
+
+  while (index < tokens.length) {
+    const command = String(tokens[index++] || '').toUpperCase();
+    const arity = command === 'M' || command === 'L' ? 2 : command === 'Q' ? 4 : 0;
+    if (!arity) return { ok: false };
+
+    normalizedTokens.push(command);
+
+    for (let i = 0; i < arity; i += 1) {
+      const numeric = roundDrawingCoord(Number(tokens[index++]));
+      if (!Number.isFinite(numeric) || Math.abs(numeric) > 1_000_000) return { ok: false };
+      normalizedTokens.push(String(numeric));
+    }
+  }
+
+  if (normalizedTokens.length < 5) return { ok: false };
+  return { ok: true, value: normalizedTokens.join(' ') };
+};
+
+const DRAWING_GROUP_KEY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+const normalizeBoardDrawingGroupKey = value => {
+  if (value === null || value === undefined || value === '') {
+    return { ok: true, value: null };
+  }
+
+  const groupKey = String(value).trim().toLowerCase();
+  if (!DRAWING_GROUP_KEY_RE.test(groupKey)) {
+    return { ok: false };
+  }
+
+  return { ok: true, value: groupKey };
+};
+
+const normalizeBoardDrawingSortOrder = value => {
+  const sortOrder = Number(value);
+  if (!Number.isInteger(sortOrder) || sortOrder <= 0 || sortOrder > 2147483647) {
+    return { ok: false };
+  }
+  return { ok: true, value: sortOrder };
+};
+
+const mapBoardDrawingRow = row => ({
+  id: Number(row.id),
+  board_id: Number(row.board_id),
+  user_id: Number(row.user_id),
+  color: typeof row.color === 'string' ? row.color.toUpperCase() : null,
+  stroke_width: Number(row.stroke_width),
+  path_d: typeof row.path_d === 'string' ? row.path_d : '',
+  sort_order: Number(row.sort_order),
+  group_key: typeof row.group_key === 'string' && row.group_key.trim() ? row.group_key.trim().toLowerCase() : null,
+  created_at: row.created_at,
+});
+
 const canUserAccessBoard = async (userId, boardId) => {
   const [rows] = await db.execute(
     `SELECT 1
@@ -102,6 +229,46 @@ const canUserAccessBoard = async (userId, boardId) => {
   );
 
   return Boolean(rows.length);
+};
+
+const canUserEditBoard = async (userId, boardId) => {
+  const [rows] = await db.execute(
+    `SELECT 1
+     FROM boards b
+     LEFT JOIN boardguests bg ON bg.board_id = b.id AND bg.user_id = ? AND bg.role = 'editer'
+     WHERE b.id = ? AND (b.owner_id = ? OR bg.user_id IS NOT NULL)
+     LIMIT 1`,
+    [userId, boardId, userId]
+  );
+
+  return Boolean(rows.length);
+};
+
+const canUserAccessPublicBoard = async (boardId, rawUserId) => {
+  const userId = Number(rawUserId);
+
+  if (Number.isFinite(userId) && userId > 0) {
+    const [boardRows] = await db.execute(
+      `SELECT 1
+       FROM boards b
+       LEFT JOIN boardguests bg_block ON bg_block.board_id = b.id AND bg_block.user_id = ? AND bg_block.role = 'blocked'
+       WHERE b.id = ? AND b.is_public = 1 AND bg_block.user_id IS NULL
+       LIMIT 1`,
+      [userId, boardId]
+    );
+
+    return Boolean(boardRows.length);
+  }
+
+  const [boardRows] = await db.execute(
+    `SELECT 1
+     FROM boards
+     WHERE id = ? AND is_public = 1
+     LIMIT 1`,
+    [boardId]
+  );
+
+  return Boolean(boardRows.length);
 };
 
 const loadFavoriteCardColors = async userId => {
@@ -2379,6 +2546,451 @@ exports.deleteFavoriteCardColor = async (req, res) => {
   } catch (e) {
     console.error(e);
     return res.status(500).json({ message: 'Failed to delete favorite color' });
+  }
+};
+
+exports.getBoardDrawings = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Invalid board request' });
+    }
+
+    const hasAccess = await canUserAccessBoard(user_id, boardId);
+    if (!hasAccess) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, user_id, color, stroke_width, path_d, sort_order, group_key, created_at
+       FROM boarddrawings
+       WHERE board_id = ?
+       ORDER BY sort_order ASC, id ASC`,
+      [boardId]
+    );
+
+    return res.status(200).json(rows.map(mapBoardDrawingRow));
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Failed to load drawings' });
+  }
+};
+
+exports.getPublicBoardDrawings = async (req, res) => {
+  try {
+    const boardId = Number(req.params?.board_id);
+    const user_id = req.user?.id ? Number(req.user.id) : null;
+
+    if (!Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Invalid board request' });
+    }
+
+    const hasAccess = await canUserAccessPublicBoard(boardId, user_id);
+    if (!hasAccess) {
+      return res.status(404).json({ message: 'Board not found' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, user_id, color, stroke_width, path_d, sort_order, group_key, created_at
+       FROM boarddrawings
+       WHERE board_id = ?
+       ORDER BY sort_order ASC, id ASC`,
+      [boardId]
+    );
+
+    return res.status(200).json(rows.map(mapBoardDrawingRow));
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Failed to load drawings' });
+  }
+};
+
+exports.createBoardDrawing = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const clientDrawIdRaw = trimNullableString(req.body?.client_draw_id);
+    const client_draw_id = clientDrawIdRaw && clientDrawIdRaw.length <= 120 ? clientDrawIdRaw : null;
+    const hasPath = req.body && Object.prototype.hasOwnProperty.call(req.body, 'path_d');
+    const hasSortOrder = req.body && Object.prototype.hasOwnProperty.call(req.body, 'sort_order');
+    const hasGroupKey = req.body && Object.prototype.hasOwnProperty.call(req.body, 'group_key');
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Invalid board request' });
+    }
+
+    const canEdit = await canUserEditBoard(user_id, boardId);
+    if (!canEdit) {
+      return res.status(403).json({ message: 'No access to draw on this board' });
+    }
+
+    const colorResult = normalizeHexColor(req.body?.color);
+    const pointsResult = normalizeBoardDrawingPoints(req.body?.points);
+    const pathResult = hasPath ? normalizeBoardDrawingPath(req.body?.path_d) : { ok: true, value: null };
+    const strokeWidth = clampDrawingStrokeWidth(req.body?.stroke_width);
+    const sortOrderResult = hasSortOrder ? normalizeBoardDrawingSortOrder(req.body?.sort_order) : { ok: true, value: null };
+    const groupKeyResult = hasGroupKey ? normalizeBoardDrawingGroupKey(req.body?.group_key) : { ok: true, value: null };
+
+    if (
+      !colorResult.ok ||
+      !colorResult.value ||
+      !strokeWidth ||
+      (!pointsResult.ok && !pathResult.value) ||
+      !pathResult.ok ||
+      !sortOrderResult.ok ||
+      !groupKeyResult.ok
+    ) {
+      return res.status(400).json({ message: 'Invalid drawing payload' });
+    }
+
+    const pathD = pointsResult.ok ? buildBoardDrawingPath(pointsResult.value) : pathResult.value;
+    if (!pathD) {
+      return res.status(400).json({ message: 'Invalid drawing payload' });
+    }
+
+    const sort_order = (() => {
+      if (hasSortOrder) return sortOrderResult.value;
+      return null;
+    })();
+    const group_key = hasGroupKey ? groupKeyResult.value : null;
+
+    let nextSortOrder = sort_order;
+    if (!nextSortOrder) {
+      const [sortRows] = await db.execute(
+        `SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order
+         FROM boarddrawings
+         WHERE board_id = ?`,
+        [boardId]
+      );
+      nextSortOrder = Number(sortRows[0]?.next_sort_order);
+    }
+
+    if (!Number.isFinite(nextSortOrder) || nextSortOrder <= 0) {
+      return res.status(500).json({ message: 'Failed to create drawing' });
+    }
+
+    const [result] = await db.execute(
+      `INSERT INTO boarddrawings (board_id, user_id, color, stroke_width, path_d, sort_order, group_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [boardId, user_id, colorResult.value, strokeWidth, pathD, nextSortOrder, group_key]
+    );
+
+    const drawingId = Number(result?.insertId);
+    if (!Number.isFinite(drawingId) || drawingId <= 0) {
+      return res.status(500).json({ message: 'Failed to create drawing' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT id, board_id, user_id, color, stroke_width, path_d, sort_order, group_key, created_at
+       FROM boarddrawings
+       WHERE id = ? AND board_id = ?
+       LIMIT 1`,
+      [drawingId, boardId]
+    );
+
+    if (!rows.length) {
+      return res.status(500).json({ message: 'Failed to load created drawing' });
+    }
+
+    const drawing = mapBoardDrawingRow(rows[0]);
+
+    emitBoardsUpdatedToBoardUsers(
+      req,
+      boardId,
+      {
+        reason: 'drawing_created',
+        drawing_id: drawing.id,
+        user_id: drawing.user_id,
+        color: drawing.color,
+        stroke_width: drawing.stroke_width,
+        path_d: drawing.path_d,
+        sort_order: drawing.sort_order,
+        group_key: drawing.group_key,
+        client_draw_id,
+      },
+      [user_id]
+    );
+
+    return res.status(200).json({ ...drawing, client_draw_id });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Failed to create drawing' });
+  }
+};
+
+exports.updateBoardDrawing = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const drawingId = Number(req.params?.drawing_id);
+    const hasColor = req.body && Object.prototype.hasOwnProperty.call(req.body, 'color');
+    const hasPath = req.body && Object.prototype.hasOwnProperty.call(req.body, 'path_d');
+    const hasSortOrder = req.body && Object.prototype.hasOwnProperty.call(req.body, 'sort_order');
+    const hasGroupKey = req.body && Object.prototype.hasOwnProperty.call(req.body, 'group_key');
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(drawingId) ||
+      drawingId <= 0
+    ) {
+      return res.status(400).json({ message: 'Invalid drawing request' });
+    }
+
+    if (!hasColor && !hasPath && !hasSortOrder && !hasGroupKey) {
+      return res.status(400).json({ message: 'Nothing to update' });
+    }
+
+    const canEdit = await canUserEditBoard(user_id, boardId);
+    if (!canEdit) {
+      return res.status(403).json({ message: 'No access to edit drawings on this board' });
+    }
+
+    const colorResult = hasColor ? normalizeHexColor(req.body?.color) : { ok: true, value: null };
+    const pathResult = hasPath ? normalizeBoardDrawingPath(req.body?.path_d) : { ok: true, value: null };
+    const sortOrderResult = hasSortOrder ? normalizeBoardDrawingSortOrder(req.body?.sort_order) : { ok: true, value: null };
+    const groupKeyResult = hasGroupKey ? normalizeBoardDrawingGroupKey(req.body?.group_key) : { ok: true, value: null };
+
+    if ((hasColor && !colorResult.ok) || (hasPath && !pathResult.ok) || (hasSortOrder && !sortOrderResult.ok) || (hasGroupKey && !groupKeyResult.ok)) {
+      return res.status(400).json({ message: 'Invalid drawing payload' });
+    }
+
+    const [existingRows] = await db.execute(
+      `SELECT id, board_id, user_id, color, stroke_width, path_d, sort_order, group_key, created_at
+       FROM boarddrawings
+       WHERE id = ? AND board_id = ?
+       LIMIT 1`,
+      [drawingId, boardId]
+    );
+
+    if (!existingRows.length) {
+      return res.status(404).json({ message: 'Drawing not found' });
+    }
+
+    const current = mapBoardDrawingRow(existingRows[0]);
+    const nextColor = hasColor ? colorResult.value : current.color;
+    const nextPathD = hasPath ? pathResult.value : current.path_d;
+    const nextSortOrder = hasSortOrder ? sortOrderResult.value : current.sort_order;
+    const nextGroupKey = hasGroupKey ? groupKeyResult.value : current.group_key;
+
+    await db.execute(
+      `UPDATE boarddrawings
+       SET color = ?, path_d = ?, sort_order = ?, group_key = ?
+       WHERE id = ? AND board_id = ?`,
+      [nextColor, nextPathD, nextSortOrder, nextGroupKey, drawingId, boardId]
+    );
+
+    const updated = {
+      ...current,
+      color: nextColor,
+      path_d: nextPathD,
+      sort_order: nextSortOrder,
+      group_key: nextGroupKey,
+    };
+
+    emitBoardsUpdatedToBoardUsers(
+      req,
+      boardId,
+      {
+        reason: 'drawing_updated',
+        drawing_id: updated.id,
+        user_id: updated.user_id,
+        color: updated.color,
+        stroke_width: updated.stroke_width,
+        path_d: updated.path_d,
+        sort_order: updated.sort_order,
+        group_key: updated.group_key,
+      },
+      [user_id]
+    );
+
+    return res.status(200).json(updated);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Failed to update drawing' });
+  }
+};
+
+exports.bulkUpdateBoardDrawings = async (req, res) => {
+  let connection;
+
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const input = Array.isArray(req.body?.drawings) ? req.body.drawings : null;
+
+    if (!Number.isFinite(user_id) || user_id <= 0 || !Number.isFinite(boardId) || boardId <= 0) {
+      return res.status(400).json({ message: 'Invalid drawing request' });
+    }
+
+    if (!input?.length || input.length > 200) {
+      return res.status(400).json({ message: 'Invalid drawings payload' });
+    }
+
+    const canEdit = await canUserEditBoard(user_id, boardId);
+    if (!canEdit) {
+      return res.status(403).json({ message: 'No access to edit drawings on this board' });
+    }
+
+    const updates = [];
+    const ids = [];
+    const seenIds = new Set();
+
+    for (const item of input) {
+      const id = Number(item?.id);
+      const hasColor = item && Object.prototype.hasOwnProperty.call(item, 'color');
+      const hasPath = item && Object.prototype.hasOwnProperty.call(item, 'path_d');
+      const hasSortOrder = item && Object.prototype.hasOwnProperty.call(item, 'sort_order');
+      const hasGroupKey = item && Object.prototype.hasOwnProperty.call(item, 'group_key');
+
+      if (!Number.isFinite(id) || id <= 0 || seenIds.has(id) || (!hasColor && !hasPath && !hasSortOrder && !hasGroupKey)) {
+        return res.status(400).json({ message: 'Invalid drawings payload' });
+      }
+
+      const colorResult = hasColor ? normalizeHexColor(item?.color) : { ok: true, value: null };
+      const pathResult = hasPath ? normalizeBoardDrawingPath(item?.path_d) : { ok: true, value: null };
+      const sortOrderResult = hasSortOrder ? normalizeBoardDrawingSortOrder(item?.sort_order) : { ok: true, value: null };
+      const groupKeyResult = hasGroupKey ? normalizeBoardDrawingGroupKey(item?.group_key) : { ok: true, value: null };
+
+      if (!colorResult.ok || !pathResult.ok || !sortOrderResult.ok || !groupKeyResult.ok) {
+        return res.status(400).json({ message: 'Invalid drawings payload' });
+      }
+
+      seenIds.add(id);
+      ids.push(id);
+      updates.push({
+        id,
+        hasColor,
+        hasPath,
+        hasSortOrder,
+        hasGroupKey,
+        color: colorResult.value,
+        path_d: pathResult.value,
+        sort_order: sortOrderResult.value,
+        group_key: groupKeyResult.value,
+      });
+    }
+
+    connection = await db.getConnection();
+    await connection.beginTransaction();
+
+    const placeholders = ids.map(() => '?').join(', ');
+    const [rows] = await connection.execute(
+      `SELECT id, board_id, user_id, color, stroke_width, path_d, sort_order, group_key, created_at
+       FROM boarddrawings
+       WHERE board_id = ? AND id IN (${placeholders})`,
+      [boardId, ...ids]
+    );
+
+    if (rows.length !== ids.length) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Drawing not found' });
+    }
+
+    const byId = new Map(rows.map((row) => [Number(row.id), mapBoardDrawingRow(row)]));
+
+    for (const update of updates) {
+      const current = byId.get(update.id);
+      if (!current) {
+        await connection.rollback();
+        return res.status(404).json({ message: 'Drawing not found' });
+      }
+
+      const nextColor = update.hasColor ? update.color : current.color;
+      const nextPathD = update.hasPath ? update.path_d : current.path_d;
+      const nextSortOrder = update.hasSortOrder ? update.sort_order : current.sort_order;
+      const nextGroupKey = update.hasGroupKey ? update.group_key : current.group_key;
+
+      await connection.execute(
+        `UPDATE boarddrawings
+         SET color = ?, path_d = ?, sort_order = ?, group_key = ?
+         WHERE id = ? AND board_id = ?`,
+        [nextColor, nextPathD, nextSortOrder, nextGroupKey, update.id, boardId]
+      );
+    }
+
+    const [updatedRows] = await connection.execute(
+      `SELECT id, board_id, user_id, color, stroke_width, path_d, sort_order, group_key, created_at
+       FROM boarddrawings
+       WHERE board_id = ? AND id IN (${placeholders})
+       ORDER BY sort_order ASC, id ASC`,
+      [boardId, ...ids]
+    );
+
+    await connection.commit();
+
+    const drawings = updatedRows.map(mapBoardDrawingRow);
+
+    emitBoardsUpdatedToBoardUsers(
+      req,
+      boardId,
+      {
+        reason: 'drawings_updated',
+        drawings,
+      },
+      [user_id]
+    );
+
+    return res.status(200).json(drawings);
+  } catch (e) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {
+        // ignore
+      }
+    }
+    console.error(e);
+    return res.status(500).json({ message: 'Failed to update drawings' });
+  } finally {
+    if (connection) connection.release();
+  }
+};
+
+exports.deleteBoardDrawing = async (req, res) => {
+  try {
+    const user_id = Number(req.user?.id);
+    const boardId = Number(req.params?.board_id);
+    const drawingId = Number(req.params?.drawing_id);
+
+    if (
+      !Number.isFinite(user_id) ||
+      user_id <= 0 ||
+      !Number.isFinite(boardId) ||
+      boardId <= 0 ||
+      !Number.isFinite(drawingId) ||
+      drawingId <= 0
+    ) {
+      return res.status(400).json({ message: 'Invalid drawing request' });
+    }
+
+    const canEdit = await canUserEditBoard(user_id, boardId);
+    if (!canEdit) {
+      return res.status(403).json({ message: 'No access to edit drawings on this board' });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT id
+       FROM boarddrawings
+       WHERE id = ? AND board_id = ?
+       LIMIT 1`,
+      [drawingId, boardId]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ message: 'Drawing not found' });
+    }
+
+    await db.execute(`DELETE FROM boarddrawings WHERE id = ? AND board_id = ?`, [drawingId, boardId]);
+    emitBoardsUpdatedToBoardUsers(req, boardId, { reason: 'drawing_deleted', drawing_id: drawingId }, [user_id]);
+    return res.status(200).json({ id: drawingId, board_id: boardId });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ message: 'Failed to delete drawing' });
   }
 };
 

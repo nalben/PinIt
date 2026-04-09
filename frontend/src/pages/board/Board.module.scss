@@ -70,9 +70,18 @@
         color: var(--pink);
         rotate: 180deg;
     }
+
+    &:disabled{
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
 }
 .left_menu_btn_toggle{}
 .left_menu_btn_create_node{}
+.left_menu_btn_active{
+    background-color: color-mix(in srgb, var(--pink) 16%, transparent);
+    border-color: var(--pink);
+}
 .menu_close .left_menu_btn{
     & svg{
         rotate: 0deg;
