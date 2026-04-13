@@ -1,6 +1,6 @@
 {
   "name": "pinit",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "PinIt desktop client",
   "main": "electron/main.js",
   "dependencies": {
@@ -60,17 +60,23 @@
   "devDependencies": {
     "electron": "^38.0.0",
     "electron-builder": "^26.0.12",
-    "png-to-ico": "^2.1.8"
+    "png-to-ico": "^2.1.8",
+    "rcedit": "^4.0.1"
   },
   "build": {
     "appId": "ru.pinit.desktop",
     "productName": "PinIt",
     "asar": true,
+    "asarUnpack": [
+      "electron/assets/*.ico",
+      "electron/assets/*.png"
+    ],
     "electronUpdaterCompatibility": ">=2.16",
     "directories": {
       "output": "desktop-dist",
       "buildResources": "electron/assets"
     },
+    "afterPack": "scripts/electron-after-pack.js",
     "files": [
       "electron/**/*"
     ],

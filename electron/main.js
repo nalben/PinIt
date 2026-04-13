@@ -1,18 +1,26 @@
 const path = require('path');
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, nativeImage } = require('electron');
 const { autoUpdater } = require('electron-updater');
 
 const APP_ID = 'ru.pinit.desktop';
+const APP_NAME = 'PinIt';
 const APP_URL = 'https://pin-it.ru';
 const UPDATE_URL = 'https://pin-it.ru/desktop-updates/';
-const ICON_PATH = path.join(__dirname, 'assets', 'icon.png');
 
 let mainWindow = null;
 let updateHandlersRegistered = false;
 
 app.setAppUserModelId(APP_ID);
 
+const getRuntimeIconPath = () => (
+  app.isPackaged
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'electron', 'assets', 'icon.ico')
+    : path.join(__dirname, 'assets', 'icon.ico')
+);
+
 const createWindow = async () => {
+  const runtimeIconPath = getRuntimeIconPath();
+  const appIcon = nativeImage.createFromPath(runtimeIconPath);
   const window = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -20,13 +28,23 @@ const createWindow = async () => {
     minHeight: 700,
     autoHideMenuBar: true,
     backgroundColor: '#f3f1ea',
-    icon: ICON_PATH,
+    icon: appIcon,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   });
+
+  if (process.platform === 'win32') {
+    window.setAppDetails({
+      appId: APP_ID,
+      appIconPath: runtimeIconPath,
+      appIconIndex: 0,
+      relaunchCommand: process.execPath,
+      relaunchDisplayName: APP_NAME,
+    });
+  }
 
   await window.loadURL(APP_URL);
   return window;
