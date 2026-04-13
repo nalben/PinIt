@@ -99,5 +99,10 @@
     .button:hover,
     .option:hover{
         opacity: 0.7;
+        transition: all 0.3s;
     }
+}
+.button,
+.option {
+    transition: all 0.3s;
 }

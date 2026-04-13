@@ -14,5 +14,6 @@ export interface BuildOptions{
     paths: BuildPaths;
     mode: BuildMode;
     platform: BuildPlatform;
+    apiUrl?: string;
     analyzer?: boolean;
 }

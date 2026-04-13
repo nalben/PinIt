@@ -2,6 +2,7 @@ const db = require('../db');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { UPLOADS_DIR } = require('../utils/runtimePaths');
 
 const getUploadsRelativePath = rawPath => {
   if (typeof rawPath !== 'string') return null;
@@ -35,9 +36,8 @@ const safeUnlinkUpload = async uploadPath => {
   const rel = getUploadsRelativePath(uploadPath);
   if (!rel) return;
 
-  const uploadsDir = path.join(__dirname, '..', 'uploads');
-  const uploadsDirResolved = path.resolve(uploadsDir);
-  const absolutePath = path.resolve(uploadsDir, rel);
+  const uploadsDirResolved = path.resolve(UPLOADS_DIR);
+  const absolutePath = path.resolve(UPLOADS_DIR, rel);
 
   const uploadsPrefix = uploadsDirResolved.toLowerCase() + path.sep;
   const absLower = absolutePath.toLowerCase();

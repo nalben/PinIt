@@ -4,14 +4,17 @@ const boardsController = require('../controllers/boardsController');
 const authMiddleware = require('../middleware/authMiddleware');
 const optionalAuth = require('../middleware/optionalAuth');
 const multer = require('multer');
+const fs = require('fs');
 const path = require('path');
+const { UPLOADS_DIR } = require('../utils/runtimePaths');
 
 /* ============================
    Multer (board images)
 ============================ */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../uploads'));
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    cb(null, UPLOADS_DIR);
   },
   filename: (req, file, cb) => {
     const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);

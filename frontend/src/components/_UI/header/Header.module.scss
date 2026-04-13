@@ -344,11 +344,20 @@
     }
     .profile_theme_trigger:hover,
     .profile_theme_option:hover,
+    .profile_install_button:hover,
     .profile_logout_trigger:hover,
     .profile_logout_option:hover{
+        transition: all 0.3s;
         opacity: 0.7;
     }
 }
+        .profile_theme_trigger,
+        .profile_theme_option,
+        .profile_install_button,
+        .profile_logout_trigger,
+        .profile_logout_option{
+            transition: all 0.3s;
+        }
 .profile_button{
     display: flex;
     align-items: center;
@@ -529,6 +538,52 @@
 
 .profile_logout_option_danger{
     color: rgb(255, 100, 100);
+}
+
+.profile_install_item{
+    display: flex !important;
+    flex: 0 0 100% !important;
+    width: 100% !important;
+    min-width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 0 !important;
+    align-items: stretch;
+}
+
+.profile_install_item,
+.profile_install_item:hover{
+    width: 100%;
+    background-color: transparent !important;
+}
+
+.profile_install_item_content{
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex: 1 1 100%;
+    align-self: stretch;
+}
+
+.profile_install_button{
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--pink);
+    padding: 10px;
+    cursor: pointer;
+    font: inherit;
+    text-align: center;
+    transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+.profile_install_button:disabled{
+    cursor: default;
+    opacity: 0.6;
 }
 
 

@@ -1,8 +1,8 @@
 const db = require('../db');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const path = require('path');
 const fs = require('fs');
+const { resolveUploadsPath } = require('../utils/runtimePaths');
 
 /* ============================
    PUT /api/profile/me
@@ -21,7 +21,7 @@ exports.updateMe = async (req, res) => {
     if (req.file) {
       newAvatarPath = `/uploads/${req.file.filename}`;
 
-      const absoluteAvatarPath = path.join(__dirname, '..', 'uploads', req.file.filename);
+      const absoluteAvatarPath = resolveUploadsPath(req.file.filename);
       const tmpPath = `${absoluteAvatarPath}.tmp`;
 
       try {
@@ -51,8 +51,8 @@ exports.updateMe = async (req, res) => {
       );
 
       const oldAvatar = oldRows[0]?.avatar;
-      if (oldAvatar) {
-        const oldFilePath = path.join(__dirname, '..', oldAvatar.replace(/^\/+/, ''));
+      if (typeof oldAvatar === 'string' && oldAvatar.startsWith('/uploads/')) {
+        const oldFilePath = resolveUploadsPath(oldAvatar.replace(/^\/uploads\//, ''));
         fs.unlink(oldFilePath, () => {});
       }
     }

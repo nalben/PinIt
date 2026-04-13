@@ -532,11 +532,15 @@ Treat as “serious changes”:
 - Adding/changing API endpoints or response shapes that are consumed by the frontend
 - Adding/changing Zustand store state shape, caching/dedup logic, or global state contracts
 - Any change that affects auth bootstrap flow or `/api/profile/me`
+- Adding/changing Electron desktop shell files or desktop release/update flow (`electron/main.js`, root `package.json` desktop scripts/build config, `scripts/build-desktop-icon.js`, `electron/assets/*`)
 
 Rules:
 
 - Write only verifiable facts based on code changes you actually made.
 - Keep the update minimal; do not rewrite unrelated sections.
+- If desktop shell/update files changed, include in the final response the exact commands for local desktop start, local desktop installer build, and desktop update artifact upload.
+- If desktop shell/update files changed, update `AGENTS.md` with the current desktop app version from the root `package.json`.
+- Do not store passwords, private keys, or other secrets in `AGENTS.md`; commands may reference host/path, but secrets must be omitted.
 
 SECTION 5 — COMMON TASK GUIDELINES
 5.1 Replace Text in Component
@@ -1559,3 +1563,22 @@ Update (2026-04-08, drawing grouping + select mode)
   - select mode box-selection on desktop: if the marquee touches any node, only nodes are selected; otherwise it selects drawings;
   - ctrl/cmd multi-select for drawings, mutual exclusivity between node and drawing selection, and group-aware selection expansion;
   - drawing group/ungroup, z-order move up/down, multi-drawing recolor/delete, and undo/redo for create/delete/move/color/group/order changes.
+
+Update (2026-04-13)
+
+- Desktop packaging via Electron added at repo root:
+  - main process entry: `electron/main.js`
+  - root scripts: `npm run desktop:start` and `npm run desktop:dist`
+  - `electron-builder` outputs Windows NSIS artifacts into `desktop-dist/`
+- Desktop `exe` now opens the production site `https://pin-it.ru` directly in Electron instead of using a bundled local frontend/backend runtime; auth, API, sockets and DB therefore use the real production environment.
+- Desktop auto-update is configured through `electron-updater` + `electron-builder` generic publish feed:
+  - feed URL: `https://pin-it.ru/desktop-updates/`
+  - packaged artifacts include `latest.yml`, Windows installer `.exe`, and `.blockmap`
+- Desktop icon assets are generated from `frontend/public/Logo.svg` by `scripts/build-desktop-icon.js` into `electron/assets/icon.png` and `electron/assets/icon.ico`.
+- Current desktop app version in the root `package.json`: `1.0.0`
+- Frontend API origin is now injected at build time via `__API_URL__`:
+  - development build default: `http://localhost:3001`
+  - production build default: same-origin (`''`)
+- Desktop runtime storage is writable outside the packaged app:
+  - when `PINIT_DATA_DIR` is set, uploads and converter files are stored under that runtime directory instead of `api/uploads` / `api/converter_uploads`
+  - web/non-desktop runtime keeps using the existing `api/` local folders

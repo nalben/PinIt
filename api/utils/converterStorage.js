@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
+const { CONVERTER_ROOT } = require('./runtimePaths');
 
-const CONVERTER_ROOT = path.join(__dirname, '..', 'converter_uploads');
 const CONVERTER_TMP_DIR = path.join(CONVERTER_ROOT, '_tmp');
 
 const ensureDir = async (dirPath) => {

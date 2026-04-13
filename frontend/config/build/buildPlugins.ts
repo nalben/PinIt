@@ -10,13 +10,14 @@ import path from 'path';
 
 const ImageminWebpWebpackPlugin = require('imagemin-webp-webpack-plugin');
 
-export function buildPlugins({ mode, paths, analyzer, platform }: BuildOptions): Configuration['plugins'] {
+export function buildPlugins({ mode, paths, analyzer, platform, apiUrl }: BuildOptions): Configuration['plugins'] {
   const isProd = mode === 'production';
   const plugins: Configuration['plugins'] = [
     new HtmlWebpackPlugin({ template: paths.html, favicon: path.resolve(paths.public, 'Logo.svg') }),
     new webpack.DefinePlugin({
       __PLATFORM__: JSON.stringify(platform),
       __ENV__: JSON.stringify(mode),
+      __API_URL__: JSON.stringify(typeof apiUrl === 'string' ? apiUrl : mode === 'development' ? 'http://localhost:3001' : ''),
     }),
   ];
 

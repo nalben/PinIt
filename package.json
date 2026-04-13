@@ -1,8 +1,8 @@
 {
   "name": "pinit",
   "version": "1.0.0",
-  "description": "",
-  "main": "template.config.js",
+  "description": "PinIt desktop client",
+  "main": "electron/main.js",
   "dependencies": {
     "accepts": "^1.3.8",
     "base64id": "^2.0.0",
@@ -31,6 +31,7 @@
     "socket.io": "^4.8.3",
     "socket.io-adapter": "^2.5.6",
     "socket.io-parser": "^4.2.5",
+    "electron-updater": "^6.6.2",
     "toposort-class": "^1.0.1",
     "undici-types": "^7.16.0",
     "uuid": "^8.3.2",
@@ -40,6 +41,9 @@
     "ws": "^8.18.3"
   },
   "scripts": {
+    "desktop:icon": "node scripts/build-desktop-icon.js",
+    "desktop:start": "npm run desktop:icon && electron .",
+    "desktop:dist": "npm run desktop:icon && electron-builder --win nsis",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -52,5 +56,43 @@
   "bugs": {
     "url": "https://github.com/nalben/PinIt/issues"
   },
-  "homepage": "https://github.com/nalben/PinIt#readme"
+  "homepage": "https://github.com/nalben/PinIt#readme",
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.12",
+    "png-to-ico": "^2.1.8"
+  },
+  "build": {
+    "appId": "ru.pinit.desktop",
+    "productName": "PinIt",
+    "asar": true,
+    "electronUpdaterCompatibility": ">=2.16",
+    "directories": {
+      "output": "desktop-dist",
+      "buildResources": "electron/assets"
+    },
+    "files": [
+      "electron/**/*"
+    ],
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://pin-it.ru/desktop-updates/"
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false,
+      "icon": "icon.ico",
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "shortcutName": "PinIt",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico"
+    }
+  }
 }

@@ -20,11 +20,13 @@ import { applyTheme, getStoredTheme, persistTheme, THEME_OPTIONS } from '@/utils
 import type { AppTheme } from '@/utils/theme';
 
 type HeaderVariant = 'default' | 'board';
+const PINIT_DESKTOP_UPDATES_URL = 'https://pin-it.ru/desktop-updates';
 
 const Header = ({ variant = 'default' }: { variant?: HeaderVariant }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme());
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+  const [isInstallerLoading, setIsInstallerLoading] = useState(false);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const isAuth = useAuthStore(state => state.isAuth);
@@ -152,6 +154,46 @@ const isProfileActive = () => {
   const handleLogoutConfirm = () => {
     closeHeaderDropdown();
     logout();
+  };
+
+  const handleInstallPinIt = async () => {
+    if (isInstallerLoading) return;
+
+    try {
+      setIsInstallerLoading(true);
+
+      const response = await fetch(`${PINIT_DESKTOP_UPDATES_URL}/latest.yml`, {
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to load latest.yml: ${response.status}`);
+      }
+
+      const latestYml = await response.text();
+      const installerPathMatch =
+        latestYml.match(/^\s*-\s+url:\s+(.+?)\s*$/m) ??
+        latestYml.match(/^path:\s+(.+?)\s*$/m);
+      const installerPath = installerPathMatch?.[1]?.trim().replace(/^['"]|['"]$/g, '');
+
+      if (!installerPath) {
+        throw new Error('Installer path not found in latest.yml');
+      }
+
+      const installerUrl = new URL(installerPath, `${PINIT_DESKTOP_UPDATES_URL}/`).toString();
+      const link = document.createElement('a');
+      link.href = installerUrl;
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      closeHeaderDropdown();
+    } catch (error) {
+      console.error(error);
+      window.open(`${PINIT_DESKTOP_UPDATES_URL}/`, '_blank', 'noopener,noreferrer');
+    } finally {
+      setIsInstallerLoading(false);
+    }
   };
 
   const activeThemeOption = THEME_OPTIONS.find((option) => option.id === theme) ?? THEME_OPTIONS[0]!;
@@ -465,6 +507,21 @@ const isProfileActive = () => {
                         </DropdownWrapper>
                       </div>
                     </div>
+                    {__PLATFORM__ === 'desktop' ? (
+                      <div
+                        data-dropdown-class={classes.profile_install_item}
+                        className={classes.profile_install_item_content}
+                      >
+                        <button
+                          type="button"
+                          className={classes.profile_install_button}
+                          onClick={handleInstallPinIt}
+                          disabled={isInstallerLoading}
+                        >
+                          {isInstallerLoading ? 'Скачивание PinIt...' : 'Установить PinIt'}
+                        </button>
+                      </div>
+                    ) : null}
                     <LogoutButton
                       data-dropdown-class={classes.profile_logout_item}
                       className={classes.profile_logout_item_content}

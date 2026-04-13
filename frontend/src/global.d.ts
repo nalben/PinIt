@@ -38,6 +38,7 @@ interface NodeRequire {
 
 declare const __PLATFORM__: 'mobile' | 'desktop';
 declare const __ENV__: 'production' | 'development';
+declare const __API_URL__: string;
 
 declare module 'scheduler/tracing' {
   export type Interaction = any;

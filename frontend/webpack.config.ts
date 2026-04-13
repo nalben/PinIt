@@ -10,6 +10,7 @@ interface EnvVariables {
     analyzer?: boolean;
     port?: number;
     platform?: BuildPlatform;
+    apiUrl?: string;
 }
 
 export default (env: EnvVariables = {}) => {
@@ -35,6 +36,7 @@ export default (env: EnvVariables = {}) => {
         paths,
         analyzer: env.analyzer,
         platform: buildPlatform,
+        apiUrl: env.apiUrl,
     })
 
     return config;
