@@ -185,6 +185,29 @@
     align-items: flex-start;
     gap: 0.75rem;
 }
+.language_switcher{
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+.language_button{
+    min-width: 38px;
+    padding: 6px 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--pink);
+    cursor: pointer;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 999px;
+    transition: border-color 0.2s ease, background-color 0.2s ease, opacity 0.2s ease;
+}
+.language_button_active{
+    border-color: rgba(255, 255, 255, 0.38);
+    background: rgba(255, 255, 255, 0.08);
+}
 .theme_switcher{
     display: none;
 }
@@ -220,6 +243,24 @@
     align-self: stretch;
     display: flex;
     flex-direction: column;
+}
+.profile_language_panel{
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 10px;
+    color: var(--pink);
+}
+.profile_language_copy{
+    flex: 1;
+    min-width: 0;
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .profile_theme_dropdown_wrapper,
 .profile_theme_dropdown_button{
@@ -338,10 +379,13 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+    .language_button:hover{
+        border-color: rgba(255, 255, 255, 0.22);
+    }
     .theme_button:hover{
         transform: translateY(-1px);
         border-color: rgba(255, 255, 255, 0.45);
-    }
+        }
     .profile_theme_trigger:hover,
     .profile_theme_option:hover,
     .profile_install_button:hover,

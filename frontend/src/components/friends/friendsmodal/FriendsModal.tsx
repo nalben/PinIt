@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import axiosInstance, { API_URL } from "@/api/axiosInstance";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
+import ImageWithFallback from '@/components/_UI/imagewithfallback/ImageWithFallback';
 import Default from "@/assets/icons/monochrome/default-user.svg";
 import AuthModal from "@/components/auth/authmodal/AuthModal";
 import Reload from "@/assets/icons/monochrome/reload.svg";
@@ -186,19 +187,23 @@ const FriendsModal = () => {
     return "";
   };
 
+  const mapFriendsToStatuses = (nextFriends: Friend[]) => {
+    const statuses: Record<number, { status: FriendStatus; requestId?: number }> = {};
+    nextFriends.forEach((friend) => {
+      statuses[friend.id] = { status: "friend" };
+    });
+    return statuses;
+  };
+
   const fetchFriendsAndCode = async (userId: number) => {
     await ensureFriendsLoaded(userId);
     const friends = useFriendsStore.getState().friends as unknown as Friend[];
     const friendCode = await loadMeFriendCode();
-    const statuses: Record<number, { status: FriendStatus; requestId?: number }> = {};
-    friends.forEach((f) => {
-      statuses[f.id] = { status: "friend" };
-    });
 
     return {
       friendCode,
       friends,
-      statuses,
+      statuses: mapFriendsToStatuses(friends),
     };
   };
 
@@ -244,12 +249,17 @@ const FriendsModal = () => {
     }
 
     let mounted = true;
-    const canUseCache =
-      storeHasLoadedOnce &&
-      storeLoadedUserId === user.id &&
-      meFriendCodeCache !== undefined;
+    const hasFriendsCache = storeHasLoadedOnce && storeLoadedUserId === user.id;
+    const hasFriendCodeCache = meFriendCodeCache !== undefined;
 
-    if (!canUseCache) setIsFriendsLoading(true);
+    if (hasFriendsCache) {
+      setFriends((prev) => mergeFriends(prev, storeFriends as unknown as Friend[]));
+      setFriendStatusById((prev) => ({ ...prev, ...mapFriendsToStatuses(storeFriends as unknown as Friend[]) }));
+    }
+
+    setFriendCode(hasFriendCodeCache ? (meFriendCodeCache ?? null) : null);
+
+    if (!hasFriendsCache) setIsFriendsLoading(true);
 
     fetchFriendsAndCode(user.id)
       .then(({ friendCode, friends: fetchedFriends, statuses }) => {
@@ -273,7 +283,7 @@ const FriendsModal = () => {
     return () => {
       mounted = false;
     };
-  }, [friendsModalOpen, isInitialized, isAuth, user?.id, storeHasLoadedOnce, storeLoadedUserId, ensureFriendsLoaded]);
+  }, [friendsModalOpen, isInitialized, isAuth, user?.id, storeHasLoadedOnce, storeLoadedUserId, storeFriends, ensureFriendsLoaded]);
 
   useEffect(() => {
     if (!friendsModalOpen) return;
@@ -547,9 +557,9 @@ const FriendsModal = () => {
 
           return (
             <div key={friend.id} className={classes.friend_item}>
-              <Link to={`/user/${friend.username}`} className={classes.friend_info}>
+              <Link to={`/user/${friend.username}`} className={classes.friend_info} onClick={closeFriendsModal}>
                 <div className={classes.friend_info_wrap}>
-                  {avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />}
+                  <ImageWithFallback src={avatarSrc} alt="avatar" fallback={<Default />} />
                   <div className={classes.friend_info_text}>
                     <span>{friend.nickname || friend.username}</span>
                     <p>в друзьях: {timeAgo(friend.created_at)}</p>
@@ -700,7 +710,7 @@ const FriendsModal = () => {
                               : `${API_URL}/uploads/${foundUserByCode.avatar}`
                             : null;
 
-                          return avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />;
+                          return <ImageWithFallback src={avatarSrc} alt="avatar" fallback={<Default />} />;
                         })()}
                         <div className={classes.friend_info_text}>
                           <span>{foundUserByCode.nickname || foundUserByCode.username}</span>

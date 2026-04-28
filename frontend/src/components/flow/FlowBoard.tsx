@@ -17,7 +17,6 @@ import ReactFlow, {
   useReactFlow
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { HexColorPicker } from 'react-colorful';
 import classes from './FlowBoard.module.scss';
 import axiosInstance from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
@@ -88,6 +87,7 @@ import { getCardImageCropPreset } from '@/utils/imageCropPresets';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 import { FlowColorPaletteModal } from './FlowColorPaletteModal';
 import { FlowDrawingToolbar } from './FlowDrawingToolbar';
+import { useLanguageStore } from '@/store/languageStore';
 
 export type FlowBoardHandle = {
   createDraftNodeAtCenter: () => void;
@@ -97,13 +97,46 @@ export type FlowBoardHandle = {
 };
 
 const DEFAULT_LINK_STYLE: ApiLinkStyle = 'line';
-const DEFAULT_LINK_COLOR = 'var(--pink)';
+const DEFAULT_LINK_COLOR = DEFAULT_CARD_PICKER_COLOR;
+const MAX_CARD_TAGS = 12;
+const MAX_CARD_TAG_LENGTH = 24;
+const TOUCH_DRAW_START_THRESHOLD_PX = 8;
+
+const normalizeCardTagsClient = (value: unknown): string[] => {
+  const source = Array.isArray(value)
+    ? value
+    : typeof value === 'string'
+      ? value.split(',')
+      : [];
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const item of source) {
+    const normalized = String(item ?? '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .slice(0, MAX_CARD_TAG_LENGTH);
+    if (!normalized) continue;
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+    if (result.length >= MAX_CARD_TAGS) break;
+  }
+
+  return result;
+};
+
+const areCardTagsEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((tag, index) => tag === right[index]);
 
 type FlowBoardProps = {
   canEditCards?: boolean;
   boardMenuRef?: React.RefObject<HTMLDivElement | null>;
   onRequestBoardMenuBlur?: () => boolean;
   onRequestImplicitLinkInspectorClose?: () => boolean;
+  onBoardColorOptionsChange?: (colors: string[]) => void;
 };
 
 const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
@@ -111,12 +144,15 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
   boardMenuRef,
   onRequestBoardMenuBlur,
   onRequestImplicitLinkInspectorClose,
+  onBoardColorOptionsChange,
 }, ref) => {
   const { boardId } = useParams<{ boardId: string }>();
   const numericBoardId = Number(boardId);
   const isAuth = useAuthStore((s) => s.isAuth);
   const hasToken = useAuthStore((s) => s.hasToken);
   const authUserId = useAuthStore((s) => s.user?.id ?? null);
+  const language = useLanguageStore((s) => s.language);
+  const isEn = language === 'en';
   const [selectionModifierPressed, setSelectionModifierPressed] = useState(false);
 
   useEffect(() => {
@@ -159,6 +195,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
   const drawPaletteRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
+  const tagsInputRef = useRef<HTMLInputElement | null>(null);
   const imagePreloadStartedRef = useRef<Set<string>>(new Set());
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance | null>(null);
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
@@ -383,11 +420,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
   const { linkModeStep, startLinkMode, cancelLinkMode, handleNodeClickInLinkMode } = useFlowBoardLinkMode({});
 
-  const getNodeDragHandleSelector = useCallback(
-    (nodeType: FlowNodeType) =>
-      nodeType === 'rectangle' ? `.${classes.node_rectangle}` : `.${classes.flow_drag_handle}`,
-    []
-  );
+  const getNodeDragHandleSelector = useCallback((_nodeType: FlowNodeType) => `.${classes.flow_drag_handle}`, []);
 
   const getNodeWrapperClassName = useCallback(
     (nodeId: string, isSelected: boolean) => {
@@ -414,6 +447,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       const nodeType = mapApiTypeToNodeType(c.type);
       const imageSrc = resolveImageSrc(c.image_path ?? null);
       const color = normalizeHexColor(c.color);
+      const tags = normalizeCardTagsClient(c.tags);
       const imageLoaded = !imageSrc;
       return {
         id: String(c.id),
@@ -427,9 +461,10 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
           imageSrc,
           color,
           isLocked: Boolean(c.is_locked),
+          tags,
           imageLoaded,
         },
-      };
+      }
     },
     [canEditCards, getNodeDragHandleSelector]
   );
@@ -496,6 +531,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     const sRect = getNodeRect(sNode);
     const sourceFloat = sourceId ? getNodeFloatVector(sourceId, floatNow) : { x: 0, y: 0, rotate: 0 };
     const hoverFloat = hoverId ? getNodeFloatVector(hoverId, floatNow) : { x: 0, y: 0, rotate: 0 };
+    const previewColor = normalizeHexColor((sNode as RFNode<FlowNodeData> | null)?.data?.color) ?? DEFAULT_LINK_COLOR;
 
     let finalToX = toX;
     let finalToY = toY;
@@ -543,7 +579,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
     return (
       <g>
-        <path d={`M${finalFromX},${finalFromY}L${finalToX},${finalToY}`} fill="none" stroke={DEFAULT_LINK_COLOR} strokeWidth={2} />
+        <path d={`M${finalFromX},${finalFromY}L${finalToX},${finalToY}`} fill="none" stroke={previewColor} strokeWidth={2} />
       </g>
     );
   };
@@ -632,6 +668,15 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
   }, [activeNodeId, isEditing]);
 
   useEffect(() => {
+    if (!flowCardSettingsOpen || !flowCardSettingsDraft) {
+      setTagsInputValue('');
+      return;
+    }
+
+    setTagsInputValue(normalizeCardTagsClient(flowCardSettingsDraft.tags).join(', '));
+  }, [flowCardSettings?.nodeId, flowCardSettingsOpen]);
+
+  useEffect(() => {
     setNodes((prev) =>
       prev
         .filter((n) => (canEditCards ? true : !String(n.id).startsWith('draft-')))
@@ -662,6 +707,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
   const displayLocked = Boolean(visualDraft?.isLocked);
   const displayImagePreview = visualDraft?.imageSrc ?? null;
   const displayColor = normalizeHexColor(visualDraft?.color);
+  const displayTags = normalizeCardTagsClient(visualDraft?.tags);
   const hasVisualSelection = Boolean(displayImagePreview || displayColor);
   const [drawStrokeWidth, setDrawStrokeWidth] = useState(DEFAULT_DRAW_STROKE_WIDTH);
   const [drawColor, setDrawColor] = useState(DEFAULT_DRAW_COLOR);
@@ -678,15 +724,28 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     strokeWidth: number;
     points: ApiBoardDrawingPoint[];
   } | null>(null);
+  const pendingTouchDrawRef = useRef<{
+    pointerId: number;
+    startClientX: number;
+    startClientY: number;
+    startPoint: ApiBoardDrawingPoint;
+  } | null>(null);
   const boardColorOptions = useMemo(
     () =>
       collectUniqueHexColors([
         ...nodes.map((node) => node.data.color),
+        ...edges.map((edge) => {
+          const edgeData = (edge as unknown as { data?: { color?: unknown } }).data;
+          return typeof edgeData?.color === 'string' ? edgeData.color : null;
+        }),
         ...drawings.map((drawing) => drawing.color),
         ...pendingDrawings.map((drawing) => drawing.color),
       ]),
-    [drawings, nodes, pendingDrawings]
+    [drawings, edges, nodes, pendingDrawings]
   );
+  useEffect(() => {
+    onBoardColorOptionsChange?.(boardColorOptions);
+  }, [boardColorOptions, onBoardColorOptionsChange]);
   const nextDrawingSortOrder = useMemo(
     () =>
       Math.max(
@@ -714,6 +773,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
   const [draftSaving, setDraftSaving] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [cardCloseConfirmOpen, setCardCloseConfirmOpen] = useState(false);
+  const [tagsInputValue, setTagsInputValue] = useState('');
   const hasUnsavedCardSettingsChanges = useMemo(() => {
     if (!flowCardSettingsOpen || !flowCardSettings || !flowCardSettingsDraft || !activeNodeId) return false;
     if (String(activeNodeId).startsWith('draft-')) return true;
@@ -723,6 +783,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       flowCardSettings.isLocked !== flowCardSettingsDraft.isLocked ||
       (flowCardSettings.imageSrc ?? null) !== (flowCardSettingsDraft.imageSrc ?? null) ||
       normalizeHexColor(flowCardSettings.color) !== normalizeHexColor(flowCardSettingsDraft.color) ||
+      !areCardTagsEqual(normalizeCardTagsClient(flowCardSettings.tags), normalizeCardTagsClient(flowCardSettingsDraft.tags)) ||
       Boolean(pendingImageFile) ||
       Boolean(cropSourceFile)
     );
@@ -1096,7 +1157,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
   );
 
   const persistLinkCreate = useCallback(
-    async (fromId: string, toId: string, style: ApiLinkStyle = DEFAULT_LINK_STYLE, color: string = DEFAULT_LINK_COLOR) => {
+    async (fromId: string, toId: string, style: ApiLinkStyle = DEFAULT_LINK_STYLE, color?: string | null) => {
       if (!canEditCards) return null;
       if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return null;
       if (!hasToken) return null;
@@ -1105,19 +1166,21 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       if (String(fromId).startsWith('draft-') || String(toId).startsWith('draft-')) return null;
 
       try {
+        const sourceNode = nodes.find((node) => String(node.id) === String(fromId));
+        const resolvedColor = normalizeHexColor(color) ?? normalizeHexColor(sourceNode?.data?.color) ?? DEFAULT_LINK_COLOR;
         const res = await axiosInstance.post<ApiCardLink>(`/api/boards/${numericBoardId}/links`, {
           from_card_id: Number(fromId),
           to_card_id: Number(toId),
           style,
-          color,
+          color: resolvedColor,
         });
         return res.data ?? null;
       } catch {
-        reportError('Не удалось создать связь.');
+        reportError(isEn ? 'Failed to create link.' : 'Не удалось создать связь.');
         return null;
       }
     },
-    [canEditCards, hasToken, numericBoardId, reportError]
+    [canEditCards, hasToken, nodes, numericBoardId, reportError]
   );
 
   useEffect(() => {
@@ -1241,7 +1304,10 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
   }, [hasToken, numericBoardId, reloadDrawingsSeq]);
 
   const applyPreviewToNode = useCallback(
-    (nodeId: string, patch: Partial<{ type: FlowNodeType; title: string; isLocked: boolean; imageSrc: string | null; color: string | null }>) => {
+    (
+      nodeId: string,
+      patch: Partial<{ type: FlowNodeType; title: string; isLocked: boolean; imageSrc: string | null; color: string | null; tags: string[] }>
+    ) => {
       setNodes((prev) =>
         prev.map((n) => {
           if (String(n.id) !== String(nodeId)) return n;
@@ -1266,6 +1332,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
           }
           const nextImageLoaded = imageChanged ? !nextImageSrc : Boolean(n.data.imageLoaded);
           const nextColor = patch.color !== undefined ? patch.color : n.data.color;
+          const nextTags = patch.tags !== undefined ? normalizeCardTagsClient(patch.tags) : n.data.tags;
 
           return {
             ...n,
@@ -1280,6 +1347,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
               imageSrc: nextImageSrc,
               imageLoaded: nextImageLoaded,
               color: nextColor,
+              tags: nextTags,
             }
           };
         })
@@ -1339,6 +1407,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         isLocked: Boolean(node.data.isLocked),
         imageSrc: node.data.imageSrc,
         color: node.data.color,
+        tags: normalizeCardTagsClient(node.data.tags),
       });
     },
     [canEditCards, clearPendingImage, openFlowCardSettingsFromNode]
@@ -1543,9 +1612,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       id,
       type: startType,
       className: getNodeWrapperClassName(id, false),
-      dragHandle: `.${classes.node_rectangle}`,
+      dragHandle: `.${classes.flow_drag_handle}`,
       position,
-      data: { title: startTitle, imageSrc: null, color: null, isLocked: false },
+      data: { title: startTitle, imageSrc: null, color: null, isLocked: false, tags: [] },
       draggable: canEditCards,
       selectable: true
     };
@@ -1673,6 +1742,11 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     applyPreviewToNode(activeNodeId, { isLocked: next });
   };
 
+  const setDraftTagsLive = (nextValue: string) => {
+    setTagsInputValue(nextValue);
+    setFlowCardSettingsDraft({ tags: normalizeCardTagsClient(nextValue) });
+  };
+
   const openDetailsFromPanel = () => {
     if (!activeCardId) return;
     if (!Number.isFinite(numericBoardId) || numericBoardId <= 0) return;
@@ -1737,7 +1811,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       syncSavedVisualsToActiveSettings({ imageSrc: nextImageSrc ?? null, color: nextColor });
       applyPreviewToNode(nodeId, { imageSrc: nextImageSrc ?? null, color: nextColor });
     } catch (e) {
-      reportError('Не удалось сохранить изображение карточки.', e);
+      reportError(isEn ? 'Failed to save card image.' : 'Не удалось сохранить изображение карточки.', e);
     } finally {
       setImageUploading(false);
     }
@@ -1747,7 +1821,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     if (!activeNodeId) return;
     if (!file) return;
     if (file.size > MAX_CARD_IMAGE_SIZE_BYTES) {
-      showTopAlarm(`Вес слишком большой, выберите изображение весом до ${MAX_CARD_IMAGE_SIZE_MB} МБ.`);
+      showTopAlarm(isEn ? `File is too large, choose an image up to ${MAX_CARD_IMAGE_SIZE_MB} MB.` : `Вес слишком большой, выберите изображение весом до ${MAX_CARD_IMAGE_SIZE_MB} МБ.`);
       return;
     }
     setCropSourceFile(file);
@@ -1840,7 +1914,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       closeColorPalette();
     } catch (e) {
       restoreDraftPreview();
-      reportError('Не удалось сохранить цвет карточки.', e);
+      reportError(isEn ? 'Failed to save card color.' : 'Не удалось сохранить цвет карточки.', e);
     } finally {
       setDraftSaving(false);
     }
@@ -1879,10 +1953,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [cancelColorPalette, colorPaletteOpen]);
-
-  const pickerColorValue = palettePickerColorValue;
-  const setDraftColorLive = setPaletteColorLive;
-  const isDisplayColorFavorite = isPaletteColorFavorite;
 
   const closeDrawPalette = useCallback(() => {
     setDrawPaletteOpen(false);
@@ -2002,7 +2072,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       pushDrawingHistoryEntry({ kind: 'update', before: beforeSnapshots, after: afterSnapshots });
     } catch (error) {
       applyDrawingSnapshotsLocally(beforeSnapshots);
-      reportError('Не удалось изменить цвет фигуры.', error);
+      reportError(isEn ? 'Failed to change shape color.' : 'Не удалось изменить цвет фигуры.', error);
     } finally {
       setDrawingMutationBusy(false);
     }
@@ -2162,7 +2232,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         applyDrawingSnapshotsLocally(entry.after);
       }
       setUndoStack((prev) => [...prev, entry]);
-      reportError('Не удалось откатить штрих.', error);
+      reportError(isEn ? 'Failed to undo stroke.' : 'Не удалось откатить штрих.', error);
     } finally {
       setHistoryBusy(false);
     }
@@ -2232,7 +2302,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         applyDrawingSnapshotsLocally(entry.before);
       }
       setRedoStack((prev) => [...prev, entry]);
-      reportError('Не удалось вернуть штрих.', error);
+      reportError(isEn ? 'Failed to redo stroke.' : 'Не удалось вернуть штрих.', error);
     } finally {
       setHistoryBusy(false);
     }
@@ -2342,6 +2412,30 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     });
   }, [authUserId, nextDrawingSortOrder, numericBoardId]);
 
+  const startActiveDrawingSession = useCallback(
+    (pointerId: number, firstPoint: ApiBoardDrawingPoint, secondPoint?: ApiBoardDrawingPoint) => {
+      const color = normalizeHexColor(drawColor) ?? DEFAULT_DRAW_COLOR;
+      const strokeWidth = clampDrawingStrokeWidth(drawStrokeWidth);
+      const session = {
+        pointerId,
+        clientDrawId: makeClientDrawId(),
+        color,
+        strokeWidth,
+        points: secondPoint ? [firstPoint, secondPoint] : [firstPoint, firstPoint],
+      };
+
+      activeDrawingSessionRef.current = session;
+      syncActiveDrawingPreview(session);
+
+      try {
+        drawingsCanvasRef.current?.setPointerCapture(pointerId);
+      } catch {
+        // ignore
+      }
+    },
+    [drawColor, drawStrokeWidth, syncActiveDrawingPreview]
+  );
+
   const finalizeActiveDrawing = useCallback(async () => {
     const session = activeDrawingSessionRef.current;
     if (!session) return;
@@ -2404,7 +2498,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       });
     } catch (error) {
       setPendingDrawings((prev) => prev.filter((drawing) => drawing.client_draw_id !== pendingDrawing.client_draw_id));
-      reportError('Не удалось сохранить штрих.', error);
+      reportError(isEn ? 'Failed to save stroke.' : 'Не удалось сохранить штрих.', error);
     }
   }, [authUserId, nextDrawingSortOrder, numericBoardId, persistBoardDrawingCreate, pushDrawingHistoryEntry, reportError, upsertDrawingFromSocket]);
 
@@ -2460,7 +2554,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     (event: React.PointerEvent<HTMLCanvasElement>) => {
       if (!isDrawMode || !canEditCards) return;
       if (!reactFlow) return;
-      if (!event.isPrimary) return;
       if (event.pointerType === 'mouse' && (event.button === 1 || event.button === 2)) {
         drawCanvasPanRef.current = {
           pointerId: event.pointerId,
@@ -2477,11 +2570,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         event.stopPropagation();
         return;
       }
+      if (event.pointerType !== 'touch' && !event.isPrimary) return;
       if (event.button !== 0) return;
 
       if (event.pointerType === 'touch') {
         drawingTouchPointsRef.current.set(event.pointerId, { clientX: event.clientX, clientY: event.clientY });
         if (drawingTouchPointsRef.current.size >= 2) {
+          pendingTouchDrawRef.current = null;
           const activeSession = activeDrawingSessionRef.current;
           if (activeSession) {
             try {
@@ -2496,29 +2591,35 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
           event.stopPropagation();
           return;
         }
+        if (!event.isPrimary) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        const startPoint = getProjectedPointFromClient(event.clientX, event.clientY);
+        if (!startPoint) return;
         drawingTouchModeRef.current = 'draw';
+        pendingTouchDrawRef.current = {
+          pointerId: event.pointerId,
+          startClientX: event.clientX,
+          startClientY: event.clientY,
+          startPoint,
+        };
+        event.preventDefault();
+        event.stopPropagation();
+        return;
       }
 
       const point = getProjectedPointFromClient(event.clientX, event.clientY);
       if (!point) return;
 
-      const color = normalizeHexColor(drawColor) ?? DEFAULT_DRAW_COLOR;
-      const strokeWidth = clampDrawingStrokeWidth(drawStrokeWidth);
-
-      activeDrawingSessionRef.current = {
-        pointerId: event.pointerId,
-        clientDrawId: makeClientDrawId(),
-        color,
-        strokeWidth,
-        points: [point, point],
-      };
-
-      syncActiveDrawingPreview(activeDrawingSessionRef.current);
-      drawingsCanvasRef.current?.setPointerCapture(event.pointerId);
+      pendingTouchDrawRef.current = null;
+      startActiveDrawingSession(event.pointerId, point);
       event.preventDefault();
       event.stopPropagation();
     },
-    [canEditCards, drawColor, drawStrokeWidth, finalizeActiveDrawing, getCurrentViewport, getProjectedPointFromClient, isDrawMode, reactFlow, restartDrawingPinchSession, syncActiveDrawingPreview]
+    [canEditCards, finalizeActiveDrawing, getCurrentViewport, getProjectedPointFromClient, isDrawMode, reactFlow, restartDrawingPinchSession, startActiveDrawingSession]
   );
 
   const handleDrawPointerMove = useCallback(
@@ -2560,6 +2661,25 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         return;
       }
 
+      const pendingTouchDraw = pendingTouchDrawRef.current;
+      if (event.pointerType === 'touch' && pendingTouchDraw && pendingTouchDraw.pointerId === event.pointerId) {
+        const movedEnough =
+          Math.hypot(event.clientX - pendingTouchDraw.startClientX, event.clientY - pendingTouchDraw.startClientY) >= TOUCH_DRAW_START_THRESHOLD_PX;
+        if (!movedEnough) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
+        const point = getProjectedPointFromClient(event.clientX, event.clientY);
+        if (!point) return;
+        pendingTouchDrawRef.current = null;
+        startActiveDrawingSession(event.pointerId, pendingTouchDraw.startPoint, point);
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      };
+
       const session = activeDrawingSessionRef.current;
       if (!session || session.pointerId !== event.pointerId) return;
 
@@ -2577,7 +2697,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       event.preventDefault();
       event.stopPropagation();
     },
-    [applyFlowViewport, getProjectedPointFromClient, setFlowViewportFromWorldAnchor, syncActiveDrawingPreview]
+    [applyFlowViewport, getProjectedPointFromClient, setFlowViewportFromWorldAnchor, startActiveDrawingSession, syncActiveDrawingPreview]
   );
 
   const handleDrawPointerUp = useCallback(
@@ -2598,6 +2718,15 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         drawingTouchPointsRef.current.delete(event.pointerId);
         if (drawingTouchModeRef.current === 'pinch') {
           restartDrawingPinchSession();
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        const pendingTouchDraw = pendingTouchDrawRef.current;
+        if (pendingTouchDraw && pendingTouchDraw.pointerId === event.pointerId) {
+          pendingTouchDrawRef.current = null;
+          drawingTouchModeRef.current = drawingTouchPointsRef.current.size ? 'draw' : 'idle';
+          drawingPinchRef.current = null;
           event.preventDefault();
           event.stopPropagation();
           return;
@@ -2638,6 +2767,15 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         drawingTouchPointsRef.current.delete(event.pointerId);
         if (drawingTouchModeRef.current === 'pinch') {
           restartDrawingPinchSession();
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        const pendingTouchDraw = pendingTouchDrawRef.current;
+        if (pendingTouchDraw && pendingTouchDraw.pointerId === event.pointerId) {
+          pendingTouchDrawRef.current = null;
+          drawingTouchModeRef.current = drawingTouchPointsRef.current.size ? 'draw' : 'idle';
+          drawingPinchRef.current = null;
           event.preventDefault();
           event.stopPropagation();
           return;
@@ -3105,7 +3243,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         pushDrawingHistoryEntry({ kind: 'update', before: baseSnapshots, after: savedSnapshots });
       } catch (error) {
         applyDrawingSnapshotsLocally(baseSnapshots);
-        reportError('Не удалось переместить фигуру.', error);
+        reportError(isEn ? 'Failed to move shape.' : 'Не удалось переместить фигуру.', error);
       } finally {
         setDrawingMutationBusy(false);
       }
@@ -3130,7 +3268,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     } catch (error) {
       applyDrawingSnapshotsLocally(snapshots);
       replaceDrawingSelection(drawingIds);
-      reportError('Не удалось удалить фигуру.', error);
+      reportError(isEn ? 'Failed to delete shape.' : 'Не удалось удалить фигуру.', error);
     } finally {
       setDrawingMutationBusy(false);
     }
@@ -3165,7 +3303,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       pushDrawingHistoryEntry({ kind: 'update', before: beforeSnapshots, after: savedSnapshots });
     } catch (error) {
       applyDrawingSnapshotsLocally(beforeSnapshots);
-      reportError('Не удалось сгруппировать фигуры.', error);
+      reportError(isEn ? 'Failed to group shapes.' : 'Не удалось сгруппировать фигуры.', error);
     } finally {
       setDrawingMutationBusy(false);
     }
@@ -3197,7 +3335,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       pushDrawingHistoryEntry({ kind: 'update', before: beforeSnapshots, after: savedSnapshots });
     } catch (error) {
       applyDrawingSnapshotsLocally(beforeSnapshots);
-      reportError('Не удалось разгруппировать фигуры.', error);
+      reportError(isEn ? 'Failed to ungroup shapes.' : 'Не удалось разгруппировать фигуры.', error);
     } finally {
       setDrawingMutationBusy(false);
     }
@@ -3256,7 +3394,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         pushDrawingHistoryEntry({ kind: 'update', before: beforeSnapshots, after: afterSnapshots });
       } catch (error) {
         applyDrawingSnapshotsLocally(beforeSnapshots);
-        reportError(direction === 'up' ? 'Не удалось поднять фигуру выше.' : 'Не удалось опустить фигуру ниже.', error);
+        reportError(direction === 'up'
+          ? (isEn ? 'Failed to move shape higher.' : 'Не удалось поднять фигуру выше.')
+          : (isEn ? 'Failed to move shape lower.' : 'Не удалось опустить фигуру ниже.'), error);
       } finally {
         setDrawingMutationBusy(false);
       }
@@ -3475,7 +3615,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       setDeleteConfirmOpen(false);
       closeFlowCardSettings();
     } catch (e) {
-      reportError('Не удалось удалить карточку.', e);
+      reportError(isEn ? 'Failed to delete card.' : 'Не удалось удалить карточку.', e);
     }
   };
 
@@ -3491,6 +3631,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
     if (!node) return;
 
     const title = String(flowCardSettingsDraft.title || '').trim();
+    const nextTags = normalizeCardTagsClient(flowCardSettingsDraft.tags);
     if (!title) return;
 
     const typeForDb = flowCardSettingsDraft.type === 'rhombus' ? 'diamond' : flowCardSettingsDraft.type;
@@ -3507,6 +3648,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
           type: typeForDb,
           title,
           color: flowCardSettingsDraft.color,
+          tags: nextTags,
           x: node.position.x,
           y: node.position.y
         });
@@ -3520,7 +3662,8 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
           prev.map((n) => (String(n.id) === String(nodeId) ? { ...n, id: createdId } : n))
         );
       } else {
-        const patch = {} as Partial<{ title: string; type: string; is_locked: boolean; x: number; y: number; color: string | null }>;
+        const patch = {} as Partial<{ title: string; type: string; is_locked: boolean; x: number; y: number; color: string | null; tags: string[] }>;
+        const currentTags = normalizeCardTagsClient(flowCardSettings.tags);
         if (flowCardSettings.title !== title) patch.title = title;
         if (flowCardSettings.type !== flowCardSettingsDraft.type) {
           patch.type = typeForDb;
@@ -3529,6 +3672,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         }
         if (flowCardSettings.isLocked !== flowCardSettingsDraft.isLocked) patch.is_locked = Boolean(flowCardSettingsDraft.isLocked);
         if ((flowCardSettings.color ?? null) !== (flowCardSettingsDraft.color ?? null)) patch.color = flowCardSettingsDraft.color ?? null;
+        if (!areCardTagsEqual(currentTags, nextTags)) patch.tags = nextTags;
 
         if (Object.keys(patch).length) {
           suppressSocketReloadByCardIdRef.current.set(String(serverNodeId), Date.now() + 1500);
@@ -3574,6 +3718,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         isLocked: flowCardSettingsDraft.isLocked,
         imageSrc: nextImageSrc ?? null,
         color: nextColor,
+        tags: nextTags,
       });
 
       clearPendingImage();
@@ -3581,7 +3726,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
       closeFlowCardSettings();
     } catch (e) {
-      reportError('Не удалось сохранить изменения карточки.', e);
+      reportError(isEn ? 'Failed to save card changes.' : 'Не удалось сохранить изменения карточки.', e);
     } finally {
       setImageUploading(false);
       setDraftSaving(false);
@@ -3787,7 +3932,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                 return;
               }
               if (!source || !target) return;
-              const link = await persistLinkCreate(source, target, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR);
+              const link = await persistLinkCreate(source, target);
               if (!link) return;
               addEdgeFromLink(link);
             }}
@@ -3796,7 +3941,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
               const target = params?.target ? String(params.target) : '';
               if (!source || !target) return;
               createdViaOnConnectRef.current = true;
-              const link = await persistLinkCreate(source, target, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR);
+              const link = await persistLinkCreate(source, target);
               if (!link) return;
               addEdgeFromLink(link);
             }}
@@ -3918,7 +4063,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
               void handleNodeClickInLinkMode<ApiCardLink>(clickedId, {
                 setSelectedNodeOnly,
-                persistLinkCreate: (fromId, toId) => persistLinkCreate(fromId, toId, DEFAULT_LINK_STYLE, DEFAULT_LINK_COLOR),
+                persistLinkCreate: (fromId, toId) => persistLinkCreate(fromId, toId),
                 onLinkCreated: (link) => addEdgeFromLink(link),
               });
 
@@ -4021,7 +4166,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
           }}
         >
           <button type="button" className={classes.context_menu_item} onClick={createDraftNode}>
-            Создать запись
+            {isEn ? 'Create card' : 'Создать карточку'}
           </button>
         </div>
       )}
@@ -4034,7 +4179,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
         }}
       >
         <div className={classes.create_panel_header}>
-          <div className={classes.create_panel_title}>Настройте вид записи:</div>
+            <div className={classes.create_panel_title}>{isEn ? 'Set up the card:' : 'Настройте карточку:'}</div>
           <div className={classes.create_panel_actions}>
             <Mainbtn
               variant="mini"
@@ -4150,26 +4295,53 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
 
           <div className={classes.create_panel_form}>
             <div className={classes.form_field}>
-              <div className={classes.form_label}>{'Название'}</div>
+              <div className={classes.form_label}>{isEn ? 'Title' : 'Название'}</div>
               <input
                 className={classes.create_panel_input}
                 ref={titleInputRef}
                 value={displayTitle}
                 onChange={e => setDraftTitleLive(e.target.value)}
-                placeholder={visualEditing ? 'Название' : 'Выберите запись'}
+                placeholder={visualEditing ? (isEn ? 'Title' : 'Название') : (isEn ? 'Select a card' : 'Выберите карточку')}
                 maxLength={50}
                 disabled={!isEditing}
               />
             </div>
 
             <div className={classes.form_field}>
-              <div className={classes.form_label}>{'Изображение'}</div>
+              <div className={classes.form_label}>{isEn ? 'Tags' : 'Теги'}</div>
+              <input
+                className={classes.create_panel_input}
+                ref={tagsInputRef}
+                value={tagsInputValue}
+                onChange={e => setDraftTagsLive(e.target.value)}
+                placeholder={visualEditing ? (isEn ? 'Comma separated' : 'Через запятую') : (isEn ? 'Select a card' : 'Выберите карточку')}
+                maxLength={320}
+                disabled={!isEditing}
+              />
+              <div className={classes.form_hint}>
+                {isEn
+                  ? `Up to ${MAX_CARD_TAGS} tags, ${MAX_CARD_TAG_LENGTH} characters each.`
+                  : `До ${MAX_CARD_TAGS} тегов, каждый до ${MAX_CARD_TAG_LENGTH} символов.`}
+              </div>
+              {displayTags.length ? (
+                <div className={classes.tag_preview_row}>
+                  {displayTags.map((tag) => (
+                    <span key={tag} className={classes.tag_preview_chip}>
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            <div className={classes.form_field}>
+              <div className={classes.form_label}>{isEn ? 'Image' : 'Изображение'}</div>
               <div className={classes.form_row}>
                 <Mainbtn
                   variant="mini"
                   kind="button"
                   type="button"
-                  text={'Выбрать'}
+                  text={isEn ? 'Choose' : 'Выбрать'}
                   onClick={() => imageInputRef.current?.click()}
                   disabled={!isEditing || draftSaving || imageUploading}
                 />
@@ -4193,123 +4365,6 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                   disabled={!isEditing || draftSaving || imageUploading}
                   className={`${classes.icon_btn} ${classes.icon_btn_trash} ${displayColor ? classes.icon_btn_active : ''}`.trim()}
                 />
-                {false ? (
-                <DropdownWrapper upDel closeOnClick={false} isOpen={colorPaletteOpen} onClose={() => setColorPaletteOpen(false)}>
-                {[
-                  <Mainbtn
-                    key="trigger"
-                    variant="mini"
-                    kind="button"
-                    type="button"
-                    text={
-                      <span className={classes.color_palette_trigger_inner}>
-                        <ColorIcon />
-                        <span
-                          className={`${classes.color_palette_trigger_swatch} ${displayColor ? '' : classes.color_palette_trigger_swatch_default}`.trim()}
-                          style={displayColor ? { backgroundColor: displayColor } : undefined}
-                        />
-                      </span>
-                    }
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (!isEditing || draftSaving || imageUploading) return;
-                      if (!colorPaletteOpen) {
-                        void ensureFavoriteColorsLoaded();
-                      }
-                      setColorPaletteOpen((prev) => !prev);
-                    }}
-                    disabled={!isEditing || draftSaving || imageUploading}
-                    className={`${classes.icon_btn} ${displayColor ? classes.icon_btn_active : ''} ${classes.icon_btn_palette}`.trim()}
-                  />,
-                  <div key="menu">
-                    <div data-dropdown-class={classes.color_palette_menu_item}>
-                      <div className={classes.color_palette_panel}>
-                        <div className={classes.color_palette_picker}>
-                          <HexColorPicker color={pickerColorValue} onChange={setDraftColorLive} />
-                        </div>
-
-                        <div className={classes.color_palette_current}>
-                          <div className={classes.color_palette_current_label}>Текущий цвет</div>
-                          <div className={classes.color_palette_current_value_row}>
-                            <span
-                              className={`${classes.color_palette_current_swatch} ${displayColor ? '' : classes.color_palette_current_swatch_default}`.trim()}
-                              style={displayColor ? { backgroundColor: displayColor } : undefined}
-                            />
-                            <span className={classes.color_palette_current_value}>{displayColor ?? 'Стандартный'}</span>
-                          </div>
-                          <button
-                            type="button"
-                            className={classes.color_palette_favorite_btn}
-                            onClick={() => void toggleCurrentColorFavorite()}
-                            disabled={!displayColor || favoritesLoading}
-                          >
-                            {isDisplayColorFavorite ? 'Убрать из избранного' : 'В избранное'}
-                          </button>
-                        </div>
-
-                        <div className={classes.color_palette_section}>
-                          <div className={classes.color_palette_section_title}>Базовые цвета</div>
-                          <div className={classes.color_palette_swatch_grid}>
-                            {PRESET_CARD_COLORS.map((color) => (
-                              <button
-                                key={color}
-                                type="button"
-                                className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
-                                style={{ backgroundColor: color }}
-                                onClick={() => setDraftColorLive(color)}
-                                aria-label={`Выбрать цвет ${color}`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-
-                        <div className={classes.color_palette_section}>
-                          <div className={classes.color_palette_section_title}>Цвета на доске</div>
-                          {boardColorOptions.length ? (
-                            <div className={classes.color_palette_swatch_grid}>
-                              {boardColorOptions.map((color) => (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
-                                  style={{ backgroundColor: color }}
-                                  onClick={() => setDraftColorLive(color)}
-                                  aria-label={`Выбрать цвет ${color}`}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className={classes.color_palette_empty}>Пока нет цветных нодов.</div>
-                          )}
-                        </div>
-
-                        <div className={classes.color_palette_section}>
-                          <div className={classes.color_palette_section_title}>Избранные цвета</div>
-                          {favoriteColors.length ? (
-                            <div className={classes.color_palette_swatch_grid}>
-                              {favoriteColors.map((color) => (
-                                <button
-                                  key={color}
-                                  type="button"
-                                  className={`${classes.color_palette_swatch_btn} ${displayColor === color ? classes.color_palette_swatch_btn_active : ''}`.trim()}
-                                  style={{ backgroundColor: color }}
-                                  onClick={() => setDraftColorLive(color)}
-                                  aria-label={`Выбрать цвет ${color}`}
-                                />
-                              ))}
-                            </div>
-                          ) : (
-                            <div className={classes.color_palette_empty}>
-                              {favoritesLoading ? 'Загрузка...' : 'Избранных цветов пока нет.'}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>,
-                ]}
-                </DropdownWrapper>
-                ) : null}
                 <Mainbtn
                   variant="mini"
                   kind="button"
@@ -4351,9 +4406,9 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                     className={classes.danger_action_trigger}
                     onClick={() => setDeleteConfirmOpen((prev) => !prev)}
                     disabled={!isEditing || draftSaving || imageUploading}
-                    aria-label={'Удалить запись'}
+                    aria-label={isEn ? 'Delete card' : 'Удалить карточку'}
                   >
-                    {'Удалить'}
+                    {isEn ? 'Delete' : 'Удалить'}
                   </button>,
                   <div key="menu">
                     <button
@@ -4362,7 +4417,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                       onClick={() => void deleteActive()}
                       disabled={!isEditing || draftSaving || imageUploading}
                     >
-                      Да, удалить
+                      {isEn ? 'Yes, delete' : 'Да, удалить'}
                     </button>
                     <button
                       type="button"
@@ -4370,7 +4425,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                       onClick={() => setDeleteConfirmOpen(false)}
                       disabled={!isEditing || draftSaving || imageUploading}
                     >
-                      Отмена
+                      {isEn ? 'Cancel' : 'Отмена'}
                     </button>
                   </div>,
                 ]}
@@ -4383,7 +4438,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                 variant="mini"
                 kind="button"
                 type="button"
-                text="Сохранить"
+                text={isEn ? 'Save' : 'Сохранить'}
                 onClick={() => {
                   if (!isEditing || draftSaving || imageUploading) return;
                   if (!displayTitle.trim()) {
@@ -4399,7 +4454,7 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
                 variant="mini"
                 kind="button"
                 type="button"
-                text="Отмена"
+                text={isEn ? 'Cancel' : 'Отмена'}
                 onClick={cancelCardSettings}
                 disabled={!isEditing || draftSaving}
               />
@@ -4422,13 +4477,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       />
       {colorPaletteOpen && isEditing ? (
         <FlowColorPaletteModal
-          title="Цвет записи"
-          ariaLabel="Выбор цвета записи"
+          title={isEn ? 'Card color' : 'Цвет карточки'}
+          ariaLabel={isEn ? 'Choose card color' : 'Выбор цвета карточки'}
           currentColor={paletteDisplayColor}
           pickerColorValue={palettePickerColorValue}
           presetColors={PRESET_CARD_COLORS}
           boardColorOptions={boardColorOptions}
-          boardColorsEmptyLabel="Пока нет цветных нодов."
+          boardColorsEmptyLabel={isEn ? 'No colored cards yet.' : 'Пока нет цветных карточек.'}
           favoriteColors={favoriteColors}
           favoritesLoading={favoritesLoading}
           isCurrentColorFavorite={isPaletteColorFavorite}
@@ -4447,13 +4502,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       ) : null}
       {drawPaletteOpen && isDrawMode ? (
         <FlowColorPaletteModal
-          title="Цвет кисти"
-          ariaLabel="Выбор цвета кисти"
+          title={isEn ? 'Brush color' : 'Цвет кисти'}
+          ariaLabel={isEn ? 'Choose brush color' : 'Выбор цвета кисти'}
           currentColor={drawPaletteDisplayColor}
           pickerColorValue={drawPalettePickerColorValue}
           presetColors={PRESET_CARD_COLORS}
           boardColorOptions={boardColorOptions}
-          boardColorsEmptyLabel="Пока на доске нет цветных элементов."
+          boardColorsEmptyLabel={isEn ? 'No colored elements on the board yet.' : 'Пока на доске нет цветных элементов.'}
           favoriteColors={favoriteColors}
           favoritesLoading={favoritesLoading}
           isCurrentColorFavorite={isDrawPaletteColorFavorite}
@@ -4468,13 +4523,13 @@ const FlowBoard = React.forwardRef<FlowBoardHandle, FlowBoardProps>(({
       ) : null}
       {selectedDrawingPaletteOpen && selectedDrawings.length ? (
         <FlowColorPaletteModal
-          title="Цвет фигуры"
-          ariaLabel="Выбор цвета фигуры"
+          title={isEn ? 'Shape color' : 'Цвет фигуры'}
+          ariaLabel={isEn ? 'Choose shape color' : 'Выбор цвета фигуры'}
           currentColor={selectedDrawingPaletteDisplayColor}
           pickerColorValue={selectedDrawingPalettePickerColorValue}
           presetColors={PRESET_CARD_COLORS}
           boardColorOptions={boardColorOptions}
-          boardColorsEmptyLabel="Пока на доске нет цветных элементов."
+          boardColorsEmptyLabel={isEn ? 'No colored elements on the board yet.' : 'Пока на доске нет цветных элементов.'}
           favoriteColors={favoriteColors}
           favoritesLoading={favoritesLoading}
           isCurrentColorFavorite={isSelectedDrawingPaletteColorFavorite}

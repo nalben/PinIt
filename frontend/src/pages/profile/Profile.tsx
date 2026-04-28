@@ -12,6 +12,7 @@ import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
 import AuthOnly from '@/components/__general/authonly/Authonly';
 import Edit from '@/assets/icons/monochrome/edit.svg';
 import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
+import ImageWithFallback from '@/components/_UI/imagewithfallback/ImageWithFallback';
 import { useAuthStore } from '@/store/authStore';
 import { useUIStore } from '@/store/uiStore';
 import { useNotificationsStore } from '@/store/notificationsStore';
@@ -176,7 +177,7 @@ const Profile = () => {
   return (
     <div className={`${classes.profile} ${profilePlatformClass}`.trim()}>
       <div className={`${classes.avatar_con} ${profile.username === 'phenomenon' ? classes.heart : ''}`}>
-        {avatarSrc ? <img src={avatarSrc} alt="avatar" /> : <Default />}
+        <ImageWithFallback src={avatarSrc} alt="avatar" fallback={<Default />} />
       </div>
 
       <div className={classes.profile_username}>
@@ -209,9 +210,9 @@ const Profile = () => {
                   <div className={classes.avatar_upload}>
                     <label htmlFor="avatar" className={`${classes.upload_label} ${uploadLabelHoverClass}`.trim()}>
                       {avatarPreview ? (
-                        <img src={avatarPreview} alt="avatar preview" />
+                        <ImageWithFallback src={avatarPreview} alt="avatar preview" fallback={<Default />} />
                       ) : profile.avatar ? (
-                        <img src={resolveProfileAvatarPath(profile.avatar) ?? ''} alt="avatar" />
+                        <ImageWithFallback src={resolveProfileAvatarPath(profile.avatar)} alt="avatar" fallback={<Default />} />
                       ) : (
                         <Default />
                       )}

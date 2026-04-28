@@ -4,6 +4,7 @@ import BackIcon from '@/assets/icons/monochrome/back.svg';
 import ColorIcon from '@/assets/icons/monochrome/color.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
 import classes from './FlowBoard.module.scss';
+import { useLanguageStore } from '@/store/languageStore';
 
 type BaseToolbarProps = {
   toolbarRef: React.RefObject<HTMLDivElement | null>;
@@ -103,7 +104,9 @@ const ColorTriggerButton: React.FC<{
   </button>
 );
 
-const getSelectedCountLabel = (count: number) => {
+const getSelectedCountLabel = (count: number, isEn: boolean) => {
+  if (isEn) return count === 1 ? 'shape' : 'shapes';
+
   const mod10 = count % 10;
   const mod100 = count % 100;
   if (mod10 === 1 && mod100 !== 11) return 'линия';
@@ -112,7 +115,9 @@ const getSelectedCountLabel = (count: number) => {
 };
 
 export const FlowDrawingToolbar: React.FC<FlowDrawingToolbarProps> = (props) => {
-  const chipLabel = props.mode === 'draw' ? 'Рисование' : `${props.selectedCount} ${getSelectedCountLabel(props.selectedCount)}`;
+  const language = useLanguageStore((state) => state.language);
+  const isEn = language === 'en';
+  const chipLabel = props.mode === 'draw' ? (isEn ? 'Drawing' : 'Рисование') : `${props.selectedCount} ${getSelectedCountLabel(props.selectedCount, isEn)}`;
   const selectionPaletteClassName =
     props.mode === 'selection' && props.selectedCount === 1 ? classes.draw_dock_actions_selection_palette_wide : '';
 
@@ -123,10 +128,10 @@ export const FlowDrawingToolbar: React.FC<FlowDrawingToolbarProps> = (props) => 
       </div>
 
       <div className={`${classes.draw_dock_section} ${classes.draw_dock_history}`.trim()}>
-        <ToolbarIconButton ariaLabel={props.mode === 'draw' ? 'Откатить штрих' : 'Откатить действие рисования'} disabled={!props.canUndo} onClick={props.onUndo}>
+        <ToolbarIconButton ariaLabel={props.mode === 'draw' ? (isEn ? 'Undo stroke' : 'Откатить штрих') : (isEn ? 'Undo action' : 'Откатить действие')} disabled={!props.canUndo} onClick={props.onUndo}>
           <BackIcon />
         </ToolbarIconButton>
-        <ToolbarIconButton ariaLabel={props.mode === 'draw' ? 'Вернуть штрих' : 'Вернуть действие рисования'} disabled={!props.canRedo} onClick={props.onRedo}>
+        <ToolbarIconButton ariaLabel={props.mode === 'draw' ? (isEn ? 'Redo stroke' : 'Вернуть штрих') : (isEn ? 'Redo action' : 'Вернуть действие')} disabled={!props.canRedo} onClick={props.onRedo}>
           <span className={classes.draw_toolbar_icon_btn_flip}>
             <BackIcon />
           </span>
@@ -136,7 +141,7 @@ export const FlowDrawingToolbar: React.FC<FlowDrawingToolbarProps> = (props) => 
       {props.mode === 'draw' ? (
         <>
           <label className={`${classes.draw_dock_section} ${classes.draw_dock_slider}`.trim()}>
-            <span className={classes.draw_dock_slider_title}>Кисть</span>
+            <span className={classes.draw_dock_slider_title}>{isEn ? 'Brush' : 'Кисть'}</span>
             <div className={classes.draw_dock_slider_row}>
               <input
                 type="range"
@@ -152,25 +157,25 @@ export const FlowDrawingToolbar: React.FC<FlowDrawingToolbarProps> = (props) => 
 
           <div className={`${classes.draw_dock_section} ${classes.draw_dock_actions} ${classes.draw_dock_actions_draw}`.trim()}>
             <ColorTriggerButton
-              ariaLabel="Выбрать цвет кисти"
+              ariaLabel={isEn ? 'Choose brush color' : 'Выбрать цвет кисти'}
               active={props.paletteActive}
               color={props.paletteColor}
               onClick={props.onOpenPalette}
             />
             <ToolbarTextButton className={classes.draw_toolbar_text_btn_primary} onClick={props.onDone}>
-              Готово
+              {isEn ? 'Done' : 'Готово'}
             </ToolbarTextButton>
           </div>
         </>
       ) : (
         <>
           <div className={`${classes.draw_dock_section} ${classes.draw_dock_layer}`.trim()}>
-            <ToolbarIconButton ariaLabel="Опустить ниже" onClick={() => props.onMoveLayer('down')}>
+            <ToolbarIconButton ariaLabel={isEn ? 'Move lower' : 'Опустить ниже'} onClick={() => props.onMoveLayer('down')}>
               <span className={classes.draw_dock_rotate_down}>
                 <BackIcon />
               </span>
             </ToolbarIconButton>
-            <ToolbarIconButton ariaLabel="Поднять выше" onClick={() => props.onMoveLayer('up')}>
+            <ToolbarIconButton ariaLabel={isEn ? 'Move higher' : 'Поднять выше'} onClick={() => props.onMoveLayer('up')}>
               <span className={classes.draw_dock_rotate_up}>
                 <BackIcon />
               </span>
@@ -179,26 +184,26 @@ export const FlowDrawingToolbar: React.FC<FlowDrawingToolbarProps> = (props) => 
 
           <div className={`${classes.draw_dock_section} ${classes.draw_dock_actions} ${classes.draw_dock_actions_selection}`.trim()}>
             <ColorTriggerButton
-              ariaLabel="Изменить цвет фигуры"
+              ariaLabel={isEn ? 'Change shape color' : 'Изменить цвет фигуры'}
               active={props.paletteActive}
               color={props.paletteColor}
               className={selectionPaletteClassName}
               onClick={props.onOpenPalette}
             />
-            {props.showGroupAction ? <ToolbarTextButton onClick={props.onGroup}>Сгруп.</ToolbarTextButton> : null}
-            {props.showUngroupAction ? <ToolbarTextButton onClick={props.onUngroup}>Разгр.</ToolbarTextButton> : null}
+            {props.showGroupAction ? <ToolbarTextButton onClick={props.onGroup}>{isEn ? 'Group' : 'Сгруп.'}</ToolbarTextButton> : null}
+            {props.showUngroupAction ? <ToolbarTextButton onClick={props.onUngroup}>{isEn ? 'Ungroup' : 'Разгр.'}</ToolbarTextButton> : null}
             <div className={classes.draw_dock_dropdown_slot}>
               <DropdownWrapper upDel closeOnClick={false} isOpen={props.deleteConfirmOpen} onClose={props.onCloseDeleteConfirm}>
                 {[
-                  <ToolbarIconButton key="trigger" ariaLabel="Удалить фигуры" className={classes.draw_dock_dropdown_trigger} onClick={props.onToggleDeleteConfirm}>
+                  <ToolbarIconButton key="trigger" ariaLabel={isEn ? 'Delete shapes' : 'Удалить фигуры'} className={classes.draw_dock_dropdown_trigger} onClick={props.onToggleDeleteConfirm}>
                     <DeleteIcon />
                   </ToolbarIconButton>,
                   <div key="menu">
                     <button type="button" data-dropdown-class={classes.confirm_danger} onClick={props.onDelete}>
-                      Да, удалить
+                      {isEn ? 'Yes, delete' : 'Да, удалить'}
                     </button>
                     <button type="button" data-dropdown-class={classes.confirm_cancel} onClick={props.onCloseDeleteConfirm}>
-                      Отмена
+                      {isEn ? 'Cancel' : 'Отмена'}
                     </button>
                   </div>,
                 ]}

@@ -17,6 +17,7 @@ type BoardsUpdatedCmd = {
   is_locked?: unknown;
   image_path?: unknown;
   color?: unknown;
+  tags?: unknown;
   link_id?: unknown;
   from_card_id?: unknown;
   to_card_id?: unknown;
@@ -117,6 +118,12 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
               typeof cmd?.image_path === 'string' || cmd?.image_path === null ? (cmd.image_path as string | null) : undefined;
             const patchColor =
               typeof cmd?.color === 'string' || cmd?.color === null ? (cmd.color as string | null) : undefined;
+            const patchTags = Array.isArray(cmd?.tags)
+              ? cmd.tags
+                  .filter((tag): tag is string => typeof tag === 'string')
+                  .map((tag) => tag.trim())
+                  .filter(Boolean)
+              : undefined;
 
             const patchType: FlowNodeType | undefined =
               patchTypeRaw === 'diamond' ? 'rhombus' : patchTypeRaw === 'circle' || patchTypeRaw === 'rectangle' ? patchTypeRaw : undefined;
@@ -127,7 +134,8 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
               patchLocked !== undefined ||
               hasXY ||
               patchImagePath !== undefined ||
-              patchColor !== undefined;
+              patchColor !== undefined ||
+              patchTags !== undefined;
 
             if (hasAnyPatch) {
               setNodes((prev) =>
@@ -143,6 +151,7 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
                   const nextImageSrc = patchImagePath === undefined ? n.data.imageSrc : resolveImageSrc(patchImagePath);
                   const nextImageLoaded = nextImageSrc === n.data.imageSrc ? Boolean(n.data.imageLoaded) : !nextImageSrc;
                   const nextColor = patchColor === undefined ? n.data.color : patchColor;
+                  const nextTags = patchTags === undefined ? n.data.tags : patchTags;
 
                   return {
                     ...n,
@@ -157,6 +166,7 @@ export const useFlowBoardBoardsUpdatedSocket = (params: {
                       imageSrc: nextImageSrc,
                       imageLoaded: nextImageLoaded,
                       color: nextColor,
+                      tags: nextTags,
                     }
                   };
                 })

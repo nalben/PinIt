@@ -488,6 +488,7 @@ $board-menu-wide-min: 1700px;
     width: 100%;
     height: 100%;
     z-index: 5;
+    pointer-events: none;
 }
 
 .flow_drag_handle{
@@ -1139,6 +1140,28 @@ $board-menu-wide-min: 1700px;
 .form_label{
     color: var(--cyan);
     font-size: fluid-prop(20, 16, 1920, 320);
+}
+
+.form_hint{
+    color: rgba(255, 255, 255, 0.62);
+    font-size: fluid-prop(14, 11, 1920, 320);
+    line-height: 1.35;
+}
+
+.tag_preview_row{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tag_preview_chip{
+    padding: 6px 10px;
+    border: 1px solid rgba(231, 205, 115, 0.35);
+    background: rgba(231, 205, 115, 0.12);
+    color: var(--pink);
+    font-size: fluid-prop(14, 11, 1920, 320);
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
 .form_row{

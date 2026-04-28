@@ -7,6 +7,7 @@ import Burger from '@/assets/icons/monochrome/burger.svg';
 import { API_URL } from "@/api/axiosInstance";
 import AuthTrigger from '@/components/auth/AuthTrigger';
 import DropdownWrapper from '../dropdownwrapper/DropdownWrapper';
+import ImageWithFallback from '@/components/_UI/imagewithfallback/ImageWithFallback';
 import LogoutButton from '@/components/__general/logoutbutton/LogoutButton';
 import Arrow from '@/assets/icons/monochrome/back.svg'
 import Accept from '@/assets/icons/monochrome/accept.svg'
@@ -16,8 +17,9 @@ import { useNotificationsStore } from '@/store/notificationsStore';
 import { useBoardsInvitesStore } from '@/store/boardsInvitesStore';
 import { useUIStore } from '@/store/uiStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
-import { applyTheme, getStoredTheme, persistTheme, THEME_OPTIONS } from '@/utils/theme';
+import { applyTheme, getStoredTheme, getThemeLabel, persistTheme, THEME_OPTIONS } from '@/utils/theme';
 import type { AppTheme } from '@/utils/theme';
+import { useLanguageStore } from '@/store/languageStore';
 
 type HeaderVariant = 'default' | 'board';
 const PINIT_DESKTOP_UPDATES_URL = 'https://pin-it.ru/desktop-updates';
@@ -26,7 +28,10 @@ const Header = ({ variant = 'default' }: { variant?: HeaderVariant }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme());
   const [themeDropdownOpen, setThemeDropdownOpen] = useState(false);
+  const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [isInstallerLoading, setIsInstallerLoading] = useState(false);
+  const language = useLanguageStore((state) => state.language);
+  const setLanguage = useLanguageStore((state) => state.setLanguage);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const isAuth = useAuthStore(state => state.isAuth);
@@ -197,10 +202,18 @@ const isProfileActive = () => {
   };
 
   const activeThemeOption = THEME_OPTIONS.find((option) => option.id === theme) ?? THEME_OPTIONS[0]!;
+  const isEn = language === 'en';
+  const activeThemeLabel = getThemeLabel(activeThemeOption, language);
+  const activeLanguageLabel = language === 'en' ? 'English' : 'Русский';
+  const languageOptions = [
+    { id: 'ru' as const, label: 'Русский' },
+    { id: 'en' as const, label: 'English' },
+  ];
 
   useEffect(() => {
     if (isProfileOpen) return;
     setThemeDropdownOpen(false);
+    setLanguageDropdownOpen(false);
   }, [isProfileOpen]);
 
   return (
@@ -222,16 +235,16 @@ const isProfileActive = () => {
         className={`${classes.menu} ${menuOpen ? classes.active_menu : ''}`}
       >
         <NavLink to="/home" className={linkClass} onClick={handleMenuItemClick}>
-          HOME
+          {isEn ? 'HOME' : 'ГЛАВНАЯ'}
         </NavLink>
         <NavLink to="/spaces" className={linkClass} onClick={handleMenuItemClick}>
-          SPACES
+          {isEn ? 'SPACES' : 'ДОСКИ'}
         </NavLink>
         <NavLink to="/converter" className={linkClass} onClick={handleMenuItemClick}>
-          CONVERTER
+          {isEn ? 'CONVERTER' : 'КОНВЕРТЕР'}
         </NavLink>
         {!isInitialized ? (
-          <div className={classes.item}>PROFILE</div>
+          <div className={classes.item}>{isEn ? 'PROFILE' : 'ПРОФИЛЬ'}</div>
         ) : isAuth ? (
           <NavLink
             to="/profile"
@@ -242,25 +255,25 @@ const isProfileActive = () => {
             }
             onClick={handleMenuItemClick}
           >
-            PROFILE
+            {isEn ? 'PROFILE' : 'ПРОФИЛЬ'}
           </NavLink>
         ) : (
           <AuthTrigger type='login'>
-            <div className={classes.item}>PROFILE</div>
+            <div className={classes.item}>{isEn ? 'PROFILE' : 'ПРОФИЛЬ'}</div>
           </AuthTrigger>
         )}
       </nav>
 
       <div className={classes.profile_container}>
-        <div className={classes.theme_switcher} aria-label="Выбор темы">
+        <div className={classes.theme_switcher} aria-label={isEn ? 'Theme selection' : 'Выбор темы'}>
           {THEME_OPTIONS.map((option) => (
             <button
               key={option.id}
               type="button"
               className={`${classes.theme_button} ${theme === option.id ? classes.theme_button_active : ''}`.trim()}
               onClick={() => handleThemeChange(option.id)}
-              aria-label={`Тема ${option.label}`}
-              title={`Тема ${option.label}`}
+              aria-label={`${isEn ? 'Theme' : 'Тема'} ${getThemeLabel(option, language)}`}
+              title={`${isEn ? 'Theme' : 'Тема'} ${getThemeLabel(option, language)}`}
             >
               <span className={`${classes.theme_button_swatch} ${classes[`theme_button_swatch_${option.id}`]}`.trim()} />
             </button>
@@ -297,7 +310,7 @@ const isProfileActive = () => {
 
                     <div className={classes.noti_con}>
                       <span className={classes.empty}>
-                        {totalNotiCount === 0 ? 'Нет уведомлений' : 'Уведомления'}
+                        {totalNotiCount === 0 ? (isEn ? 'No notifications' : 'Нет уведомлений') : (isEn ? 'Notifications' : 'Уведомления')}
                       </span>
                       {[...requests]
                         .sort((a, b) => {
@@ -318,10 +331,11 @@ const isProfileActive = () => {
                             onClick={closeHeaderDropdown} // закрываем dropdown при переходе
                           >
                             {req.avatar ? (
-                              <img
+                              <ImageWithFallback
                                 src={req.avatar.startsWith('/uploads/') ? `${API_URL}${req.avatar}` : `${API_URL}/uploads/${req.avatar}`}
-                                alt="Аватар"
+                                alt={isEn ? 'Avatar' : 'Аватар'}
                                 className={classes.avatar}
+                                fallback={<Default />}
                               />
                             ) : (
                               <Default />
@@ -336,7 +350,7 @@ const isProfileActive = () => {
                             >
                               {req.nickname || req.username}
                             </NavLink>
-                            подал заявку в друзья
+                            {isEn ? ' sent you a friend request' : ' подал заявку в друзья'}
                           </span>
 
                           <div className={classes.noti_int}>
@@ -367,10 +381,11 @@ const isProfileActive = () => {
                             onClick={closeHeaderDropdown}
                           >
                             {invite.avatar ? (
-                              <img
+                              <ImageWithFallback
                                 src={invite.avatar.startsWith('/uploads/') ? `${API_URL}${invite.avatar}` : `${API_URL}/uploads/${invite.avatar}`}
-                                alt="Аватар"
+                                alt={isEn ? 'Avatar' : 'Аватар'}
                                 className={classes.avatar}
+                                fallback={<Default />}
                               />
                             ) : (
                               <Default />
@@ -385,7 +400,7 @@ const isProfileActive = () => {
                             >
                               {invite.nickname || invite.username}
                             </NavLink>
-                            {' пригласил(а) в доску '}
+                            {isEn ? ' invited you to board ' : ' пригласил(а) в доску '}
                             <span className={classes.board_invite_name}>
                               {invite.title}
                             </span>
@@ -416,12 +431,13 @@ const isProfileActive = () => {
                       <div className={`${classes.skeleton} ${classes.skeleton_avatar_sm}`} />
                     ) : null}
                     {user?.avatar ? (
-                      <img
+                      <ImageWithFallback
                         src={user.avatar.startsWith('/uploads/') ? `${API_URL}${user.avatar}` : `${API_URL}/uploads/${user.avatar}`}
-                        alt="Аватар"
+                        alt={isEn ? 'Avatar' : 'Аватар'}
                         className={`${classes.avatar} ${showAvatarSkeleton ? classes.avatar_preload : ''}`}
                         onLoad={() => setIsAvatarLoaded(true)}
                         onError={() => setIsAvatarLoaded(true)}
+                        fallback={!isProfileLoading ? <Default /> : null}
                       />
                     ) : (
                       !isProfileLoading && <Default />
@@ -437,12 +453,13 @@ const isProfileActive = () => {
                           <div className={`${classes.skeleton} ${classes.skeleton_avatar_md}`} />
                         ) : null}
                         {user?.avatar ? (
-                          <img
+                          <ImageWithFallback
                             src={user.avatar.startsWith('/uploads/') ? `${API_URL}${user.avatar}` : `${API_URL}/uploads/${user.avatar}`}
-                            alt="Аватар"
+                            alt={isEn ? 'Avatar' : 'Аватар'}
                             className={`${classes.avatar} ${showAvatarSkeleton ? classes.avatar_preload : ''}`}
                             onLoad={() => setIsAvatarLoaded(true)}
                             onError={() => setIsAvatarLoaded(true)}
+                            fallback={!isProfileLoading ? <Default /> : null}
                           />
                         ) : (
                           !isProfileLoading && <Default />
@@ -460,6 +477,58 @@ const isProfileActive = () => {
                         </div>
                       </div>
                     </NavLink>
+                    <div
+                      data-dropdown-class={`${classes.profile_theme_item} ${languageDropdownOpen ? classes.profile_theme_item_open : ''}`.trim()}
+                      className={classes.profile_theme_item_content}
+                    >
+                      <div className={classes.profile_theme_panel} onClick={(event) => event.stopPropagation()}>
+                        <DropdownWrapper
+                          fixed
+                          middleleftTop
+                          anchorToButton
+                          fixedMarginPx={0}
+                          repositionOnScroll
+                          isOpen={languageDropdownOpen}
+                          onClose={() => setLanguageDropdownOpen(false)}
+                          menuClassName={classes.profile_theme_menu}
+                          wrapperClassName={classes.profile_theme_dropdown_wrapper}
+                          buttonClassName={classes.profile_theme_dropdown_button}
+                        >
+                          <button
+                            type="button"
+                            className={classes.profile_theme_trigger}
+                            onClick={() => {
+                              setThemeDropdownOpen(false);
+                              setLanguageDropdownOpen((prev) => !prev);
+                            }}
+                            aria-expanded={languageDropdownOpen}
+                            aria-label={`${isEn ? 'Language' : 'Язык'}: ${activeLanguageLabel}`}
+                          >
+                            <span className={classes.profile_theme_copy}>{`${isEn ? 'Language' : 'Язык'}: ${activeLanguageLabel}`}</span>
+                            <span className={classes.profile_theme_arrow}>
+                              <Arrow />
+                            </span>
+                          </button>
+                          <div>
+                            {languageOptions.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                data-dropdown-class={`${classes.profile_theme_option_item} ${language === option.id ? classes.profile_theme_option_item_active : ''}`.trim()}
+                                className={classes.profile_theme_option}
+                                onClick={() => {
+                                  setLanguage(option.id);
+                                  setLanguageDropdownOpen(false);
+                                }}
+                                aria-label={`${isEn ? 'Choose language' : 'Выбрать язык'} ${option.label}`}
+                              >
+                                <span>{option.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </DropdownWrapper>
+                      </div>
+                    </div>
                     <div
                       data-dropdown-class={`${classes.profile_theme_item} ${themeDropdownOpen ? classes.profile_theme_item_open : ''}`.trim()}
                       className={classes.profile_theme_item_content}
@@ -481,12 +550,13 @@ const isProfileActive = () => {
                             type="button"
                             className={classes.profile_theme_trigger}
                             onClick={() => {
+                              setLanguageDropdownOpen(false);
                               setThemeDropdownOpen((prev) => !prev);
                             }}
                             aria-expanded={themeDropdownOpen}
-                            aria-label={`\u0422\u0435\u043c\u0430 : ${activeThemeOption.label}`}
+                            aria-label={`${isEn ? 'Theme' : 'Тема'}: ${activeThemeLabel}`}
                           >
-                            <span className={classes.profile_theme_copy}>{`\u0422\u0435\u043c\u0430 : ${activeThemeOption.label}`}</span>
+                            <span className={classes.profile_theme_copy}>{`${isEn ? 'Theme' : 'Тема'}: ${activeThemeLabel}`}</span>
                             <span className={`${classes.theme_button_swatch} ${classes.theme_button_swatch_inline} ${classes[`theme_button_swatch_${activeThemeOption.id}`]}`.trim()} />
                           </button>
                           <div>
@@ -497,10 +567,10 @@ const isProfileActive = () => {
                                 data-dropdown-class={`${classes.profile_theme_option_item} ${theme === option.id ? classes.profile_theme_option_item_active : ''}`.trim()}
                                 className={classes.profile_theme_option}
                                 onClick={() => handleThemeChange(option.id)}
-                                aria-label={`\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0442\u0435\u043c\u0443 ${option.label}`}
+                                aria-label={`${isEn ? 'Choose theme' : 'Выбрать тему'} ${getThemeLabel(option, language)}`}
                               >
                                 <span className={`${classes.theme_button_swatch} ${classes.theme_button_swatch_inline} ${classes[`theme_button_swatch_${option.id}`]}`.trim()} />
-                                <span>{option.label}</span>
+                                <span>{getThemeLabel(option, language)}</span>
                               </button>
                             ))}
                           </div>
@@ -518,16 +588,19 @@ const isProfileActive = () => {
                           onClick={handleInstallPinIt}
                           disabled={isInstallerLoading}
                         >
-                          {isInstallerLoading ? 'Скачивание PinIt...' : 'Установить PinIt'}
+                          {isInstallerLoading ? (isEn ? 'Downloading PinIt...' : 'Скачивание PinIt...') : (isEn ? 'Install PinIt' : 'Установить PinIt')}
                         </button>
                       </div>
                     ) : null}
                     <LogoutButton
                       data-dropdown-class={classes.profile_logout_item}
                       className={classes.profile_logout_item_content}
-                      closeSignal={themeDropdownOpen}
+                      closeSignal={themeDropdownOpen || languageDropdownOpen}
                       onOpenChange={(open) => {
-                        if (open) setThemeDropdownOpen(false);
+                        if (open) {
+                          setThemeDropdownOpen(false);
+                          setLanguageDropdownOpen(false);
+                        }
                       }}
                       onLogout={handleLogoutConfirm}
                     />
@@ -538,7 +611,7 @@ const isProfileActive = () => {
           <AuthTrigger type='login'>
             <div className={`${classes.user} ${classes.header_reg}`}>
               <span>
-                Sign in
+                {isEn ? 'Sign in' : 'Войти'}
               </span>
             </div>
           </AuthTrigger>

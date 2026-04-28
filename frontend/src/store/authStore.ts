@@ -8,6 +8,10 @@ interface User {
   email?: string;
 }
 
+interface BootstrapUser extends User {
+  token?: string | null;
+}
+
 
 interface AuthState {
   isAuth: boolean;
@@ -37,19 +41,17 @@ export const useAuthStore = create<AuthState>(set => ({
     set({ isAuth: false, hasToken: false, user: null, isInitialized: true });
   },
   bootstrap: async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      set({ isAuth: false, hasToken: false, user: null, isInitialized: true });
-      return;
-    }
-
     try {
-      const { data } = await axiosInstance.get<User>("/api/profile/me");
+      const { data } = await axiosInstance.get<BootstrapUser>("/api/profile/me");
 
       if (data && data.id > 0 && data.username) {
+        const nextToken = typeof data.token === "string" && data.token.trim() ? data.token : localStorage.getItem("token");
+        if (nextToken) {
+          localStorage.setItem("token", nextToken);
+        }
         localStorage.setItem("userId", String(data.id));
         localStorage.setItem("username", data.username);
-        set({ isAuth: true, hasToken: true, user: data, isInitialized: true });
+        set({ isAuth: true, hasToken: Boolean(nextToken), user: data, isInitialized: true });
       } else {
         localStorage.removeItem("token");
         localStorage.removeItem("userId");

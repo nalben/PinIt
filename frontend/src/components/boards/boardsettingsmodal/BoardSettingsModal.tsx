@@ -7,6 +7,7 @@ import axiosInstance, { API_URL } from '@/api/axiosInstance';
 import Mainbtn from '@/components/_UI/mainbtn/Mainbtn';
 import DropdownWrapper from '@/components/_UI/dropdownwrapper/DropdownWrapper';
 import ImageCropModal from '@/components/_UI/imagecropmodal/ImageCropModal';
+import ImageWithFallback from '@/components/_UI/imagewithfallback/ImageWithFallback';
 import UnsavedChangesModal from '@/components/_UI/unsavedchangesmodal/UnsavedChangesModal';
 import Default from '@/assets/icons/monochrome/image-placeholder.svg';
 import Edit from '@/assets/icons/monochrome/edit.svg';
@@ -17,6 +18,7 @@ import { Friend, useFriendsStore } from '@/store/friendsStore';
 import { BoardParticipant, useBoardDetailsStore } from '@/store/boardDetailsStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
 import { BOARD_IMAGE_CROP_PRESET } from '@/utils/imageCropPresets';
+import { useLanguageStore } from '@/store/languageStore';
 
 const MAX_BOARD_IMAGE_SIZE_MB = 5;
 const MAX_BOARD_IMAGE_SIZE_BYTES = MAX_BOARD_IMAGE_SIZE_MB * 1024 * 1024;
@@ -81,6 +83,8 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const openFriendsModal = useUIStore((s) => s.openFriendsModal);
   const showTopAlarm = useUIStore((s) => s.showTopAlarm);
   const userId = useAuthStore((s) => s.user?.id ?? null);
+  const language = useLanguageStore((s) => s.language);
+  const isEn = language === 'en';
 
   const friends = useFriendsStore((s) => s.friends);
   const friendsLoading = useFriendsStore((s) => s.isLoading);
@@ -171,6 +175,55 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
   const participantsLoading = Boolean(participantsLoadingFlags?.initial) && !participantsResponse;
   const outgoingInvitesLoading = Boolean(outgoingInvitesLoadingFlags?.initial) && Object.keys(outgoingInvitesByUserId).length === 0;
   const inviteLinkLoading = inviteLinkActionLoading || (Boolean(inviteLinkLoadingFlags?.initial) && !inviteLinkToken);
+  const settingsTabText = isEn ? 'Settings' : 'Настройки';
+  const participantsTabText = isEn ? 'Participants' : 'Участники';
+  const boardEditOwnerHintText = isEn ? 'Only the owner can edit the board' : 'Только владелец может редактировать доску';
+  const boardInviteOwnerHintText = isEn ? 'Only the owner can invite friends' : 'Только владелец может приглашать друзей';
+  const changeText = isEn ? 'Change' : 'Изменить';
+  const onlyImagesText = isEn ? 'Only images can be uploaded' : 'Можно загружать только изображения';
+  const boardImageTooLargeText = isEn
+    ? `The file is too large, choose an image up to ${MAX_BOARD_IMAGE_SIZE_MB} MB.`
+    : `Вес слишком большой, выберите изображение весом до ${MAX_BOARD_IMAGE_SIZE_MB} МБ.`;
+  const titleLabelText = isEn ? 'Title' : 'Название';
+  const titlePlaceholderText = isEn ? 'Enter a title' : 'Введите название';
+  const descriptionLabelText = isEn ? 'Description' : 'Описание';
+  const descriptionPlaceholderText = isEn ? 'Enter a description' : 'Введите описание';
+  const publicBoardText = isEn ? 'Make board public' : 'Сделать доску публичной';
+  const deleteBoardText = isEn ? 'Delete board' : 'Удалить доску';
+  const deleteText = isEn ? 'Delete' : 'Удалить';
+  const cancelText = isEn ? 'Cancel' : 'Отмена';
+  const saveText = isEn ? 'Save' : 'Сохранить';
+  const inviteLinkTitleText = isEn ? 'Invite by link' : 'Приглашение по ссылке';
+  const copiedText = isEn ? 'Copied!' : 'Скопировано!';
+  const copyText = isEn ? 'Copy' : 'Скопировать';
+  const regenerateText = isEn ? 'Regenerate' : 'Пересоздать';
+  const friendsText = isEn ? 'Friends' : 'Друзья';
+  const emptyFriendsText = isEn ? 'Friends list is empty' : 'Список друзей пуст';
+  const addFriendText = isEn ? 'Add friend' : 'Добавить друга';
+  const searchUsersPlaceholderText = isEn ? 'Search by nickname or username' : 'Поиск по никнейму или юзернейму';
+  const participantText = isEn ? 'Participant' : 'Участник';
+  const sentText = isEn ? 'Sent' : 'Отправлено';
+  const rejectedText = isEn ? 'Rejected' : 'Отклонено';
+  const inviteText = isEn ? 'Invite' : 'Пригласить';
+  const ownerText = isEn ? 'Owner' : 'Владелец';
+  const guestText = isEn ? 'Guest' : 'Гость';
+  const editorText = isEn ? 'Editor' : 'Редактор';
+  const removeText = isEn ? 'Remove' : 'Удалить';
+  const regenerateInviteLinkErrorText = isEn ? 'Failed to regenerate invite link' : 'Не удалось пересоздать ссылку';
+  const inviteFriendErrorText = isEn ? 'Failed to send invite' : 'Не удалось отправить приглашение';
+  const cancelInviteErrorText = isEn ? 'Failed to cancel invite' : 'Не удалось отменить приглашение';
+  const removeGuestErrorText = isEn ? 'Failed to remove guest' : 'Не удалось удалить гостя';
+  const updateGuestRoleErrorText = isEn ? 'Failed to change role' : 'Не удалось изменить роль';
+  const deleteBoardErrorText = isEn ? 'Failed to delete board' : 'Не удалось удалить доску';
+  const saveBoardErrorText = isEn ? 'Failed to save changes' : 'Не удалось сохранить изменения';
+  const loadBoardErrorText = isEn ? 'Failed to load board' : 'Не удалось загрузить доску';
+  const titleRequiredErrorText = isEn ? 'Title is required' : 'Название обязательно';
+  const titleTooLongErrorText = isEn
+    ? `Title is too long (max ${BOARD_TITLE_MAX_LENGTH})`
+    : `Название слишком длинное (max ${BOARD_TITLE_MAX_LENGTH})`;
+  const descriptionTooLongErrorText = isEn
+    ? `Description is too long (max ${BOARD_DESCRIPTION_MAX_LENGTH})`
+    : `Описание слишком длинное (max ${BOARD_DESCRIPTION_MAX_LENGTH})`;
 
   const requestClose = useCallback(() => {
     if (!isOpen || isSaving || isDeleting) return;
@@ -281,9 +334,8 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     const moveThreshold = 6;
 
     const shouldIgnoreTarget = (target: EventTarget | null) => {
-      const modalEl = modalContentRef.current;
-      if (modalEl && target instanceof Node && modalEl.contains(target)) return true;
       const targetEl = target instanceof HTMLElement ? target : null;
+      if (targetEl?.closest?.('[data-modal-content-scope="board-settings"]')) return true;
       if (targetEl?.closest?.('[data-modal-scope="image-crop"]')) return true;
       if (targetEl?.closest?.('[data-modal-scope="unsaved-changes"]')) return true;
       return false;
@@ -365,7 +417,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       const token = typeof data?.token === 'string' ? data.token : null;
       useBoardDetailsStore.getState().setInviteLinkToken(numericBoardId, token);
     } catch {
-      setInviteLinkError('Не удалось пересоздать ссылку');
+      setInviteLinkError(regenerateInviteLinkErrorText);
     } finally {
       setInviteLinkActionLoading(false);
     }
@@ -426,7 +478,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
         const nextStatus: 'sent' | 'rejected' = inviteStatus === 'rejected' ? 'rejected' : 'sent';
         useBoardDetailsStore.getState().setOutgoingInvite(numericBoardId, friend.id, { id: inviteId, status: nextStatus });
       } else {
-        setParticipantsError('Не удалось отправить приглашение');
+        setParticipantsError(inviteFriendErrorText);
       }
     } finally {
       setInviteActionUserId(null);
@@ -447,7 +499,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       await axiosInstance.delete(`/api/boards/${numericBoardId}/invites/${inviteInfo.id}`);
       useBoardDetailsStore.getState().removeOutgoingInvite(numericBoardId, friend.id);
     } catch {
-      setParticipantsError('Не удалось отменить приглашение');
+      setParticipantsError(cancelInviteErrorText);
     } finally {
       setInviteActionUserId(null);
     }
@@ -469,7 +521,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       useBoardDetailsStore.getState().removeOutgoingInvite(numericBoardId, guest.id);
       setRemovedGuestsByUserId((prev) => ({ ...prev, [guest.id]: guest }));
     } catch {
-      setParticipantsError('Не удалось удалить гостя');
+      setParticipantsError(removeGuestErrorText);
     } finally {
       setInviteActionUserId(null);
     }
@@ -495,16 +547,16 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       });
       setRoleDropdownUserId(null);
     } catch {
-      setParticipantsError('Не удалось изменить роль');
+      setParticipantsError(updateGuestRoleErrorText);
     } finally {
       setRoleActionUserId(null);
     }
   };
 
   const getRoleLabel = (role: BoardParticipantRole) => {
-    if (role === 'editer') return 'Редактор';
-    if (role === 'guest') return 'Гость';
-    if (role === 'owner') return 'Владелец';
+    if (role === 'editer') return editorText;
+    if (role === 'guest') return guestText;
+    if (role === 'owner') return ownerText;
     return String(role);
   };
 
@@ -575,7 +627,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       close();
       navigate('/spaces', { replace: true });
     } catch {
-      setError('Не удалось удалить доску');
+      setError(deleteBoardErrorText);
     } finally {
       setIsDeleting(false);
       setDeleteConfirmOpen(false);
@@ -669,7 +721,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       setCropSourceFile(null);
       return true;
     } catch {
-      setError('Не удалось сохранить изменения');
+      setError(saveBoardErrorText);
       return false;
     } finally {
       setIsSaving(false);
@@ -680,21 +732,21 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
     if (!numericBoardId) return;
     if (!isOwner) return;
     if (!boardMeta) {
-      setError('Не удалось загрузить доску');
+      setError(loadBoardErrorText);
       return;
     }
 
     const nextTitle = title.trim();
     if (!nextTitle) {
-      setError('Название обязательно');
+      setError(titleRequiredErrorText);
       return;
     }
     if (nextTitle.length > BOARD_TITLE_MAX_LENGTH) {
-      setError(`Название слишком длинное (max ${BOARD_TITLE_MAX_LENGTH})`);
+      setError(titleTooLongErrorText);
       return;
     }
     if (description.trim().length > BOARD_DESCRIPTION_MAX_LENGTH) {
-      setError(`Описание слишком длинное (max ${BOARD_DESCRIPTION_MAX_LENGTH})`);
+      setError(descriptionTooLongErrorText);
       return;
     }
 
@@ -750,29 +802,29 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
       useBoardDetailsStore.getState().resetBoardDraft(numericBoardId);
       close();
     } catch {
-      setError('Не удалось сохранить изменения');
+      setError(saveBoardErrorText);
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <AuthModal isOpen={isOpen} onClose={requestClose} closeOnOverlayClick={false}>
-      <div ref={modalContentRef} className={classes.root}>
+    <AuthModal isOpen={isOpen} onClose={requestClose} closeOnOverlayClick={false} modalScope="board-settings" modalRef={modalContentRef}>
+      <div className={classes.root}>
         <div className={classes.toggleButtons}>
           <button
             type="button"
             className={view === 'settings' ? classes.toggleActive : ''}
             onClick={() => setView('settings')}
           >
-            Настройки
+            {settingsTabText}
           </button>
           <button
             type="button"
             className={view === 'participants' ? classes.toggleActive : ''}
             onClick={() => setView('participants')}
           >
-            Участники
+            {participantsTabText}
           </button>
         </div>
 
@@ -780,7 +832,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
           {view === 'settings' ? (
             <div className={classes.settings}>
               {error ? <p className={classes.error}>{error}</p> : null}
-              {!metaInitialLoading && boardMeta && !isOwner ? <p className={classes.hint}>Только владелец может редактировать доску</p> : null}
+              {!metaInitialLoading && boardMeta && !isOwner ? <p className={classes.hint}>{boardEditOwnerHintText}</p> : null}
 
               {metaInitialLoading && !boardMeta ? (
                 <p className={classes.hint} />
@@ -795,9 +847,9 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                       }}
                     >
                       {imagePreview ? (
-                        <img src={imagePreview} alt="board preview" />
+                        <img src={imagePreview} alt={isEn ? 'Board preview' : 'Превью доски'} />
                       ) : imageSrc ? (
-                        <img src={imageSrc} alt="board" />
+                        <img src={imageSrc} alt={isEn ? 'Board' : 'Доска'} />
                       ) : (
                         <Default />
                       )}
@@ -810,7 +862,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         if (!isOwner) e.preventDefault();
                       }}
                     >
-                      <span>{'\u0418\u0437\u043c\u0435\u043d\u0438\u0442\u044c'}</span>
+                      <span>{changeText}</span>
                     </label>
                     <input
                       ref={fileInputRef}
@@ -825,12 +877,12 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         if (!file) return;
 
                         if (!file.type.startsWith('image/')) {
-                          showTopAlarm('\u041c\u043e\u0436\u043d\u043e \u0437\u0430\u0433\u0440\u0443\u0436\u0430\u0442\u044c \u0442\u043e\u043b\u044c\u043a\u043e \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044f');
+                          showTopAlarm(onlyImagesText);
                           return;
                         }
 
                         if (file.size > MAX_BOARD_IMAGE_SIZE_BYTES) {
-                          showTopAlarm(`\u0412\u0435\u0441 \u0441\u043b\u0438\u0448\u043a\u043e\u043c \u0431\u043e\u043b\u044c\u0448\u043e\u0439, \u0432\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0432\u0435\u0441\u043e\u043c \u0434\u043e ${MAX_BOARD_IMAGE_SIZE_MB} \u041c\u0411.`);
+                          showTopAlarm(boardImageTooLargeText);
                           return;
                         }
 
@@ -840,7 +892,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                   </div>
 
                   <label className={classes.inputLabel}>
-                    <span className={classes.inputLabelItem}>Название</span>
+                    <span className={classes.inputLabelItem}>{titleLabelText}</span>
                     <input
                       type="text"
                       value={title}
@@ -850,12 +902,12 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         if (!numericBoardId) return;
                         useBoardDetailsStore.getState().setBoardDraft(numericBoardId, { title: e.target.value });
                       }}
-                      placeholder="Введите название"
+                      placeholder={titlePlaceholderText}
                     />
                   </label>
 
                   <label className={classes.inputLabel}>
-                    <span className={classes.inputLabelItem}>Описание</span>
+                    <span className={classes.inputLabelItem}>{descriptionLabelText}</span>
                     <input
                       type="text"
                       value={description}
@@ -865,12 +917,12 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         if (!numericBoardId) return;
                         useBoardDetailsStore.getState().setBoardDraft(numericBoardId, { description: e.target.value });
                       }}
-                      placeholder="Введите описание"
+                      placeholder={descriptionPlaceholderText}
                     />
                   </label>
 
                   <label className={`${classes.publicToggle} ${isPublicToggleNoAnim ? classes.publicToggleNoAnim : ''}`}>
-                    <span className={classes.publicToggleText}>Сделать доску публичной</span>
+                    <span className={classes.publicToggleText}>{publicBoardText}</span>
                     <input
                       className={classes.publicToggleInput}
                       type="checkbox"
@@ -899,10 +951,10 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         type="button"
                         className={classes.deleteBoardTrigger}
                         disabled={isSaving || isDeleting || metaInitialLoading}
-                        aria-label="Удалить доску"
+                        aria-label={deleteBoardText}
                         onClick={() => setDeleteConfirmOpen((v) => !v)}
                       >
-                        Удалить доску
+                        {deleteBoardText}
                       </button>,
                       <div key="menu">
                         <button
@@ -911,7 +963,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                           onClick={deleteBoard}
                           disabled={isDeleting || isSaving || metaInitialLoading}
                         >
-                          {'Удалить'}
+                          {deleteText}
                         </button>
                         <button
                           type="button"
@@ -919,7 +971,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                           onClick={() => setDeleteConfirmOpen(false)}
                           disabled={isDeleting || isSaving || metaInitialLoading}
                         >
-                          Отмена
+                          {cancelText}
                         </button>
                       </div>,
                     ]}
@@ -930,7 +982,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                   variant="mini"
                   kind="button"
                   type="button"
-                  text={'Сохранить'}
+                  text={saveText}
                   onClick={submit}
                   disabled={!isOwner || isSaving || isDeleting || metaInitialLoading}
                 />
@@ -940,12 +992,12 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
             <div className={classes.participantsTab}>
               {participantsError ? <p className={classes.error}>{participantsError}</p> : null}
               {inviteLinkError ? <p className={classes.error}>{inviteLinkError}</p> : null}
-              {!metaInitialLoading && boardMeta && !isOwner ? <p className={classes.hint}>Только владелец может приглашать друзей</p> : null}
+              {!metaInitialLoading && boardMeta && !isOwner ? <p className={classes.hint}>{boardInviteOwnerHintText}</p> : null}
 
               {isOwner ? (
                 <>
                   <div className={classes.inviteLinkBlock}>
-                    <h2>Приглашение по ссылке</h2>
+                    <h2>{inviteLinkTitleText}</h2>
                     <div className={classes.inviteLinkRow}>
                       <input
                         className={classes.inviteLinkInput}
@@ -959,7 +1011,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         onClick={copyInviteLink}
                         disabled={!inviteLinkUrl || inviteLinkLoading}
                       >
-                        {inviteLinkCopied ? 'Скопировано!' : 'Скопировать'}
+                        {inviteLinkCopied ? copiedText : copyText}
                       </button>
                       <button
                         type="button"
@@ -967,7 +1019,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                         onClick={regenerateInviteLink}
                         disabled={inviteLinkLoading}
                       >
-                        Пересоздать
+                        {regenerateText}
                       </button>
                     </div>
                   </div>
@@ -982,27 +1034,27 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                           setParticipantsInnerView('friends');
                         }}
                       >
-                        Друзья
+                        {friendsText}
                       </button>
                       <button
                         type="button"
                         className={participantsInnerView === 'guests' ? classes.participantsInnerToggleActive : ''}
                         onClick={() => setParticipantsInnerView('guests')}
                       >
-                        Участники
+                        {participantsTabText}
                       </button>
                     </div>
 
                     {participantsInnerView === 'friends' ? (
                       <>
                         
-                        {!friendsLoading && friends.length === 0 ? <p className={classes.hint}>Список друзей пуст</p> : null}
+                        {!friendsLoading && friends.length === 0 ? <p className={classes.hint}>{emptyFriendsText}</p> : null}
                         {!friendsLoading && friends.length === 0 ? (
                           <Mainbtn
                             variant="mini"
                             kind="button"
                             type="button"
-                            text="Добавить друга"
+                            text={addFriendText}
                             onClick={() => {
                               close();
                               openFriendsModal('search');
@@ -1015,7 +1067,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                             className={classes.guestsSearchInput}
                             type="text"
                             value={friendsSearch}
-                            placeholder="Поиск по никнейму или юзернейму"
+                            placeholder={searchUsersPlaceholderText}
                             onChange={(e) => setFriendsSearch(e.target.value)}
                           />
                         ) : null}
@@ -1058,12 +1110,12 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                                    metaInitialLoading;
 
                                 const btnText = isParticipant
-                                  ? 'Участник'
+                                  ? participantText
                                   : inviteStatus === 'sent'
-                                    ? 'Отправлено'
+                                    ? sentText
                                     : inviteStatus === 'rejected'
-                                      ? 'Отклонено'
-                                      : 'Пригласить';
+                                      ? rejectedText
+                                      : inviteText;
 
                                 const btnClass = isParticipant
                                   ? classes.friendInviteBtnParticipant
@@ -1077,7 +1129,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                                   <div key={f.id} className={classes.friendRow}>
                                     <Link className={classes.friendInfo} to={`/user/${f.username}`}>
                                       <div className={classes.friendAvatar}>
-                                        {avatarSrc ? <img src={avatarSrc} alt={f.username} /> : <DefaultUser />}
+                                        <ImageWithFallback src={avatarSrc} alt={f.username} fallback={<DefaultUser />} />
                                       </div>
                                       <div className={classes.friendText}>
                                         <span className={classes.friendName}>{f.nickname || f.username}</span>
@@ -1118,7 +1170,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                           className={classes.guestsSearchInput}
                           type="text"
                           value={guestsSearch}
-                          placeholder="Поиск по никнейму или юзернейму"
+                          placeholder={searchUsersPlaceholderText}
                           onChange={(e) => setGuestsSearch(e.target.value)}
                         />
 
@@ -1166,14 +1218,14 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                                 metaInitialLoading;
 
                               const btnText = isOwnerRow
-                                ? 'Владелец'
+                                ? ownerText
                                 : isParticipant
-                                  ? 'Удалить'
+                                  ? removeText
                                   : inviteStatus === 'sent'
-                                    ? 'Отправлено'
+                                    ? sentText
                                     : inviteStatus === 'rejected'
-                                      ? 'Отклонено'
-                                      : 'Пригласить';
+                                      ? rejectedText
+                                      : inviteText;
 
                               const btnClass = isOwnerRow
                                 ? classes.friendInviteBtnParticipant
@@ -1189,7 +1241,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                                 <div key={p.id} id={`board-guests-${p.id}`} className={classes.friendRow}>
                                   <Link className={classes.friendInfo} to={`/user/${p.username}`}>
                                     <div className={classes.friendAvatar}>
-                                      {avatarSrc ? <img src={avatarSrc} alt={p.username} /> : <DefaultUser />}
+                                      <ImageWithFallback src={avatarSrc} alt={p.username} fallback={<DefaultUser />} />
                                     </div>
                                     <div className={classes.friendText}>
                                       <span className={classes.friendName}>{p.nickname || p.username}</span>
@@ -1222,7 +1274,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                                               onClick={() => void updateGuestRole(p, 'guest')}
                                               disabled={disabled}
                                             >
-                                              Гость
+                                              {guestText}
                                             </button>
                                             <button
                                               type="button"
@@ -1230,7 +1282,7 @@ const BoardSettingsModal: React.FC<BoardSettingsModalProps> = ({
                                               onClick={() => void updateGuestRole(p, 'editer')}
                                               disabled={disabled}
                                             >
-                                              Редактор
+                                              {editorText}
                                             </button>
                                           </div>,
                                         ]}

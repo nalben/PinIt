@@ -1,4 +1,6 @@
-const AUTH_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const { AUTH_TOKEN_TTL_DAYS } = require('./authSession');
+
+const AUTH_COOKIE_MAX_AGE_MS = AUTH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 const getAuthCookieBaseOptions = (req) => {
   const forwardedProto = req.headers['x-forwarded-proto'];

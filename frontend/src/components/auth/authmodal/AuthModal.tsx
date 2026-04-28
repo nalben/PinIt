@@ -13,6 +13,7 @@ interface AuthModalProps {
   overlayClassName?: string;
   modalClassName?: string;
   modalScope?: string;
+  modalRef?: React.Ref<HTMLDivElement>;
 }
 
 const AuthModal: React.FC<AuthModalProps> = ({
@@ -25,6 +26,7 @@ const AuthModal: React.FC<AuthModalProps> = ({
   overlayClassName,
   modalClassName,
   modalScope,
+  modalRef,
 }) => {
   useEffect(() => {
     if (isOpen) {
@@ -61,8 +63,10 @@ const AuthModal: React.FC<AuthModalProps> = ({
       onClick={handleOverlayClick}
     >
       <div
+        ref={modalRef}
         className={[classes.modal, modalClassName].filter(Boolean).join(' ')}
         data-modal-scope={modalScope}
+        data-modal-content-scope={modalScope}
         onClick={(e) => e.stopPropagation()}
       >
         {showCloseButton && (

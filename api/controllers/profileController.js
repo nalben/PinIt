@@ -1,19 +1,19 @@
 const db = require('../db');
-const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const fs = require('fs');
 const { resolveUploadsPath } = require('../utils/runtimePaths');
+const { getAuthCookieOptions } = require('../utils/authCookieOptions');
+const { signAuthToken } = require('../utils/authSession');
 
 /* ============================
    PUT /api/profile/me
 ============================ */
 exports.updateMe = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'Не авторизован' });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded.id;
+    const userId = Number(req.user?.id);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return res.status(401).json({ message: 'Не авторизован' });
+    }
 
     const { nickname, status } = req.body;
     let newAvatarPath = null;
@@ -59,7 +59,7 @@ exports.updateMe = async (req, res) => {
 
     await db.execute(
       `
-        UPDATE users 
+        UPDATE users
         SET nickname = ?, status = ?, avatar = COALESCE(?, avatar)
         WHERE id = ?
       `,
@@ -86,11 +86,10 @@ exports.updateMe = async (req, res) => {
 ============================ */
 exports.getMe = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'Не авторизован' });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const userId = decoded.id;
+    const userId = Number(req.user?.id);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return res.status(401).json({ message: 'Не авторизован' });
+    }
 
     const [rows] = await db.execute(
       'SELECT id, username, nickname, avatar, role, email, friend_code FROM users WHERE id = ?',
@@ -101,11 +100,20 @@ exports.getMe = async (req, res) => {
       return res.status(404).json({ message: 'Пользователь не найден' });
     }
 
-    res.json({
-      ...rows[0],
-      isOwner: true,
+    const user = rows[0];
+    const token = signAuthToken({
+      id: user.id,
+      username: user.username,
     });
-  } catch {
+
+    res.cookie('pinit_token', token, getAuthCookieOptions(req));
+    res.json({
+      ...user,
+      isOwner: true,
+      token,
+    });
+  } catch (err) {
+    console.error(err);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 };
@@ -115,11 +123,10 @@ exports.getMe = async (req, res) => {
 ============================ */
 exports.generateFriendCode = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'Не авторизован' });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-    const userId = decoded.id;
+    const userId = Number(req.user?.id);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return res.status(401).json({ message: 'Не авторизован' });
+    }
 
     const [rows] = await db.execute(
       'SELECT friend_code FROM users WHERE id = ?',
@@ -173,11 +180,10 @@ exports.generateFriendCode = async (req, res) => {
 ============================ */
 exports.regenerateFriendCode = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'Не авторизован' });
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-    const userId = decoded.id;
+    const userId = Number(req.user?.id);
+    if (!Number.isFinite(userId) || userId <= 0) {
+      return res.status(401).json({ message: 'Не авторизован' });
+    }
 
     const [rows] = await db.execute(
       'SELECT friend_code FROM users WHERE id = ?',
@@ -317,6 +323,7 @@ exports.getFriendsCount = async (req, res) => {
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 };
+
 exports.getFriendsByUsername = async (req, res) => {
   try {
     const { username } = req.params;

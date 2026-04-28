@@ -14,6 +14,7 @@ import Edit from '@/assets/icons/monochrome/edit.svg';
 import DeleteIcon from '@/assets/icons/monochrome/delete.svg';
 import classes from './Board.module.scss';
 import { getDetailsImageCropPreset } from '@/utils/imageCropPresets';
+import { useLanguageStore } from '@/store/languageStore';
 
 type CardDetailsSnapshot = {
   cardId: number;
@@ -97,7 +98,6 @@ const trimValue = (value: string | null | undefined) => String(value ?? '').repl
 const createDraftId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random()}`;
 const IMAGE_CAPTION_MAX_LENGTH = 70;
 const FACT_ITEM_MAX_LENGTH = 200;
-const IMAGE_BLOCK_TOO_LARGE_MESSAGE = 'Вес слишком большой — выберите изображение весом до 5 МБ.';
 const DETAILS_POLL_INTERVAL_MS = 10_000;
 const normalizeSingleLine = (value: string) => value.replace(/[\r\n]+/g, ' ');
 const shouldAddExtraSpacer = (node: HTMLTextAreaElement | null) => {
@@ -120,10 +120,61 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (typeof message === 'string' && message.trim()) return message;
   return fallback;
 };
+const CopyIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <rect x="9" y="9" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+    <path d="M7 15H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const MoveUpIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 6 6.5 11.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12 6 17.5 11.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12 18V6.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
+const MoveDownIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 18 6.5 12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12 18 17.5 12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12 6V17.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+  </svg>
+);
 
 export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps) => {
   const { canEditCards, isLoggedIn, selectedCardDetails } = props;
   const showTopAlarm = useUIStore((s) => s.showTopAlarm);
+  const language = useLanguageStore((state) => state.language);
+  const isEn = language === 'en';
+  const imageBlockTooLargeMessage = isEn ? 'The file is too large. Choose an image up to 5 MB.' : 'Вес слишком большой — выберите изображение весом до 5 МБ.';
+  const onlyImagesMessage = isEn ? 'Only image files can be uploaded.' : 'Можно загружать только изображения';
+  const deleteConfirmText = isEn ? 'Yes, delete' : 'Да, удалить';
+  const cancelText = isEn ? 'Cancel' : 'Отмена';
+  const descriptionText = isEn ? 'Description' : 'Описание';
+  const textPlaceholder = isEn ? 'Text' : 'Текст';
+  const factsTitle = isEn ? 'Facts' : 'Факты';
+  const factPlaceholder = isEn ? 'Fact' : 'Факт';
+  const newFactPlaceholder = isEn ? 'New fact' : 'Новый факт';
+  const checklistTitle = isEn ? 'Checklist' : 'Чеклист';
+  const taskPlaceholder = isEn ? 'Task' : 'Задача';
+  const newTaskPlaceholder = isEn ? 'New task' : 'Новая задача';
+  const emptyDetailsText = isEn ? 'Add notes from the menu at the bottom of the screen.' : 'Добавьте заметки в меню снизу экрана';
+  const moveBlockFailedText = isEn ? 'Failed to move block.' : 'Не удалось переместить блок';
+  const moveItemFailedText = isEn ? 'Failed to move item.' : 'Не удалось переместить пункт';
+  const saveTextBlockFailedText = isEn ? 'Failed to save text block.' : 'Не удалось сохранить текстовый блок';
+  const replaceImageFailedText = isEn ? 'Failed to replace block image.' : 'Не удалось заменить картинку блока';
+  const saveImageDescriptionFailedText = isEn ? 'Failed to save image description.' : 'Не удалось сохранить описание картинки';
+  const saveFactFailedText = isEn ? 'Failed to save fact.' : 'Не удалось сохранить факт';
+  const deleteFactFailedText = isEn ? 'Failed to delete fact.' : 'Не удалось удалить факт';
+  const saveTaskFailedText = isEn ? 'Failed to save task.' : 'Не удалось сохранить задачу';
+  const updateTaskFailedText = isEn ? 'Failed to update task.' : 'Не удалось обновить задачу';
+  const deleteTaskFailedText = isEn ? 'Failed to delete task.' : 'Не удалось удалить задачу';
+  const textCopiedText = isEn ? 'Text copied.' : 'Текст скопирован.';
+  const factCopiedText = isEn ? 'Fact copied.' : 'Факт скопирован.';
+  const taskCopiedText = isEn ? 'Task copied.' : 'Задача скопирована.';
+  const copyTextFailedText = isEn ? 'Failed to copy text.' : 'Не удалось скопировать текст.';
+  const copyFactFailedText = isEn ? 'Failed to copy fact.' : 'Не удалось скопировать факт.';
+  const copyTaskFailedText = isEn ? 'Failed to copy task.' : 'Не удалось скопировать задачу.';
   const [details, setDetails] = useState<CardDetailsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [draftBlocks, setDraftBlocks] = useState<DraftBlock[]>([]);
@@ -153,6 +204,62 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
   const checklistInputRefs = useRef<Record<number, HTMLTextAreaElement | null>>({});
   const socketReloadInFlightRef = useRef(false);
   const pollInFlightRef = useRef(false);
+
+  const copyTextToClipboard = async (text: string, successMessage: string, errorMessage: string) => {
+    const normalized = text.trim();
+    if (!normalized) {
+      showTopAlarm(errorMessage);
+      return;
+    }
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(normalized);
+      } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = normalized;
+        textarea.style.position = 'fixed';
+        textarea.style.top = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+
+        const copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+        if (!copied) throw new Error('copy failed');
+      }
+
+      showTopAlarm(successMessage);
+    } catch {
+      showTopAlarm(errorMessage);
+    }
+  };
+
+  const moveDetailsBlock = async (blockId: number, direction: 'up' | 'down') => {
+    if (!canEditCards || !isLoggedIn) return;
+    try {
+      const { data } = await axiosInstance.patch<CardDetailsResponse>(
+        `${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/order`,
+        { direction }
+      );
+      reloadFromResponse(data);
+    } catch (error) {
+      showTopAlarm(getApiErrorMessage(error, moveBlockFailedText));
+    }
+  };
+
+  const moveDetailsItem = async (blockId: number, itemId: number, direction: 'up' | 'down') => {
+    if (!canEditCards || !isLoggedIn) return;
+    try {
+      const { data } = await axiosInstance.patch<CardDetailsResponse>(
+        `${buildDetailsPath(selectedCardDetails, true)}/blocks/${blockId}/items/${itemId}/order`,
+        { direction }
+      );
+      reloadFromResponse(data);
+    } catch (error) {
+      showTopAlarm(getApiErrorMessage(error, moveItemFailedText));
+    }
+  };
 
   useEffect(() => {
     if (editingCaptionBlockId !== null) return;
@@ -409,7 +516,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       });
       reloadFromResponse(data);
     } catch (error) {
-      showTopAlarm(getApiErrorMessage(error, 'Не удалось сохранить текстовый блок'));
+      showTopAlarm(getApiErrorMessage(error, saveTextBlockFailedText));
     } finally {
       setEditingTextBlockId(null);
     }
@@ -443,7 +550,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       });
       reloadFromResponse(data);
     } catch (error) {
-      const message = getApiErrorMessage(error, 'Не удалось заменить картинку блока');
+      const message = getApiErrorMessage(error, replaceImageFailedText);
       const normalizedMessage = message.toLowerCase();
       if (
         normalizedMessage.includes('5mb') ||
@@ -452,7 +559,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
         normalizedMessage.includes('too large') ||
         normalizedMessage.includes('file too large')
       ) {
-        showTopAlarm(IMAGE_BLOCK_TOO_LARGE_MESSAGE);
+        showTopAlarm(imageBlockTooLargeMessage);
         return;
       }
       showTopAlarm(message);
@@ -468,7 +575,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     }
 
     if (!file.type.startsWith('image/')) {
-      showTopAlarm('Можно загружать только изображения');
+      showTopAlarm(onlyImagesMessage);
       if (target?.kind === 'draft') {
         removeDraftBlock(target.draftId);
       }
@@ -476,7 +583,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      showTopAlarm(IMAGE_BLOCK_TOO_LARGE_MESSAGE);
+      showTopAlarm(imageBlockTooLargeMessage);
       if (target?.kind === 'draft') {
         removeDraftBlock(target.draftId);
       }
@@ -522,7 +629,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       });
       reloadFromResponse(data);
     } catch (error) {
-      showTopAlarm(getApiErrorMessage(error, 'Не удалось сохранить описание картинки'));
+      showTopAlarm(getApiErrorMessage(error, saveImageDescriptionFailedText));
     } finally {
       setEditingCaptionBlockId(null);
       setEditingCaptionValue('');
@@ -570,7 +677,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       );
       reloadFromResponse(data);
     } catch (error) {
-      showTopAlarm(getApiErrorMessage(error, 'Не удалось сохранить факт'));
+      showTopAlarm(getApiErrorMessage(error, saveFactFailedText));
     } finally {
       setEditingFactItemId(null);
     }
@@ -601,7 +708,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       setConfirmDeleteFactItemId(null);
       reloadFromResponse(data);
     } catch (error) {
-      showTopAlarm(getApiErrorMessage(error, 'Не удалось удалить факт'));
+      showTopAlarm(getApiErrorMessage(error, deleteFactFailedText));
     }
   };
 
@@ -648,7 +755,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       );
       reloadFromResponse(data);
     } catch (error) {
-      showTopAlarm(getApiErrorMessage(error, 'Не удалось сохранить задачу'));
+      showTopAlarm(getApiErrorMessage(error, saveTaskFailedText));
     } finally {
       setEditingChecklistItemId(null);
     }
@@ -679,7 +786,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       );
       reloadFromResponse(data);
     } catch (error) {
-      showTopAlarm(getApiErrorMessage(error, 'Не удалось обновить задачу'));
+      showTopAlarm(getApiErrorMessage(error, updateTaskFailedText));
     }
   };
 
@@ -692,7 +799,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
       setConfirmDeleteChecklistItemId(null);
       reloadFromResponse(data);
     } catch (error) {
-      showTopAlarm(getApiErrorMessage(error, 'Не удалось удалить задачу'));
+      showTopAlarm(getApiErrorMessage(error, deleteTaskFailedText));
     }
   };
 
@@ -784,22 +891,28 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                               type="button"
                               className={classes.image_block_icon_btn}
                               onClick={() => setConfirmDeleteBlockId((prev) => (prev === block.id ? null : block.id))}
-                              aria-label="Удалить блок картинки"
+                              aria-label={isEn ? 'Delete image block' : 'Удалить блок картинки'}
                             >
                               <DeleteIcon />
                             </button>,
                             <div key="menu">
                               <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteDetailsBlock(block.id)}>
-                                Да, удалить
+                                {deleteConfirmText}
                               </button>
                               <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setConfirmDeleteBlockId(null)}>
-                                Отмена
+                                {cancelText}
                               </button>
                             </div>,
                           ]}
                         </DropdownWrapper>
+                        <button type="button" className={classes.image_block_icon_btn} onClick={() => void moveDetailsBlock(block.id, 'up')} aria-label={isEn ? 'Move image block up' : 'Поднять блок картинки'}>
+                          <MoveUpIcon />
+                        </button>
+                        <button type="button" className={classes.image_block_icon_btn} onClick={() => void moveDetailsBlock(block.id, 'down')} aria-label={isEn ? 'Move image block down' : 'Опустить блок картинки'}>
+                          <MoveDownIcon />
+                        </button>
                         {__PLATFORM__ !== 'desktop' ? (
-                          <button type="button" className={classes.image_block_icon_btn} onClick={() => imageBlockInputRefs.current[block.id]?.click()} aria-label="Изменить картинку блока">
+                          <button type="button" className={classes.image_block_icon_btn} onClick={() => imageBlockInputRefs.current[block.id]?.click()} aria-label={isEn ? 'Change block image' : 'Изменить картинку блока'}>
                             <Edit />
                           </button>
                         ) : null}
@@ -809,7 +922,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                           type="button"
                           className={`${classes.image_block_edit_center} ${isDeleteConfirmOpen ? classes.image_block_edit_center_open : ''}`.trim()}
                           onClick={() => imageBlockInputRefs.current[block.id]?.click()}
-                          aria-label="Изменить картинку блока"
+                          aria-label={isEn ? 'Change block image' : 'Изменить картинку блока'}
                         >
                           <Edit />
                         </button>
@@ -855,7 +968,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                     <textarea
                       className={`${classes.image_block_caption} ${classes.image_block_caption_editing}`.trim()}
                       value={editingCaptionValue}
-                      placeholder="Описание"
+                      placeholder={descriptionText}
                       rows={1}
                       autoFocus
                       ref={(node) => {
@@ -895,13 +1008,13 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                       }}
                     />
                   ) : (
-                    <span className={classes.image_block_caption}>{savedCaption || 'Описание'}</span>
+                    <span className={classes.image_block_caption}>{savedCaption || descriptionText}</span>
                   )}
                   {canEditCards && isLoggedIn && !isCaptionEditing ? (
                     <button
                       type="button"
                       className={classes.image_block_caption_edit_btn}
-                      aria-label="Изменить описание картинки"
+                      aria-label={isEn ? 'Edit image description' : 'Изменить описание картинки'}
                       onClick={() => {
                         setEditingCaptionBlockId(block.id);
                         setEditingCaptionValue(savedCaption);
@@ -929,7 +1042,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                     className={classes.text_block_textarea}
                     defaultValue={block.content}
                     autoFocus
-                    placeholder="Текст"
+                    placeholder={textPlaceholder}
                     onInput={(event) => {
                       const target = event.currentTarget;
                       autosizeTextarea(target, shouldAddExtraSpacer(target));
@@ -960,7 +1073,31 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                         <button
                           type="button"
                           className={classes.text_block_edit_btn}
-                          aria-label="Изменить текстовый блок"
+                          aria-label={isEn ? 'Move text block up' : 'Поднять текстовый блок'}
+                          onClick={() => void moveDetailsBlock(block.id, 'up')}
+                        >
+                          <MoveUpIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className={classes.text_block_edit_btn}
+                          aria-label={isEn ? 'Move text block down' : 'Опустить текстовый блок'}
+                          onClick={() => void moveDetailsBlock(block.id, 'down')}
+                        >
+                          <MoveDownIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className={classes.text_block_edit_btn}
+                          aria-label={isEn ? 'Copy text block' : 'Скопировать текстовый блок'}
+                          onClick={() => void copyTextToClipboard(block.content, textCopiedText, copyTextFailedText)}
+                        >
+                          <CopyIcon />
+                        </button>
+                        <button
+                          type="button"
+                          className={classes.text_block_edit_btn}
+                          aria-label={isEn ? 'Edit text block' : 'Изменить текстовый блок'}
                           onClick={() => {
                             setEditingTextBlockId(block.id);
                             window.requestAnimationFrame(() => {
@@ -980,17 +1117,17 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                               key="trigger"
                               type="button"
                               className={classes.text_block_edit_btn}
-                              aria-label="Удалить текстовый блок"
+                              aria-label={isEn ? 'Delete text block' : 'Удалить текстовый блок'}
                               onClick={() => setConfirmDeleteBlockId((prev) => (prev === block.id ? null : block.id))}
                             >
                               <DeleteIcon />
                             </button>,
                             <div key="menu">
                               <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteDetailsBlock(block.id)}>
-                                Да, удалить
+                                {deleteConfirmText}
                               </button>
                               <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setConfirmDeleteBlockId(null)}>
-                                Отмена
+                                {cancelText}
                               </button>
                             </div>,
                           ]}
@@ -1007,6 +1144,19 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
             const draftValue = factDraftValues[block.id] ?? '';
             return (
               <div key={block.id} className={classes.facts_block}>
+                {canEditCards && isLoggedIn ? (
+                  <div className={classes.details_block_header}>
+                    <span className={classes.details_block_title}>{factsTitle}</span>
+                    <span className={classes.text_block_actions}>
+                      <button type="button" className={classes.text_block_edit_btn} aria-label={isEn ? 'Move facts block up' : 'Поднять блок фактов'} onClick={() => void moveDetailsBlock(block.id, 'up')}>
+                        <MoveUpIcon />
+                      </button>
+                      <button type="button" className={classes.text_block_edit_btn} aria-label={isEn ? 'Move facts block down' : 'Опустить блок фактов'} onClick={() => void moveDetailsBlock(block.id, 'down')}>
+                        <MoveDownIcon />
+                      </button>
+                    </span>
+                  </div>
+                ) : null}
                 {block.items.map((item) => {
                   const isFactEditing = editingFactItemId === item.id;
                   const isDeleteConfirmOpen = confirmDeleteFactItemId === item.id;
@@ -1017,7 +1167,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                           className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                           value={editingFactValue}
                           autoFocus
-                          placeholder="Факт"
+                          placeholder={factPlaceholder}
                           rows={1}
                           maxLength={FACT_ITEM_MAX_LENGTH}
                           ref={(node) => autosizeTextarea(node)}
@@ -1058,7 +1208,31 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                           <button
                             type="button"
                             className={classes.text_block_edit_btn}
-                            aria-label="Изменить факт"
+                            aria-label={isEn ? 'Move fact up' : 'Поднять факт'}
+                            onClick={() => void moveDetailsItem(block.id, item.id, 'up')}
+                          >
+                            <MoveUpIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className={classes.text_block_edit_btn}
+                            aria-label={isEn ? 'Move fact down' : 'Опустить факт'}
+                            onClick={() => void moveDetailsItem(block.id, item.id, 'down')}
+                          >
+                            <MoveDownIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className={classes.text_block_edit_btn}
+                            aria-label={isEn ? 'Copy fact' : 'Скопировать факт'}
+                            onClick={() => void copyTextToClipboard(item.content, factCopiedText, copyFactFailedText)}
+                          >
+                            <CopyIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className={classes.text_block_edit_btn}
+                            aria-label={isEn ? 'Edit fact' : 'Изменить факт'}
                             onClick={() => {
                               setEditingFactItemId(item.id);
                               setEditingFactValue(item.content.slice(0, FACT_ITEM_MAX_LENGTH));
@@ -1072,17 +1246,17 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                                 key="trigger"
                                 type="button"
                                 className={classes.text_block_edit_btn}
-                                aria-label="Удалить факт"
+                                aria-label={isEn ? 'Delete fact' : 'Удалить факт'}
                                 onClick={() => setConfirmDeleteFactItemId((prev) => (prev === item.id ? null : item.id))}
                               >
                                 <DeleteIcon />
                               </button>,
                               <div key="menu">
                                 <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteFactItem(block.id, item.id)}>
-                                  Да, удалить
+                                  {deleteConfirmText}
                                 </button>
                                 <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setConfirmDeleteFactItemId(null)}>
-                                  Отмена
+                                  {cancelText}
                                 </button>
                               </div>,
                             ]}
@@ -1101,7 +1275,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                       }}
                       className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                       value={draftValue}
-                      placeholder="Новый факт"
+                      placeholder={newFactPlaceholder}
                       rows={1}
                       maxLength={FACT_ITEM_MAX_LENGTH}
                       onChange={(event) => {
@@ -1133,6 +1307,19 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
 
           return (
             <div key={block.id} className={classes.checklist_block}>
+              {canEditCards && isLoggedIn ? (
+                <div className={classes.details_block_header}>
+                  <span className={classes.details_block_title}>{checklistTitle}</span>
+                  <span className={classes.text_block_actions}>
+                    <button type="button" className={classes.text_block_edit_btn} aria-label={isEn ? 'Move checklist block up' : 'Поднять блок чеклиста'} onClick={() => void moveDetailsBlock(block.id, 'up')}>
+                      <MoveUpIcon />
+                    </button>
+                    <button type="button" className={classes.text_block_edit_btn} aria-label={isEn ? 'Move checklist block down' : 'Опустить блок чеклиста'} onClick={() => void moveDetailsBlock(block.id, 'down')}>
+                      <MoveDownIcon />
+                    </button>
+                  </span>
+                </div>
+              ) : null}
               {block.items.map((item) => {
                 const isChecklistEditing = editingChecklistItemId === item.id;
                 const isDeleteConfirmOpen = confirmDeleteChecklistItemId === item.id;
@@ -1154,7 +1341,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                           className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                           value={editingChecklistValue}
                           autoFocus
-                          placeholder="Задача"
+                          placeholder={taskPlaceholder}
                           rows={1}
                           maxLength={FACT_ITEM_MAX_LENGTH}
                           ref={(node) => autosizeTextarea(node)}
@@ -1199,7 +1386,37 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                           <button
                             type="button"
                             className={classes.text_block_edit_btn}
-                            aria-label="Изменить задачу"
+                            aria-label={isEn ? 'Move task up' : 'Поднять задачу'}
+                            onClick={() => void moveDetailsItem(block.id, item.id, 'up')}
+                          >
+                            <MoveUpIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className={classes.text_block_edit_btn}
+                            aria-label={isEn ? 'Move task down' : 'Опустить задачу'}
+                            onClick={() => void moveDetailsItem(block.id, item.id, 'down')}
+                          >
+                            <MoveDownIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className={classes.text_block_edit_btn}
+                            aria-label={isEn ? 'Copy task' : 'Скопировать задачу'}
+                            onClick={() =>
+                              void copyTextToClipboard(
+                                `${Boolean(item.is_checked) ? '[x]' : '[ ]'} ${item.content}`,
+                                taskCopiedText,
+                                copyTaskFailedText
+                              )
+                            }
+                          >
+                            <CopyIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className={classes.text_block_edit_btn}
+                            aria-label={isEn ? 'Edit task' : 'Изменить задачу'}
                             onClick={() => {
                               setEditingChecklistItemId(item.id);
                               setEditingChecklistValue(item.content.slice(0, FACT_ITEM_MAX_LENGTH));
@@ -1213,17 +1430,17 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                                 key="trigger"
                                 type="button"
                                 className={classes.text_block_edit_btn}
-                                aria-label="Удалить задачу"
+                                aria-label={isEn ? 'Delete task' : 'Удалить задачу'}
                                 onClick={() => setConfirmDeleteChecklistItemId((prev) => (prev === item.id ? null : item.id))}
                               >
                                 <DeleteIcon />
                               </button>,
                               <div key="menu">
                                 <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => void deleteChecklistItem(block.id, item.id)}>
-                                  Да, удалить
+                                  {deleteConfirmText}
                                 </button>
                                 <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setConfirmDeleteChecklistItemId(null)}>
-                                  Отмена
+                                  {cancelText}
                                 </button>
                               </div>,
                             ]}
@@ -1247,7 +1464,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                     }}
                     className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                     value={checklistDraftValues[block.id] ?? ''}
-                    placeholder="Новая задача"
+                    placeholder={newTaskPlaceholder}
                     rows={1}
                     maxLength={FACT_ITEM_MAX_LENGTH}
                     onChange={(event) => {
@@ -1285,7 +1502,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   className={classes.details_textarea}
                   value={draft.value}
                   autoFocus
-                  placeholder="Текст"
+                  placeholder={textPlaceholder}
                   onKeyDown={(event) => {
                     if (__PLATFORM__ === 'desktop' && event.key === 'Enter' && !event.shiftKey) {
                       event.preventDefault();
@@ -1337,7 +1554,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                   className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                   value={value}
                   autoFocus
-                  placeholder="Новый факт"
+                  placeholder={newFactPlaceholder}
                   rows={1}
                   maxLength={FACT_ITEM_MAX_LENGTH}
                   onKeyDown={(event) => {
@@ -1377,7 +1594,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
                     className={`${classes.details_inline_textarea} ${classes.details_inline_textarea_editing}`.trim()}
                     value={value}
                     autoFocus
-                    placeholder="Новая задача"
+                    placeholder={newTaskPlaceholder}
                     rows={1}
                     maxLength={FACT_ITEM_MAX_LENGTH}
                     onKeyDown={(event) => {
@@ -1408,7 +1625,7 @@ export const BoardRightMenuCardDetails = (props: BoardRightMenuCardDetailsProps)
           return null;
         })}
 
-        {!loading && !blocks.length && !draftBlocks.length ? <div className={classes.details_empty}>Добавьте заметки в меню снизу экрана</div> : null}
+        {!loading && !blocks.length && !draftBlocks.length ? <div className={classes.details_empty}>{emptyDetailsText}</div> : null}
       </div>
 
       {canEditCards && isLoggedIn ? (

@@ -37,6 +37,7 @@ export type SelectedLinkDraft = {
   fromCardId: number;
   toCardId: number;
   style: FlowLinkStyle;
+  color: string;
   label: string;
   isLabelVisible: boolean;
   fromTitle?: string | null;
@@ -66,6 +67,7 @@ export type FlowCardSettingsSnapshot = {
   isLocked: boolean;
   imageSrc: string | null;
   color: string | null;
+  tags: string[];
 };
 
 interface UIState {
@@ -345,6 +347,7 @@ export const useUIStore = create<UIState>((set, get) => {
         fromCardId: snapshot.fromCardId,
         toCardId: snapshot.toCardId,
         style: snapshot.style,
+        color: snapshot.color,
         label: snapshot.label ?? '',
         isLabelVisible: Boolean(snapshot.isLabelVisible),
         fromTitle: snapshot.fromTitle ?? null,
@@ -437,6 +440,7 @@ export const useUIStore = create<UIState>((set, get) => {
           isLocked: snapshot.isLocked,
           imageSrc: snapshot.imageSrc,
           color: snapshot.color,
+          tags: snapshot.tags,
         },
         restoreBoardMenuAfterFlowCardSettings:
           s.flowCardSettingsOpen

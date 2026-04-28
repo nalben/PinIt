@@ -25,8 +25,8 @@ export const buildEdgeFromLink = (l: ApiCardLink): Edge => ({
   target: String(l.to_card_id),
   type: 'flowStraight',
   className: 'flow_edge',
-  style: { stroke: 'var(--pink)', strokeWidth: 2 },
-  markerEnd: l.style === 'arrow' ? { type: MarkerType.ArrowClosed, color: 'var(--pink)' } : undefined,
+  style: { stroke: l.color, strokeWidth: 2 },
+  markerEnd: l.style === 'arrow' ? { type: MarkerType.ArrowClosed, color: l.color } : undefined,
   data: {
     linkId: l.id,
     fromCardId: l.from_card_id,

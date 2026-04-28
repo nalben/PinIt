@@ -6,7 +6,8 @@ import * as yup from "yup";
 import axios from "axios";
 import { API_URL } from '@/api/axiosInstance';
 import classes from "./ResetPasswordForm.module.scss";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { useLanguageStore } from '@/store/languageStore';
 
 interface ResetPasswordFormProps {
   onClose: () => void;
@@ -40,26 +41,26 @@ interface SetNewPasswordResponse {
   id: number;
 }
 
-const Step1Schema = yup.object({
+const createStep1Schema = (isEn: boolean) => yup.object({
   username: yup.string().when("inputType", {
     is: "username",
-    then: (schema) => schema.required("Введите логин"),
+    then: (schema) => schema.required(isEn ? "Enter username" : "Введите логин"),
     otherwise: (schema) => schema.notRequired(),
   }),
-  email: yup.string().email("Введите корректный email").when("inputType", {
+  email: yup.string().email(isEn ? "Enter a valid email" : "Введите корректный email").when("inputType", {
     is: "email",
-    then: (schema) => schema.required("Введите email"),
+    then: (schema) => schema.required(isEn ? "Enter email" : "Введите email"),
     otherwise: (schema) => schema.notRequired(),
   }),
   inputType: yup.mixed<"username" | "email">().oneOf(["username", "email"]).required(),
 });
 
-const PasswordSchema: yup.ObjectSchema<Step3Data> = yup.object({
-  password: yup.string().min(6, "Минимум 6 символов").required("Обязательное поле"),
+const createPasswordSchema = (isEn: boolean): yup.ObjectSchema<Step3Data> => yup.object({
+  password: yup.string().min(6, isEn ? "Minimum 6 characters" : "Минимум 6 символов").required(isEn ? "Required field" : "Обязательное поле"),
   confirmPassword: yup
     .string()
-    .oneOf([yup.ref("password")], "Пароли не совпадают")
-    .required("Обязательное поле"),
+    .oneOf([yup.ref("password")], isEn ? "Passwords do not match" : "Пароли не совпадают")
+    .required(isEn ? "Required field" : "Обязательное поле"),
 });
 
 const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialStep = 1, initialUsername }) => {
@@ -69,8 +70,11 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
   const [maskedEmail, setMaskedEmail] = useState("");
   const [emailValue, setEmailValue] = useState("");
   const [inputType, setInputType] = useState<"username" | "email">("username");
+  const language = useLanguageStore((state) => state.language);
+  const isEn = language === 'en';
+  const step1Schema = createStep1Schema(isEn);
+  const passwordSchema = createPasswordSchema(isEn);
 
-  const navigate = useNavigate();
   const location = useLocation();
 
   const {
@@ -82,7 +86,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
     watch: watchStep1,
   } = useForm<Step1Data>({
     mode: "onBlur",
-    resolver: yupResolver(Step1Schema) as any,
+    resolver: yupResolver(step1Schema) as any,
     defaultValues: { username: "", email: "", inputType: "username" },
   });
 
@@ -100,15 +104,14 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
       setValue("username", "");
       clearErrors("username");
     }
-  }, [inputType]);
+  }, [clearErrors, inputType, setValue]);
 
-  // Если сразу открываем Step2 по username
   useEffect(() => {
-  if (initialStep === 2 && initialUsername) {
+    if (initialStep !== 2 || !initialUsername) return;
+
     const fetchEmailAndSendCode = async () => {
       try {
         setLoading(true);
-        // Получаем email по username
         const res = await axios.post<CheckResetUserResponse>(`${API_URL}/api/auth/check-reset-user`, {
           inputType: "username",
           username: initialUsername
@@ -116,20 +119,16 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
 
         setEmailValue(res.data.email);
         setMaskedEmail(res.data.maskedEmail);
-
-        // Отправляем код на email
         await axios.post(`${API_URL}/api/auth/send-reset-code`, { email: res.data.email });
-
       } catch (err: any) {
-        setError(err?.response?.data?.message || "Ошибка сервера");
+        setError(err?.response?.data?.message || (isEn ? "Server error" : "Ошибка сервера"));
       } finally {
         setLoading(false);
       }
     };
-    fetchEmailAndSendCode();
-  }
-}, [initialStep, initialUsername]);
 
+    void fetchEmailAndSendCode();
+  }, [initialStep, initialUsername, isEn]);
 
   useEffect(() => {
     if (!error) return;
@@ -157,7 +156,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
 
       setStep(2);
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Ошибка сервера");
+      setError(err?.response?.data?.message || (isEn ? "Server error" : "Ошибка сервера"));
     } finally {
       setLoading(false);
     }
@@ -178,7 +177,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
 
       setStep(3);
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Неверный код");
+      setError(err?.response?.data?.message || (isEn ? "Invalid code" : "Неверный код"));
     } finally {
       setLoading(false);
     }
@@ -186,7 +185,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
 
   const { register: regStep3, handleSubmit: submitStep3, watch: watchStep3, formState: { errors: errorsStep3 } } =
     useForm<Step3Data>({
-      resolver: yupResolver(PasswordSchema) as any,
+      resolver: yupResolver(passwordSchema) as any,
       mode: "onBlur",
       defaultValues: { password: "", confirmPassword: "" },
     });
@@ -217,7 +216,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
         window.location.reload();
       }
     } catch (err: any) {
-      setError(err?.response?.data?.message || "Ошибка сервера");
+      setError(err?.response?.data?.message || (isEn ? "Server error" : "Ошибка сервера"));
     } finally {
       setLoading(false);
     }
@@ -229,7 +228,7 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
     <div className={`${classes.resetForm} ${classes.form_con_reset}`}>
       {step === 1 && (
         <form onSubmit={submitStep1(handleStep1)} noValidate className={`${classes.form1} ${classes.form_con_reset}`}>
-          <h2>Восстановление пароля</h2>
+          <h2>{isEn ? 'Reset password' : 'Восстановление пароля'}</h2>
 
           <div className={classes.toggleButtons}>
             <button
@@ -237,14 +236,14 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
               className={inputType === "username" ? classes.active : "toggle_active_reset"}
               onClick={() => handleToggle("username")}
             >
-              Логин
+              {isEn ? 'Username' : 'Логин'}
             </button>
             <button
               type="button"
               className={inputType === "email" ? classes.active : "toggle_active_reset"}
               onClick={() => handleToggle("email")}
             >
-              Почта
+              {isEn ? 'Email' : 'Почта'}
             </button>
           </div>
 
@@ -252,11 +251,11 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
 
           {inputType === "username" && (
             <div className={classes.form_item_row}>
-              <label>Логин</label>
+              <label>{isEn ? 'Username' : 'Логин'}</label>
               <input
                 type="text"
                 {...regStep1("username")}
-                placeholder="Введите логин"
+                placeholder={isEn ? 'Enter username' : 'Введите логин'}
                 className={errorsStep1.username ? "error" : ""}
               />
               {errorsStep1.username && <p className={classes.error}>{errorsStep1.username.message}</p>}
@@ -265,11 +264,11 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
 
           {inputType === "email" && (
             <div className={classes.form_item_row}>
-              <label>Почта</label>
+              <label>{isEn ? 'Email' : 'Почта'}</label>
               <input
                 type="text"
                 {...regStep1("email")}
-                placeholder="Введите адрес электронной почты"
+                placeholder={isEn ? 'Enter email address' : 'Введите адрес электронной почты'}
                 className={errorsStep1.email ? "error" : ""}
               />
               {errorsStep1.email && <p className={classes.error}>{errorsStep1.email.message}</p>}
@@ -279,39 +278,39 @@ const ResetPasswordForm: React.FC<ResetPasswordFormProps> = ({ onClose, initialS
           {error && <p className={classes.error}>{error}</p>}
 
           <button type="submit" disabled={loading || !canSubmitStep1} className={classes.form_item_button}>
-            {loading ? "Отправка..." : "Далее"}
+            {loading ? (isEn ? "Sending..." : "Отправка...") : (isEn ? "Next" : "Далее")}
           </button>
         </form>
       )}
 
       {step === 2 && (
         <form onSubmit={submitStep2(handleStep2)} className={`${classes.form2} ${classes.form_con_reset}`}>
-          <h2>Введите код с почты</h2>
-          <p>Код отправлен на почту {maskedEmail}</p>
+          <h2>{isEn ? 'Enter email code' : 'Введите код с почты'}</h2>
+          <p>{isEn ? `Code sent to ${maskedEmail}` : `Код отправлен на почту ${maskedEmail}`}</p>
           <div className={classes.form_item_row}>
-            <input type="text" {...regStep2("code")} placeholder="Введите код" autoComplete="off" />
+            <input type="text" {...regStep2("code")} placeholder={isEn ? 'Enter code' : 'Введите код'} autoComplete="off" />
           </div>
           {error && <p className={classes.error}>{error}</p>}
           <button type="submit" disabled={loading || !canSubmitStep2} className={classes.form_item_button}>
-            {loading ? "Проверка..." : "Далее"}
+            {loading ? (isEn ? "Checking..." : "Проверка...") : (isEn ? "Next" : "Далее")}
           </button>
         </form>
       )}
 
       {step === 3 && (
         <form onSubmit={submitStep3(handleStep3)} className={classes.form_con_reset}>
-          <h2>Введите новый пароль</h2>
+          <h2>{isEn ? 'Set new password' : 'Введите новый пароль'}</h2>
           <div className={classes.form_item_row}>
-            <input type="password" {...regStep3("password")} placeholder="Новый пароль" autoComplete="off" />
+            <input type="password" {...regStep3("password")} placeholder={isEn ? 'New password' : 'Новый пароль'} autoComplete="off" />
             {errorsStep3.password && <p className={classes.error}>{errorsStep3.password.message}</p>}
           </div>
           <div className={classes.form_item_row}>
-            <input type="password" {...regStep3("confirmPassword")} placeholder="Подтвердите пароль" autoComplete="off" />
+            <input type="password" {...regStep3("confirmPassword")} placeholder={isEn ? 'Confirm password' : 'Подтвердите пароль'} autoComplete="off" />
             {errorsStep3.confirmPassword && <p className={classes.error}>{errorsStep3.confirmPassword.message}</p>}
           </div>
           {error && <p className={classes.error}>{error}</p>}
           <button type="submit" disabled={loading || !canSubmitStep3} className={classes.form_item_button}>
-            {loading ? "Сохранение..." : "Сменить пароль"}
+            {loading ? (isEn ? "Saving..." : "Сохранение...") : (isEn ? "Change password" : "Сменить пароль")}
           </button>
         </form>
       )}

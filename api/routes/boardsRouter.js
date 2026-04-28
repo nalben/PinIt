@@ -92,9 +92,11 @@ router.delete('/:board_id/cards/favorite-colors/:color', boardsController.delete
 router.get('/:board_id/cards/:card_id/details', boardsController.getCardDetails);
 router.post('/:board_id/cards/:card_id/details/blocks', maybeUploadSingleImage, boardsController.createCardDetailsBlock);
 router.patch('/:board_id/cards/:card_id/details/blocks/:block_id', maybeUploadSingleImage, boardsController.updateCardDetailsBlock);
+router.patch('/:board_id/cards/:card_id/details/blocks/:block_id/order', boardsController.reorderCardDetailsBlock);
 router.delete('/:board_id/cards/:card_id/details/blocks/:block_id', boardsController.deleteCardDetailsBlock);
 router.post('/:board_id/cards/:card_id/details/blocks/:block_id/items', boardsController.createCardDetailsBlockItem);
 router.patch('/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id', boardsController.updateCardDetailsBlockItem);
+router.patch('/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id/order', boardsController.reorderCardDetailsBlockItem);
 router.delete('/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id', boardsController.deleteCardDetailsBlockItem);
 router.patch('/:board_id/cards/:card_id', boardsController.updateCard);
 router.patch('/:board_id/cards/:card_id/lock', boardsController.updateCardLock);

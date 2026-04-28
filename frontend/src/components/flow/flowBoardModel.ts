@@ -6,6 +6,7 @@ export type FlowNodeData = {
   imageSrc: string | null;
   color: string | null;
   isLocked: boolean;
+  tags: string[];
   imageLoaded?: boolean;
 };
 
@@ -18,6 +19,7 @@ export type ApiCard = {
   image_path: string | null;
   color: string | null;
   is_locked: number | boolean | null;
+  tags?: string[] | null;
   x: number;
   y: number;
   created_at: string;

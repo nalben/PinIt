@@ -1590,3 +1590,26 @@ Update (2026-04-13, laptop deploy script)
 
 - Added `scripts/deploy-laptop.sh` for the Ubuntu laptop deployment flow.
 - The script runs, in order: `git pull --ff-only` at repo root, `npm install` in `api/`, `npm install` in `frontend/`, `npm run build:prod` in `frontend/`, `pm2 restart all`, and `sudo systemctl restart nginx`.
+
+Update (2026-04-27)
+
+- Authenticated link update endpoint `PATCH /api/boards/:board_id/links/:link_id` now also validates and updates `cardlinks.color` together with `style`, `label`, and `is_label_visible`.
+- `frontend/src/components/flow/flowBoardUtils.ts` now renders board links with the persisted `cardlinks.color` for both edge stroke and arrow marker color.
+- `frontend/src/components/flow/FlowBoard.tsx` now derives the initial color of a newly created link from the source card color when available; otherwise it falls back to `DEFAULT_CARD_PICKER_COLOR`.
+- `frontend/src/pages/board/Board.tsx` + `frontend/src/pages/board/BoardRightMenu.tsx` now expose a link-color picker in the right-menu inspector and reuse the existing preset / board-used / favorite color sources.
+- Added shared auth-session helper `api/utils/authSession.js`; auth JWT/cookie lifetime is now 365 days and both `api/controllers/authController.js` and `api/controllers/profileController.js` use the same signer/options flow.
+- `GET /api/profile/me` is now protected by `authMiddleware`, refreshes the `pinit_token` cookie, and returns a fresh `token` in the response payload for frontend bootstrap.
+- `frontend/src/store/authStore.ts` bootstrap no longer requires a preexisting `localStorage.token`; it always probes `/api/profile/me`, restores auth from cookie-backed sessions, and rewrites localStorage token from the response when present.
+- Added tags migration `api/sql/2026-04-27-card-tags.sql` with table `cardtags (id, card_id, tag, sort_order, created_at)` and `ON DELETE CASCADE` to `cards(id)`.
+- Cards API now supports ordered per-card `tags: string[]`:
+  - `POST /api/boards/:board_id/cards`
+  - `PATCH /api/boards/:board_id/cards/:card_id`
+  - `GET /api/boards/:board_id/cards`
+  - `GET /api/boards/public/:board_id/cards`
+- `boards:updated` card payloads may now include `tags` for `reason: 'card_updated'`; `frontend/src/components/flow/useFlowBoardBoardsUpdatedSocket.ts` applies those tag updates in-memory.
+- `frontend/src/store/uiStore.ts` `FlowCardSettingsSnapshot` / `flowCardSettingsDraft` now include `tags: string[]`; `frontend/src/components/flow/FlowBoard.tsx` card create/edit panel exposes comma-separated tags input with preview chips.
+- Added authenticated card-details reorder endpoints in `api/controllers/boardsController.js`:
+  - `PATCH /api/boards/:board_id/cards/:card_id/details/blocks/:block_id/order`
+  - `PATCH /api/boards/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id/order`
+- `frontend/src/pages/board/BoardRightMenuCardDetails.tsx` now supports block/item up/down reordering and per-block/item copy actions in the right-menu details view.
+- Added global language store `frontend/src/store/languageStore.ts` with persisted `language: 'ru' | 'en'`; `frontend/src/components/app/App.tsx` syncs `document.documentElement.lang` from that store.

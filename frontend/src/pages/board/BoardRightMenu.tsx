@@ -24,6 +24,7 @@ import LinkIcon from '@/assets/icons/monochrome/link.svg';
 import PencilIcon from '@/assets/icons/monochrome/pencil.svg';
 import SelectIcon from '@/assets/icons/monochrome/select.svg';
 import { BoardRightMenuCardDetails } from './BoardRightMenuCardDetails';
+import { useLanguageStore } from '@/store/languageStore';
 
 type BoardInfoViewModel = {
   title: string | null;
@@ -56,6 +57,7 @@ type BoardRightMenuProps = {
   leaveBoard: () => void | Promise<void>;
   leaveConfirmOpen: boolean;
   leaveLoading: boolean;
+  linkColorValue: string;
   linkDeleteConfirmOpen: boolean;
   linkDeleteLoading: boolean;
   linkStyleDropdownOpen: boolean;
@@ -63,6 +65,7 @@ type BoardRightMenuProps = {
   loadedParticipantAvatarSrcs: Record<string, true>;
   onCreateNode: () => void;
   onOpenBoardSettings: () => void;
+  onOpenLinkColorPalette: () => void;
   onOpenParticipantsSettings: (view: 'friends' | 'guests') => void;
   onStartDrawMode: () => void;
   onStartSelectMode: () => void;
@@ -94,6 +97,8 @@ type BoardRightMenuProps = {
 };
 
 export const BoardRightMenu = (props: BoardRightMenuProps) => {
+  const language = useLanguageStore((state) => state.language);
+  const isEn = language === 'en';
   const {
     boardInfo,
     boardMenuRef,
@@ -118,6 +123,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
     leaveBoard,
     leaveConfirmOpen,
     leaveLoading,
+    linkColorValue,
     linkDeleteConfirmOpen,
     linkDeleteLoading,
     linkStyleDropdownOpen,
@@ -125,6 +131,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
     loadedParticipantAvatarSrcs,
     onCreateNode,
     onOpenBoardSettings,
+    onOpenLinkColorPalette,
     onOpenParticipantsSettings,
     onStartDrawMode,
     onStartSelectMode,
@@ -181,7 +188,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
               onStartLinkMode();
               e.currentTarget.blur();
             }}
-            aria-label="Связать записи"
+            aria-label={isEn ? 'Link cards' : 'Связать карточки'}
           >
             <LinkIcon />
           </button>
@@ -194,7 +201,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
               onStartDrawMode();
               e.currentTarget.blur();
             }}
-            aria-label="Рисовать на поле"
+            aria-label={isEn ? 'Draw on board' : 'Рисовать на поле'}
           >
             <PencilIcon />
           </button>
@@ -207,7 +214,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
               onStartSelectMode();
               e.currentTarget.blur();
             }}
-            aria-label="Выделение"
+            aria-label={isEn ? 'Selection mode' : 'Выделение'}
           >
             <SelectIcon />
           </button>
@@ -217,19 +224,19 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
         {boardMenuView === 'link' && selectedLink && canEditCards ? (
           <div className={classes.link_inspector_root}>
             <div className={classes.link_inspector_header}>
-              <div className={classes.link_inspector_title}>Связь</div>
+              <div className={classes.link_inspector_title}>{isEn ? 'Link' : 'Связь'}</div>
             </div>
             <div className={classes.link_inspector_meta}>
               <div>
-                <span>От:</span> {selectedLinkDraft?.fromTitle || selectedLink.fromTitle || `#${selectedLinkDraft?.fromCardId ?? selectedLink.fromCardId}`}
+                <span>{isEn ? 'From:' : 'От:'}</span> {selectedLinkDraft?.fromTitle || selectedLink.fromTitle || `#${selectedLinkDraft?.fromCardId ?? selectedLink.fromCardId}`}
               </div>
               <div>
-                <span>К:</span> {selectedLinkDraft?.toTitle || selectedLink.toTitle || `#${selectedLinkDraft?.toCardId ?? selectedLink.toCardId}`}
+                <span>{isEn ? 'To:' : 'К:'}</span> {selectedLinkDraft?.toTitle || selectedLink.toTitle || `#${selectedLinkDraft?.toCardId ?? selectedLink.toCardId}`}
               </div>
             </div>
             <div className={classes.link_inspector_form}>
               <div className={classes.link_inspector_field}>
-                <div className={classes.link_inspector_label}>Вид</div>
+                <div className={classes.link_inspector_label}>{isEn ? 'Style' : 'Вид'}</div>
                 <div className={classes.link_inspector_select_row}>
                   <div className={classes.link_inspector_select_wrap}>
                     {__PLATFORM__ === 'desktop' ? (
@@ -247,7 +254,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                             onClick={() => setLinkStyleDropdownOpen((prev) => !prev)}
                             disabled={!canEditCards || !isLoggedIn}
                           >
-                            {(selectedLinkDraft?.style ?? selectedLink.style) === 'arrow' ? 'Стрелка' : 'Линия'}
+                            {(selectedLinkDraft?.style ?? selectedLink.style) === 'arrow' ? (isEn ? 'Arrow' : 'Стрелка') : (isEn ? 'Line' : 'Линия')}
                           </button>,
                           <div key="menu" className={classes.link_inspector_select_menu}>
                             <button
@@ -256,7 +263,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                               onClick={() => patchSelectedLinkDraft({ style: 'line' })}
                               disabled={!canEditCards || !isLoggedIn}
                             >
-                              Линия
+                              {isEn ? 'Line' : 'Линия'}
                             </button>
                             <button
                               type="button"
@@ -264,7 +271,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                               onClick={() => patchSelectedLinkDraft({ style: 'arrow' })}
                               disabled={!canEditCards || !isLoggedIn}
                             >
-                              Стрелка
+                              {isEn ? 'Arrow' : 'Стрелка'}
                             </button>
                           </div>,
                         ]}
@@ -275,8 +282,8 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                         onChange={(e) => patchSelectedLinkDraft({ style: e.currentTarget.value === 'arrow' ? 'arrow' : 'line' })}
                         disabled={!canEditCards || !isLoggedIn}
                       >
-                        <option value="line">Линия</option>
-                        <option value="arrow">Стрелка</option>
+                        <option value="line">{isEn ? 'Line' : 'Линия'}</option>
+                        <option value="arrow">{isEn ? 'Arrow' : 'Стрелка'}</option>
                       </select>
                     )}
                   </div>
@@ -288,24 +295,38 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                       e.currentTarget.blur();
                     }}
                     disabled={!canEditCards || !isLoggedIn}
-                    aria-label="Развернуть связь"
+                    aria-label={isEn ? 'Flip link direction' : 'Развернуть связь'}
                   >
                     <SwitchIcon />
                   </button>
                 </div>
               </div>
               <div className={classes.link_inspector_field}>
-                <div className={classes.link_inspector_label}>Подпись</div>
+                <div className={classes.link_inspector_label}>{isEn ? 'Color' : 'Цвет'}</div>
+                <button
+                  type="button"
+                  className={classes.link_inspector_color_trigger}
+                  onClick={() => onOpenLinkColorPalette()}
+                  disabled={!canEditCards || !isLoggedIn}
+                >
+                  <span className={classes.link_inspector_color_trigger_inner}>
+                    <span className={classes.link_inspector_color_swatch} style={{ backgroundColor: linkColorValue }} />
+                    <span>{linkColorValue}</span>
+                  </span>
+                </button>
+              </div>
+              <div className={classes.link_inspector_field}>
+                <div className={classes.link_inspector_label}>{isEn ? 'Label' : 'Подпись'}</div>
                 <input
                   value={selectedLinkDraft?.label ?? (selectedLink.label ?? '')}
-                  placeholder="Введите подпись"
+                  placeholder={isEn ? 'Enter label' : 'Введите подпись'}
                   maxLength={70}
                   onChange={(e) => patchSelectedLinkDraft({ label: e.currentTarget.value })}
                   disabled={!canEditCards || !isLoggedIn}
                 />
               </div>
               <label className={classes.link_inspector_toggle}>
-                <span className={classes.link_inspector_toggle_text}>Показывать подпись</span>
+                <span className={classes.link_inspector_toggle_text}>{isEn ? 'Show label' : 'Показывать подпись'}</span>
                 <input
                   className={classes.link_inspector_toggle_input}
                   type="checkbox"
@@ -324,9 +345,9 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                       className={classes.link_inspector_delete_trigger}
                       onClick={() => setLinkDeleteConfirmOpen((prev) => !prev)}
                       disabled={!canEditCards || !isLoggedIn || linkDeleteLoading}
-                      aria-label="Удалить связь"
+                      aria-label={isEn ? 'Delete link' : 'Удалить связь'}
                     >
-                      Удалить связь
+                      {isEn ? 'Delete link' : 'Удалить связь'}
                     </button>,
                     <div key="menu">
                       <button
@@ -335,7 +356,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                         onClick={() => void deleteSelectedLink()}
                         disabled={!canEditCards || !isLoggedIn || linkDeleteLoading}
                       >
-                        {'Да, удалить'}
+                        {isEn ? 'Yes, delete' : 'Да, удалить'}
                       </button>
                       <button
                         type="button"
@@ -343,15 +364,15 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                         onClick={() => setLinkDeleteConfirmOpen(false)}
                         disabled={linkDeleteLoading}
                       >
-                        Отмена
+                        {isEn ? 'Cancel' : 'Отмена'}
                       </button>
                     </div>,
                   ]}
                 </DropdownWrapper>
               </div>
               <div className={classes.link_inspector_actions}>
-                <Mainbtn variant="mini" kind="button" type="button" text="Сохранить" onClick={() => void saveSelectedLink()} disabled={!canEditCards || !isLoggedIn || !selectedLinkDraft} />
-                <Mainbtn variant="mini" kind="button" type="button" text="Назад" onClick={() => closeLinkInspector()} />
+                <Mainbtn variant="mini" kind="button" type="button" text={isEn ? 'Save' : 'Сохранить'} onClick={() => void saveSelectedLink()} disabled={!canEditCards || !isLoggedIn || !selectedLinkDraft} />
+                <Mainbtn variant="mini" kind="button" type="button" text={isEn ? 'Back' : 'Назад'} onClick={() => closeLinkInspector()} />
               </div>
             </div>
           </div>
@@ -391,7 +412,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
         {boardMenuView === 'board' && isLoggedIn && !isOwnerBoard && ownerParticipant ? (
           <div>
             <div className={classes.owner_block}>
-              <span className={classes.owner_title}>Владелец:</span>
+              <span className={classes.owner_title}>{isEn ? 'Owner:' : 'Владелец:'}</span>
               <div className={classes.owner_row}>
                 <Link className={classes.owner_link} to={`/user/${ownerParticipant.username}`}>
                   <div className={classes.owner_avatar}>
@@ -402,7 +423,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                     <span className={classes.owner_username}>@{ownerParticipant.username}</span>
                   </div>
                 </Link>
-                <Mainbtn variant="mini" kind="navlink" href={`/user/${ownerParticipant.username}`} text="Открыть" />
+                <Mainbtn variant="mini" kind="navlink" href={`/user/${ownerParticipant.username}`} text={isEn ? 'Open' : 'Открыть'} />
               </div>
             </div>
           </div>
@@ -417,16 +438,16 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                   className={classes.leave_board_trigger}
                   onClick={() => setLeaveConfirmOpen((v) => !v)}
                   disabled={leaveLoading || participantsInitialLoading}
-                  aria-label="Покинуть доску"
+                  aria-label={isEn ? 'Leave board' : 'Покинуть доску'}
                 >
-                  Покинуть доску
+                  {isEn ? 'Leave board' : 'Покинуть доску'}
                 </button>,
                 <div key="menu">
                   <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={leaveBoard} disabled={leaveLoading || participantsInitialLoading}>
-                    {'Покинуть'}
+                    {isEn ? 'Leave' : 'Покинуть'}
                   </button>
                   <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setLeaveConfirmOpen(false)} disabled={leaveLoading || participantsInitialLoading}>
-                    Отмена
+                    {isEn ? 'Cancel' : 'Отмена'}
                   </button>
                 </div>,
               ]}
@@ -440,7 +461,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
             </div>
           ) : isOwnerBoard ? (
             <div className={classes.board_info_actions}>
-              <Mainbtn variant="mini" kind="button" type="button" text="Настройки" onClick={onOpenBoardSettings} />
+              <Mainbtn variant="mini" kind="button" type="button" text={isEn ? 'Settings' : 'Настройки'} onClick={onOpenBoardSettings} />
             </div>
           ) : null
         ) : null}
@@ -448,7 +469,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
           <div className={classes.participants}>
             <div className={classes.participant_add}>
               <AuthTrigger type="login">
-                <Mainbtn variant="mini" kind="button" type="button" text="Войти как гость" />
+                <Mainbtn variant="mini" kind="button" type="button" text={isEn ? 'Sign in as guest' : 'Войти как гость'} />
               </AuthTrigger>
             </div>
           </div>
@@ -458,7 +479,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
             {participantsInitialLoading ? (
               <div className={`${classes.skeleton} ${classes.participants_title_skeleton}`} />
             ) : (
-              <span className={classes.participants_title}>Участники:</span>
+              <span className={classes.participants_title}>{isEn ? 'Participants:' : 'Участники:'}</span>
             )}
             <div className={classes.participants_list}>
               {canManageParticipants ? (
@@ -472,7 +493,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                           variant="mini"
                           kind="button"
                           type="button"
-                          text="Добавить участников"
+                          text={isEn ? 'Add participants' : 'Добавить участников'}
                           onClick={() => onOpenParticipantsSettings('friends')}
                         />
                       </div>
@@ -512,7 +533,7 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                 const isRoleBusy = roleLoadingParticipantId === p.id;
                 const isAvatarLoaded = Boolean(avatarSrc && loadedParticipantAvatarSrcs[avatarSrc]);
                 const isAvatarFailed = Boolean(avatarSrc && failedParticipantAvatarSrcs[avatarSrc]);
-                const roleLabel = p.role === 'editer' ? 'Редактор' : 'Гость';
+                const roleLabel = p.role === 'editer' ? (isEn ? 'Editor' : 'Редактор') : (isEn ? 'Guest' : 'Гость');
 
                 return (
                   <div className={classes.participant_item} key={p.id}>
@@ -552,13 +573,13 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                             {roleLabel}
                           </button>,
                           <div key="menu">
-                            <button type="button" data-dropdown-class={classes.participant_role_item} onClick={() => updateParticipantRole(p.id, 'guest')} disabled={participantsInitialLoading || isRoleBusy}>Гость</button>
-                            <button type="button" data-dropdown-class={classes.participant_role_item} onClick={() => updateParticipantRole(p.id, 'editer')} disabled={participantsInitialLoading || isRoleBusy}>Редактор</button>
+                            <button type="button" data-dropdown-class={classes.participant_role_item} onClick={() => updateParticipantRole(p.id, 'guest')} disabled={participantsInitialLoading || isRoleBusy}>{isEn ? 'Guest' : 'Гость'}</button>
+                            <button type="button" data-dropdown-class={classes.participant_role_item} onClick={() => updateParticipantRole(p.id, 'editer')} disabled={participantsInitialLoading || isRoleBusy}>{isEn ? 'Editor' : 'Редактор'}</button>
                           </div>,
                         ]}
                       </DropdownWrapper>
                     ) : (
-                      <span className={classes.participant_role}>{p.role === 'editer' ? 'Редактор' : 'Гость'}</span>
+                      <span className={classes.participant_role}>{p.role === 'editer' ? (isEn ? 'Editor' : 'Редактор') : (isEn ? 'Guest' : 'Гость')}</span>
                     )}
                     {shouldShowOwnerActions ? (
                       <DropdownWrapper right middleleft closeOnClick={false} isOpen={removeConfirmParticipantId === p.id} onClose={() => setRemoveConfirmParticipantId(null)}>
@@ -572,13 +593,13 @@ export const BoardRightMenu = (props: BoardRightMenuProps) => {
                               setRemoveConfirmParticipantId((prev) => (prev === p.id ? null : p.id));
                             }}
                             disabled={participantsInitialLoading || removeLoadingParticipantId === p.id}
-                            aria-label="Удалить участника"
+                            aria-label={isEn ? 'Remove participant' : 'Удалить участника'}
                           >
                             <Deny />
                           </button>,
                           <div key="menu">
-                            <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => removeParticipant(p.id)} disabled={participantsInitialLoading || removeLoadingParticipantId === p.id}>Удалить</button>
-                            <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setRemoveConfirmParticipantId(null)} disabled={participantsInitialLoading || removeLoadingParticipantId === p.id}>Отмена</button>
+                            <button type="button" data-dropdown-class={classes.participant_confirm_danger} onClick={() => removeParticipant(p.id)} disabled={participantsInitialLoading || removeLoadingParticipantId === p.id}>{isEn ? 'Remove' : 'Удалить'}</button>
+                            <button type="button" data-dropdown-class={classes.participant_confirm_cancel} onClick={() => setRemoveConfirmParticipantId(null)} disabled={participantsInitialLoading || removeLoadingParticipantId === p.id}>{isEn ? 'Cancel' : 'Отмена'}</button>
                           </div>,
                         ]}
                       </DropdownWrapper>

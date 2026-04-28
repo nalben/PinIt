@@ -4,6 +4,7 @@ const nodemailer = require("nodemailer");
 const axios = require("axios");
 const UserModel = require("../models/UserModel");
 const { getAuthCookieBaseOptions, getAuthCookieOptions } = require("../utils/authCookieOptions");
+const { signAuthToken } = require("../utils/authSession");
 
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
@@ -106,11 +107,7 @@ const authController = {
       if (!isMatch)
         return res.status(400).json({ message: "Неверный логин или пароль" });
 
-      const token = jwt.sign(
-        { id: user.id, username: user.username },
-        process.env.JWT_SECRET || "secret",
-        { expiresIn: "7d" }
-      );
+      const token = signAuthToken({ id: user.id, username: user.username });
 
       res.cookie('pinit_token', token, getAuthCookieOptions(req));
 
@@ -226,11 +223,7 @@ const authController = {
 
     delete authController.codes[email];
 
-    const token = jwt.sign(
-      { id: user.id, username: user.username },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const token = signAuthToken({ id: user.id, username: user.username });
 
     res.cookie('pinit_token', token, getAuthCookieOptions(req));
 

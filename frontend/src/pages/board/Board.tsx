@@ -19,7 +19,11 @@ import UnsavedChangesModal from '@/components/_UI/unsavedchangesmodal/UnsavedCha
 import { InviteAuthModals, type InviteAuthView } from '@/components/flowboard/components/InviteAuthModals';
 import { BoardParticipant, BoardParticipantsResponse, useBoardDetailsStore } from '@/store/boardDetailsStore';
 import { useEscapeHandler } from '@/hooks/useEscapeHandler';
+import { FlowColorPaletteModal } from '@/components/flow/FlowColorPaletteModal';
+import { useFlowCardFavoriteColors } from '@/components/flowboard/hooks/useFlowCardFavoriteColors';
+import { DEFAULT_CARD_PICKER_COLOR, normalizeHexColor, PRESET_CARD_COLORS } from '@/components/flow/flowBoardDrawingUtils';
 import { BoardRightMenu } from './BoardRightMenu';
+import { useLanguageStore } from '@/store/languageStore';
 
 type BoardParticipantRole = 'owner' | 'guest' | 'editer';
 type LinkCloseMode = 'restore' | 'collapse';
@@ -34,6 +38,8 @@ const getSelectedLinkDraftChangeState = (
         return {
             label: '',
             currentLabel: '',
+            color: DEFAULT_CARD_PICKER_COLOR,
+            currentColor: DEFAULT_CARD_PICKER_COLOR,
             shouldFlipDirection: false,
             shouldPatchLink: false,
             isDirty: false,
@@ -42,17 +48,22 @@ const getSelectedLinkDraftChangeState = (
 
     const label = selectedLinkDraft.label.trim().slice(0, 70);
     const currentLabel = (selectedLink.label ?? '').trim().slice(0, 70);
+    const color = normalizeHexColor(selectedLinkDraft.color) ?? DEFAULT_CARD_PICKER_COLOR;
+    const currentColor = normalizeHexColor(selectedLink.color) ?? DEFAULT_CARD_PICKER_COLOR;
     const shouldFlipDirection =
         Number(selectedLinkDraft.fromCardId) === Number(selectedLink.toCardId) &&
         Number(selectedLinkDraft.toCardId) === Number(selectedLink.fromCardId);
     const shouldPatchLink =
         selectedLinkDraft.style !== selectedLink.style ||
+        color !== currentColor ||
         label !== currentLabel ||
         Boolean(selectedLinkDraft.isLabelVisible) !== Boolean(selectedLink.isLabelVisible);
 
     return {
         label,
         currentLabel,
+        color,
+        currentColor,
         shouldFlipDirection,
         shouldPatchLink,
         isDirty: shouldFlipDirection || shouldPatchLink,
@@ -63,6 +74,8 @@ const Board = () => {
     const { boardId } = useParams<{ boardId: string }>();
     const location = useLocation();
     const navigate = useNavigate();
+    const language = useLanguageStore((state) => state.language);
+    const isEn = language === 'en';
     const isAuth = useAuthStore((s) => s.isAuth);
     const isInitialized = useAuthStore((s) => s.isInitialized);
     const boards = useBoardsUnifiedStore((s) => s.myBoards);
@@ -92,6 +105,9 @@ const Board = () => {
     const [linkDeleteLoading, setLinkDeleteLoading] = useState(false);
     const [linkCloseConfirmOpen, setLinkCloseConfirmOpen] = useState(false);
     const [linkStyleDropdownOpen, setLinkStyleDropdownOpen] = useState(false);
+    const [linkColorPaletteOpen, setLinkColorPaletteOpen] = useState(false);
+    const [linkColorPaletteDraft, setLinkColorPaletteDraft] = useState<string | null>(null);
+    const [boardColorOptions, setBoardColorOptions] = useState<string[]>([]);
     const [forcedAuthOpen, setForcedAuthOpen] = useState(false);
     const [forcedAuthView, setForcedAuthView] = useState<InviteAuthView>('login');
     const effectiveBoardMenuOpen = isBoardMenuOpen;
@@ -133,6 +149,48 @@ const Board = () => {
         [selectedLink, selectedLinkDraft]
     );
     const linkInspectorHasUnsavedChanges = boardMenuView === 'link' && linkDraftChangeState.isDirty;
+    const {
+        favoriteColors,
+        favoritesLoading,
+        ensureFavoriteColorsLoaded,
+        addFavoriteColor,
+        removeFavoriteColor,
+    } = useFlowCardFavoriteColors({
+        numericBoardId,
+        hasToken: hasAuthToken,
+        onError: (message) => showTopAlarm(message),
+    });
+    const linkPaletteDisplayColor = normalizeHexColor(linkColorPaletteDraft) ?? linkDraftChangeState.color;
+    const linkPalettePickerColorValue = linkPaletteDisplayColor ?? DEFAULT_CARD_PICKER_COLOR;
+    const isLinkPaletteColorFavorite = Boolean(linkPaletteDisplayColor && favoriteColors.includes(linkPaletteDisplayColor));
+
+    const openLinkColorPalette = useCallback(() => {
+        if (boardMenuView !== 'link' || !selectedLink || !selectedLinkDraft) return;
+        setLinkColorPaletteDraft(normalizeHexColor(selectedLinkDraft.color) ?? normalizeHexColor(selectedLink.color) ?? DEFAULT_CARD_PICKER_COLOR);
+        setLinkColorPaletteOpen(true);
+        void ensureFavoriteColorsLoaded();
+    }, [boardMenuView, ensureFavoriteColorsLoaded, selectedLink, selectedLinkDraft]);
+
+    const cancelLinkColorPalette = useCallback(() => {
+        setLinkColorPaletteDraft(normalizeHexColor(selectedLinkDraft?.color) ?? normalizeHexColor(selectedLink?.color) ?? DEFAULT_CARD_PICKER_COLOR);
+        setLinkColorPaletteOpen(false);
+    }, [selectedLink, selectedLinkDraft]);
+
+    const saveLinkColorPalette = useCallback(() => {
+        const nextColor = normalizeHexColor(linkColorPaletteDraft) ?? DEFAULT_CARD_PICKER_COLOR;
+        patchSelectedLinkDraft({ color: nextColor });
+        setLinkColorPaletteDraft(nextColor);
+        setLinkColorPaletteOpen(false);
+    }, [linkColorPaletteDraft, patchSelectedLinkDraft]);
+
+    const toggleLinkColorFavorite = useCallback(async () => {
+        if (!linkPaletteDisplayColor || favoritesLoading) return;
+        if (favoriteColors.includes(linkPaletteDisplayColor)) {
+            await removeFavoriteColor(linkPaletteDisplayColor);
+            return;
+        }
+        await addFavoriteColor(linkPaletteDisplayColor);
+    }, [addFavoriteColor, favoriteColors, favoritesLoading, linkPaletteDisplayColor, removeFavoriteColor]);
 
     const performLinkClose = useCallback((mode: LinkCloseMode) => {
         if (mode === 'collapse') {
@@ -166,6 +224,17 @@ const Board = () => {
         return false;
     }, [boardMenuView, handleBoardMenuBlur, requestImplicitLinkInspectorClose]);
 
+    useEffect(() => {
+        if (boardMenuView !== 'link' || !selectedLink || !selectedLinkDraft) {
+            setLinkColorPaletteOpen(false);
+            setLinkColorPaletteDraft(null);
+            return;
+        }
+
+        if (linkColorPaletteOpen) return;
+        setLinkColorPaletteDraft(normalizeHexColor(selectedLinkDraft.color) ?? normalizeHexColor(selectedLink.color) ?? DEFAULT_CARD_PICKER_COLOR);
+    }, [boardMenuView, linkColorPaletteOpen, selectedLink, selectedLinkDraft]);
+
     const saveSelectedLink = async (closeMode: LinkCloseMode = 'restore') => {
         if (!hasValidBoardId) return;
         if (!selectedLink) return;
@@ -185,7 +254,7 @@ const Board = () => {
             created_at: string;
         };
 
-        const { label, shouldFlipDirection, shouldPatchLink } = getSelectedLinkDraftChangeState(selectedLink, selectedLinkDraft);
+        const { label, color, shouldFlipDirection, shouldPatchLink } = getSelectedLinkDraftChangeState(selectedLink, selectedLinkDraft);
 
         try {
             let finalFromCardId = Number(selectedLink.fromCardId);
@@ -213,6 +282,7 @@ const Board = () => {
             if (shouldPatchLink) {
                 const patchRes = await axiosInstance.patch<LinkResponse>(`/api/boards/${numericBoardId}/links/${selectedLink.linkId}`, {
                     style: selectedLinkDraft.style,
+                    color,
                     label: label ? label : null,
                     is_label_visible: selectedLinkDraft.isLabelVisible,
                 });
@@ -239,7 +309,7 @@ const Board = () => {
 
             performLinkClose(closeMode);
         } catch (e) {
-            showTopAlarm('Не удалось сохранить связь.');
+            showTopAlarm(isEn ? 'Failed to save link.' : 'Не удалось сохранить связь.');
             if (process.env.NODE_ENV !== 'production') console.error(e);
         }
     };
@@ -256,7 +326,7 @@ const Board = () => {
             setLinkDeleteConfirmOpen(false);
             closeLinkInspector();
         } catch (e) {
-            showTopAlarm('Не удалось удалить связь.');
+            showTopAlarm(isEn ? 'Failed to delete link.' : 'Не удалось удалить связь.');
             if (process.env.NODE_ENV !== 'production') console.error(e);
         } finally {
             setLinkDeleteLoading(false);
@@ -828,6 +898,7 @@ const Board = () => {
                         ref={flowBoardRef}
                         canEditCards={canEditCards}
                         boardMenuRef={boardMenuRef}
+                        onBoardColorOptionsChange={setBoardColorOptions}
                         onRequestBoardMenuBlur={requestBoardMenuBlur}
                         onRequestImplicitLinkInspectorClose={() => requestImplicitLinkInspectorClose('restore')}
                     />
@@ -855,6 +926,7 @@ const Board = () => {
                 leaveBoard={leaveBoard}
                 leaveConfirmOpen={leaveConfirmOpen}
                 leaveLoading={leaveLoading}
+                linkColorValue={normalizeHexColor(selectedLinkDraft?.color ?? selectedLink?.color) ?? DEFAULT_CARD_PICKER_COLOR}
                 linkDeleteConfirmOpen={linkDeleteConfirmOpen}
                 linkDeleteLoading={linkDeleteLoading}
                 linkStyleDropdownOpen={linkStyleDropdownOpen}
@@ -862,6 +934,7 @@ const Board = () => {
                 loadedParticipantAvatarSrcs={loadedParticipantAvatarSrcs}
                 onCreateNode={() => flowBoardRef.current?.createDraftNodeAtCenter()}
                 onOpenBoardSettings={() => openBoardSettingsModal()}
+                onOpenLinkColorPalette={openLinkColorPalette}
                 onOpenParticipantsSettings={(view) => {
                     setBoardSettingsModalParticipantsInnerViewNext(view);
                     openBoardSettingsModal('participants');
@@ -931,6 +1004,26 @@ const Board = () => {
                 }}
                 onContinueEditing={() => setLinkCloseConfirmOpen(false)}
             />
+            {linkColorPaletteOpen && boardMenuView === 'link' && selectedLink ? (
+                <FlowColorPaletteModal
+                    title={isEn ? 'Link color' : 'Цвет связи'}
+                    ariaLabel={isEn ? 'Choose link color' : 'Выбор цвета связи'}
+                    currentColor={linkPaletteDisplayColor}
+                    pickerColorValue={linkPalettePickerColorValue}
+                    presetColors={PRESET_CARD_COLORS}
+                    boardColorOptions={boardColorOptions}
+                    boardColorsEmptyLabel={isEn ? 'No colored elements on the board yet.' : 'Пока на доске нет цветных элементов.'}
+                    favoriteColors={favoriteColors}
+                    favoritesLoading={favoritesLoading}
+                    isCurrentColorFavorite={isLinkPaletteColorFavorite}
+                    style={{ left: 'auto', right: '16px', bottom: '16px', width: 'min(720px, calc(100vw - 32px))' }}
+                    onColorChange={setLinkColorPaletteDraft}
+                    onToggleFavorite={() => void toggleLinkColorFavorite()}
+                    onCancel={cancelLinkColorPalette}
+                    onSave={saveLinkColorPalette}
+                    favoriteDisabled={!linkPaletteDisplayColor || favoritesLoading}
+                />
+            ) : null}
         </div>
     );
 };

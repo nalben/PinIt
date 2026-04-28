@@ -3,14 +3,14 @@ import React, { useState } from "react";
 import { useForm, SubmitHandler } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
-import { RegisterScheme } from "@/schemas/RegisterScheme";
+import { createRegisterScheme, RegisterScheme } from "@/schemas/RegisterScheme";
 import { InferType } from "yup";
 import { API_URL } from "@/api/axiosInstance";
 import classes from "./Register.module.scss";
 import Close from '@/assets/icons/monochrome/close.svg';
 import Open from '@/assets/icons/monochrome/open.svg';
 import { useAuthStore } from '@/store/authStore';
-
+import { useLanguageStore } from '@/store/languageStore';
 
 type RegisterFormData = InferType<typeof RegisterScheme> & {
   code?: string;
@@ -34,6 +34,9 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
   const [codeError, setCodeError] = useState<string | null>(null);
   const login = useAuthStore(state => state.login);
   const bootstrap = useAuthStore(state => state.bootstrap);
+  const language = useLanguageStore((state) => state.language);
+  const isEn = language === 'en';
+  const registerScheme = createRegisterScheme(isEn);
 
   const [emailValue, setEmailValue] = useState("");
   const [usernameValue, setUsernameValue] = useState("");
@@ -46,7 +49,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
     formState: { errors: errorsStep1 },
     reset: resetStep1,
   } = useForm<RegisterFormData>({
-    resolver: yupResolver(RegisterScheme) as any,
+    resolver: yupResolver(registerScheme) as any,
     mode: "onBlur",
     reValidateMode: "onBlur",
   });
@@ -82,7 +85,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
       setStep(2);
       resetStep1();
     } catch (err: any) {
-      setCodeError(err?.response?.data?.message || "Ошибка сервера");
+      setCodeError(err?.response?.data?.message || (isEn ? "Server error" : "Ошибка сервера"));
       setTimeout(() => setCodeError(null), 5000);
     } finally {
       setLoading(false);
@@ -129,7 +132,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
 
     } catch (err: any) {
       const msg =
-        err?.response?.data?.message || "Неверный код подтверждения";
+        err?.response?.data?.message || (isEn ? "Invalid verification code" : "Неверный код подтверждения");
 
       setCodeError(msg);
       setTimeout(() => setCodeError(null), 5000);
@@ -146,52 +149,47 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
           className={classes.form_con_reg}
         >
           <div className={classes.form_item_row}>
-            <label>Адрес электронной почты</label>
+            <label>{isEn ? 'Email address' : 'Адрес электронной почты'}</label>
             <input
               type="email"
               {...registerStep1("email")}
-              placeholder="Введите адрес электронной почты "
-              // autoComplete="off"
+              placeholder={isEn ? 'Enter email address' : 'Введите адрес электронной почты'}
               className={errorsStep1.email ? "error" : ""}
             />
             {errorsStep1.email && <p>{errorsStep1.email.message}</p>}
           </div>
 
           <div className={classes.form_item_row}>
-            <label>Логин</label>
+            <label>{isEn ? 'Username' : 'Логин'}</label>
             <input
               type="text"
               {...registerStep1("username")}
-              placeholder="Введите логин"
-              // autoComplete="off"
+              placeholder={isEn ? 'Enter username' : 'Введите логин'}
               className={errorsStep1.username ? "error" : ""}
             />
             {errorsStep1.username && <p>{errorsStep1.username.message}</p>}
           </div>
 
           <div className={`${classes.form_item_row} ${classes.anchor_input}`}>
-            <label>Пароль</label>
+            <label>{isEn ? 'Password' : 'Пароль'}</label>
             <input
               type={showPassword ? "text" : "password"}
               {...registerStep1("password")}
-              placeholder="Введите Пароль"
-              // autoComplete="off"
+              placeholder={isEn ? 'Enter password' : 'Введите пароль'}
               className={errorsStep1.password ? "error" : ""}
             />
             <span onClick={() => setShowPassword(prev => !prev)}>
               {showPassword ? <Open /> : <Close />}
             </span>
             {errorsStep1.password && <p>{errorsStep1.password.message}</p>}
-            
           </div>
-          
 
           <div className={classes.form_item_row}>
-            <label>Подтверждение пароля</label>
+            <label>{isEn ? 'Confirm password' : 'Подтверждение пароля'}</label>
             <input
               type="password"
               {...registerStep1("confirmPassword")}
-              placeholder="Подтвердите пароль"
+              placeholder={isEn ? 'Confirm password' : 'Подтвердите пароль'}
               autoComplete="off"
               className={errorsStep1.confirmPassword ? "error" : ""}
             />
@@ -205,7 +203,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
             disabled={!canSendCode || loading}
             className={classes.form_item_button}
           >
-            {loading ? "Отправка кода..." : "Регистрация"}
+            {loading ? (isEn ? "Sending code..." : "Отправка кода...") : (isEn ? "Continue" : "Регистрация")}
           </button>
 
           {codeError && <p>{codeError}</p>}
@@ -217,12 +215,12 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
           onSubmit={handleSubmitStep2(submitRegistration)}
           className={classes.form_con_code}
         >
-          <label>Подтвердите почту</label>
+          <label>{isEn ? 'Verify email' : 'Подтвердите почту'}</label>
 
           <input
             type="text"
             {...registerStep2("code", { required: true })}
-            placeholder="Введите код"
+            placeholder={isEn ? 'Enter code' : 'Введите код'}
             autoComplete="off"
             className={codeError ? "error" : ""}
           />
@@ -234,7 +232,7 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
             disabled={loading || !code}
             className={classes.form_item_button}
           >
-            {loading ? "Регистрация..." : "Зарегистрироваться"}
+            {loading ? (isEn ? "Creating account..." : "Регистрация...") : (isEn ? "Create account" : "Зарегистрироваться")}
           </button>
         </form>
       )}
@@ -243,5 +241,3 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onClose }) => {
 };
 
 export default RegisterForm;
-
-

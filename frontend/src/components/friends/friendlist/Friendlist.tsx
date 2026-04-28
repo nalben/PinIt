@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import Mainbtn from "@/components/_UI/mainbtn/Mainbtn";
+import ImageWithFallback from '@/components/_UI/imagewithfallback/ImageWithFallback';
 import Default from '@/assets/icons/monochrome/default-user.svg';
 import classes from './Friendlist.module.scss';
 import { useFriendsStore } from "@/store/friendsStore";
@@ -164,7 +165,7 @@ const FriendsList: React.FC = () => {
             return (
               <div key={friend.id} className={classes.friends_list_item}>
                 <Link to={`/user/${friend.username}`} className={classes.friend_list_img_con}>
-                  {avatarSrc ? <img src={avatarSrc} alt={friend.nickname || friend.username} /> : <Default />}
+                  <ImageWithFallback src={avatarSrc} alt={friend.nickname || friend.username} fallback={<Default />} />
                 </Link>
                 <span>
                   <Link to={`/user/${friend.username}`} className={classes.friend_list_username_con}>

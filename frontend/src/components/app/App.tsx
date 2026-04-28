@@ -22,6 +22,7 @@ import LoginForm from '@/components/auth/login/Login';
 import RegisterForm from '@/components/auth/register/Register';
 import ResetPasswordForm from '@/components/auth/reset/ResetPasswordForm';
 import TopAlarm from '@/components/_UI/topalarm/TopAlarm';
+import { useLanguageStore } from '@/store/languageStore';
 
 const PENDING_INVITE_LS_KEY = 'pinit_pendingInviteUrl';
 
@@ -95,6 +96,11 @@ const Root = () => {
   const closeAuthModal = useUIStore((s) => s.closeAuthModal);
   const isBoardPage = Boolean(matchPath('/spaces/:boardId', location.pathname));
   const triggerEscape = useUIStore((s) => s.triggerEscape);
+  const language = useLanguageStore((s) => s.language);
+
+  useEffect(() => {
+    document.documentElement.lang = language;
+  }, [language]);
 
   useEffect(() => {
     const onKeyDownCapture = (e: KeyboardEvent) => {
