@@ -1689,3 +1689,4 @@ Update (2026-11-05)
 - Product descriptions are required for leather goods and 3D models; descriptions are optional for the art collections.
 - Public VPS Nginx proxies `/phpmyadmin/` to the laptop Nginx listener at `10.8.0.4:8080`. The laptop requires `GET /api/admin/check` through its internal `/_admin_check` auth request and redirects unauthorized users to `/home`; this public proxy depends on the laptop OpenVPN connection.
 - Production Webpack builds copy `instagram.svg` and `telegram.svg` from `frontend/public/` to the build root so the storefront footer can load them by absolute URL.
+- On the laptop, PM2 runs the main API (`server`, port 3001) and the dedicated shop API (`shopserver`, port 3002). VPS Nginx routes `/api/shop/` to port 3002 and other `/api/` paths to port 3001; both routes depend on the laptop OpenVPN connection.
