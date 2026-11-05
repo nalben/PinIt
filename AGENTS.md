@@ -1473,7 +1473,7 @@ Rules: dependency boundaries for profilepage
   - production default: same-origin (`''`)
   - an explicit webpack `apiUrl` value overrides the defaults.
 - `frontend/isLocal.js` exists but is not imported by the frontend source or build configuration.
-- Backend DB host selection is environment-based in `api/db.js` (`IS_LOCAL` toggles localhost vs VPN host).
+- `api/db.js` reads database connection settings from `DB_HOST`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME`; its fallback host is `127.0.0.1`, and fallback database is `PinIt`.
 
 Update (2026-03-28)
 
