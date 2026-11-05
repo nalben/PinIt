@@ -271,11 +271,17 @@ api/routes/index.js aggregates:
 
 /boards
 
-/cards
-
 /profile
 
 /friends
+
+/admin
+
+/converter
+
+/shop
+
+Cards, links, drawings, and board settings routes are nested under `/boards`.
 
 authMiddleware:
 
@@ -300,6 +306,14 @@ friend_request:new
 friend_request:removed
 
 friends:status
+
+board_invite:new
+
+board_invite:removed
+
+boards:updated
+
+converter:updated
 
 Boards public API (guest access):
 
@@ -354,7 +368,9 @@ index.tsx:
 
 createBrowserRouter
 
-Routes: /welcome, /home, /spaces, /todo, /user/:username
+Public storefront: `/`
+
+Previous PinIt application: `/oldsite` (React Router basename `/oldsite`), with effective routes `/oldsite/welcome`, `/oldsite/home`, `/oldsite/spaces`, `/oldsite/spaces/:boardId`, `/oldsite/user/:username`, `/oldsite/converter`, and related routes.
 
 AppInit
 
@@ -374,7 +390,7 @@ Socket lifecycle
 
 AUTH BOOTSTRAP FLOW (CRITICAL)
 
-localStorage token
+auth cookie and/or localStorage token
 → /api/profile/me
 → authStore bootstrap
 → socket connect
@@ -732,7 +748,7 @@ Activity Logging
 
 No soft-delete pattern is defined in schema.
 No polymorphic tables.
-No join tables with composite primary keys are explicitly defined.
+Some association tables use composite keys; for example, `user_card_color_favorites` has primary key `(user_id, color)`.
 
 2. USERS DOMAIN
    users
@@ -845,9 +861,8 @@ id
 
 owner_id
 
-title (varchar 20)
-
-description (varchar 80)
+title (varchar 100 in the current SQL dump; API validation limits it to 20 characters)
+description (text in the current SQL dump; API validation limits it to 80 characters)
 
 image (path)
 
@@ -889,7 +904,7 @@ board_id
 
 user_id
 
-role enum('guest')
+role enum('guest','editer','blocked')
 
 added_at
 
@@ -943,9 +958,10 @@ board_id
 
 type enum('circle','rectangle','diamond')
 
-title (varchar 50)
-
+title (varchar 50 in the current SQL dump and API validation)
 image_path
+color (nullable hex color)
+is_locked (boolean)
 
 x
 
@@ -978,7 +994,7 @@ Block payload is stored in type-specific tables:
 cardlinks
 
 Directed links between cards on a board (replaces the old `linked_card_ids` column).
-Supports `style` (line/arrow) and `color` for rendering.
+Supports `style` (line/arrow), `color`, `label`, and `is_label_visible` for rendering.
 
 cardcomments
 
@@ -1052,9 +1068,11 @@ cards
 ├─ cardcomments
 └─ activitylog
 
-SECTION 11 - VERIFIED CURRENT CODE FACTS (2026-02-24)
+SECTION 11 - CODEBASE IMPLEMENTATION HISTORY
 
-These points are confirmed from current repository code and override any older conflicting notes.
+The dated entries below record implementation changes at those points in time; they are not all current contracts. Later entries and the directly verified current-code notes supersede earlier behavior. Verify current code before relying on any historical detail.
+
+Implementation history (newer dated entries below supersede earlier contracts; verify current behavior against code before changing it).
 
 Update (2026-02-26)
 
@@ -1064,7 +1082,7 @@ Update (2026-02-26)
 - Cards type enum includes `diamond` (in addition to `circle`/`rectangle`).
 - Cards table includes `is_locked` boolean (TINYINT(1)) to disable dragging in UI.
 - New cards endpoints:
-  - `PATCH /api/boards/:board_id/cards/:card_id` вЂ” batch update `cards` fields (`title`, `type`, `is_locked`, `x`, `y`) in one request (owner/`editer` only).
+  - `PATCH /api/boards/:board_id/cards/:card_id` — batch update `cards` fields (`title`, `type`, `is_locked`, `x`, `y`) in one request (owner/`editer` only).
   - `POST /api/boards/:board_id/cards` (owner/`editer` only) — create a card row + `carddetails` row.
   - `GET /api/boards/:board_id/cards` — list board cards for authorized users (owner/guest/`editer`).
   - `GET /api/boards/public/:board_id/cards` — list board cards for public boards (auth optional, blocked users filtered).
@@ -1183,7 +1201,7 @@ Update (2026-03-04)
 - `authMiddleware` now accepts JWT from `pinit_token` cookie in addition to the `Authorization` header.
 - When a request is authorized via `Authorization: Bearer <token>`, `authMiddleware` also refreshes/synchronizes the `pinit_token` cookie on the response.
 - Auth endpoints now manage the `pinit_token` cookie:
-  - `POST /api/auth/login` and `POST /api/auth/set-new-password` set it (httpOnly, 7d).
+  - At that time, `POST /api/auth/login` and `POST /api/auth/set-new-password` set it (httpOnly, 7d); the 2026-04-27 update below supersedes this lifetime with 365 days.
   - `POST /api/auth/logout` clears it.
 - Frontend `authStore.logout()` calls `/api/auth/logout` to clear the cookie.
 - `frontend/src/components/boards/lastboards/Lastboards.tsx` now refreshes recent boards right after auth transition (`isAuth: false -> true`) by calling `boardsUnifiedStore.refreshRecentSilent()` once (tracked via `prevIsAuthRef`), so list data appears after login without page reload.
@@ -1351,8 +1369,10 @@ Rules: dependency boundaries for profilepage
 1. Frontend routing and app entry
 
 - Root layout component is `frontend/src/components/app/App.tsx` (not `frontend/src/App.tsx`).
-- Active routes in `frontend/src/index.tsx`: `/`, `/welcome`, `/profile`, `/user/:username`, `/home`, `/spaces`, `/spaces/:boardId`, and catch-all redirect.
-- Route `/todo` is currently commented out in router config.
+- `/` renders the shop storefront from `frontend/src/pages/storefront/Storefront.tsx`.
+- The existing PinIt React Router is mounted at `/oldsite` with basename `/oldsite`; its effective routes include `/oldsite/welcome`, `/oldsite/profile`, `/oldsite/user/:username`, `/oldsite/home`, `/oldsite/spaces`, `/oldsite/spaces/:boardId`, and `/oldsite/converter`.
+- `/todo` remains commented out in the old-site router.
+- In the frontend entrypoint, paths outside `/` and the `/oldsite` prefix redirect to `/`; unknown routes within `/oldsite` use the old-site router's catch-all redirect.
 
 2. Realtime contracts (socket events)
 
@@ -1371,6 +1391,7 @@ Rules: dependency boundaries for profilepage
   - `board_invite:new`
   - `board_invite:removed`
   - `boards:updated`
+  - `converter:updated`
 - Room invariant is active in `api/server.js`: on connect user joins `user:<id>`.
 
 3. Auth middleware and profile access model
@@ -1378,7 +1399,7 @@ Rules: dependency boundaries for profilepage
 - `api/middleware/authMiddleware.js`: accepts Bearer token or `pinit_token` cookie and returns 401 if token missing/invalid.
 - `api/middleware/optionalAuth.js`: tries decode when token exists, sets `req.user = null` on absence/invalid token, then continues.
 - `api/routes/profileRouter.js`:
-  - `/me` and friend-code generation endpoints are handled by controller token checks.
+  - `/me`, profile update, and friend-code endpoints use `authMiddleware`.
   - `/:username`, `/:username/friends-count`, `/:username/friends`, `/by-friend-code/:code` use `optionalAuth`.
 
 4. Frontend auth/socket/bootstrap flow
@@ -1434,7 +1455,7 @@ Rules: dependency boundaries for profilepage
   - For non-auth users: persists recent public board info into localStorage key `pinit_recentBoards`.
 - `frontend/src/components/flow/FlowBoard.tsx` renders board cards as ReactFlow nodes, supports dragging, and persists position changes via `PATCH /api/boards/:board_id/cards/:card_id/position`.
 - Cards can be deleted via `DELETE /api/boards/:board_id/cards/:card_id` (owner/editer).
-- `cards.title` max length is 70 (DB constraint via `VARCHAR(70)`).
+- Current controller validation limits `cards.title` to 50 characters; the SQL dump `api/sql/2026-11-04.sql` also declares `cards.title VARCHAR(50)`. The older initial migration declares 70 and is not the current limit.
 
 6. Frontend UI components (current code)
 
@@ -1447,8 +1468,11 @@ Rules: dependency boundaries for profilepage
 
 6. API URL / environment behavior (current code)
 
-- Frontend API base URL is selected by `frontend/isLocal.js`.
-- `frontend/isLocal.js` currently exports `true`, so frontend uses `http://localhost:3001`.
+- Frontend API base URL is injected as `__API_URL__` by `frontend/config/build/buildPlugins.ts`:
+  - development default: `http://localhost:3001`
+  - production default: same-origin (`''`)
+  - an explicit webpack `apiUrl` value overrides the defaults.
+- `frontend/isLocal.js` exists but is not imported by the frontend source or build configuration.
 - Backend DB host selection is environment-based in `api/db.js` (`IS_LOCAL` toggles localhost vs VPN host).
 
 Update (2026-03-28)
@@ -1578,7 +1602,7 @@ Update (2026-04-13)
 - `electron/main.js` uses Windows `.ico` desktop icon metadata (`app.setAppUserModelId` + `BrowserWindow` icon from `icon.ico` + `win.setAppDetails(...)`) for taskbar/relaunch consistency on Windows.
 - Desktop build unpacks `electron/assets/*.ico` and `electron/assets/*.png` outside `app.asar`; `electron/main.js` resolves Windows runtime icon from `process.resourcesPath/app.asar.unpacked/electron/assets/icon.ico`.
 - Windows desktop build also runs `scripts/electron-after-pack.js` as an `electron-builder` `afterPack` hook and applies icon/version resource metadata directly to `desktop-dist/win-unpacked/PinIt.exe` via `rcedit`.
-- Current desktop app version in the root `package.json`: `1.0.1`
+- Current desktop app version in the root `package.json`: `1.0.2`
 - Frontend API origin is now injected at build time via `__API_URL__`:
   - development build default: `http://localhost:3001`
   - production build default: same-origin (`''`)
@@ -1613,3 +1637,53 @@ Update (2026-04-27)
   - `PATCH /api/boards/:board_id/cards/:card_id/details/blocks/:block_id/items/:item_id/order`
 - `frontend/src/pages/board/BoardRightMenuCardDetails.tsx` now supports block/item up/down reordering and per-block/item copy actions in the right-menu details view.
 - Added global language store `frontend/src/store/languageStore.ts` with persisted `language: 'ru' | 'en'`; `frontend/src/components/app/App.tsx` syncs `document.documentElement.lang` from that store.
+Update (2026-11-04) — Новый сайт-магазин в корне домена
+
+- Добавлены новые SQL-миграции: api/sql/2026-11-04-shop-schema.sql, создает таблицы shop_categories, shop_products, shop_product_images.
+- Добавлен бэкенд-маршрутизатор магазина: api/routes/shopRouter.js, обслуживает API маршруты:
+  - GET /api/shop/categories (публичный)
+  - GET /api/shop/products (публичный)
+  - GET /api/shop/products/:id (публичный)
+  - Административные маршруты (требуют роли admin):
+    - POST /api/shop/categories
+    - PATCH /api/shop/categories/:id
+    - DELETE /api/shop/categories/:id
+    - POST /api/shop/products
+    - PATCH /api/shop/products/:id
+    - DELETE /api/shop/products/:id
+    - POST /api/shop/products/:id/images
+    - DELETE /api/shop/products/:id/images/:image_id
+- Контроллер магазина: api/controllers/shopApiController.js реализует CRUD-операции, загрузку изображений и проверку текущего аккаунта.
+- Новый Express-сервер магазина: api/shopServer.js обслуживает статический фронтенд магазина (по умолчанию из api/static/shop/) и API-магазина на порту 3002 (SHOP_PORT). Используется тот же объект DB pool, uploads и middleware adminOnly.
+- Простой фронтенд-магазина: api/static/shop/index.html, отображает каталог товаров через /api/shop/products.
+- shopRoutes добавлены в api/routes/index.js, чтобы API-магазина был доступен по /api/shop.
+
+Update (2026-11-04, root storefront and account status)
+
+- `api/server.js` serves the shop from `/` and keeps the previous frontend available under `/oldsite`.
+- `GET /api/shop/session` requires the existing auth cookie or Authorization header and returns the current account id, username, nickname, role, and `isAdmin`.
+- Both `api/server.js` and `api/shopServer.js` mount the shop routes and use `api/static/shop/index.html` as the storefront.
+- The production frontend entrypoint also renders `frontend/src/pages/storefront/Storefront.tsx` only at `/`; the previous React application uses the `/oldsite` basename, and unsupported frontend paths redirect to `/`.
+- The web storefront UI is rendered by the production frontend bundle; `api/static/shop/index.html` is the fallback storefront served directly by the API/shop Express servers.
+- `frontend/src/pages/storefront/Storefront.tsx` presents the Potorochin shop with category tabs backed by `shop_categories.slug`: `leather-goods`, `warhammer-art`, `3d-models`, and `comic-art`.
+- `api/sql/2026-11-04-shop-categories.sql` idempotently seeds and reactivates the four shop categories by slug; apply it after the shop schema migration.
+- The shop account header displays account identity only. The product-management panel is rendered only when `/api/shop/session` returns `isAdmin: true`; product mutations continue to be protected by `adminOnly` on the API routes.
+- The shop admin product form can create missing default categories using the existing `POST /api/shop/categories` route; category state refreshes after creation.
+- Product create/update accepts multiple selected images in the storefront UI by uploading each sequentially through the existing `POST /api/shop/products/:id/images` route. `shop_product_images` already supports multiple rows per product; no schema change is needed.
+- Product descriptions are optional in the storefront admin form. Category/product data remains in the existing `shop_categories`, `shop_products`, and `shop_product_images` tables.
+
+Update (2026-11-05)
+
+- The React storefront supports `/`, `/leather`, `/warhammer`, `/comics`, and `/3d-printing`; the collection routes render the selected collection, while `/` opens the home view. `/oldsite` remains reserved for the previous app, and unsupported page routes do not fall back to the storefront. If no React build is present, the static fallback is served instead.
+- `api/server.js` uses `PINIT_FRONTEND_DIST` when configured, otherwise it serves `frontend/build/desktop` when that build exists; `api/static/shop/index.html` is the fallback when no frontend build exists. `api/shopServer.js` uses the same desktop build by default when available (or `api/static/shop/` otherwise). Both servers only send the storefront index for `/`, `/leather`, `/warhammer`, `/comics`, and `/3d-printing`.
+- Storefront language is stored in `localStorage` under `pinit_shop_language` (`en` or `ru`). Collection names and descriptions entered into the database, product names/descriptions, and product subcategory names are displayed as stored.
+- Added `api/sql/2026-11-05-shop-product-categories-metadata.sql`:
+  - creates `shop_product_categories`, linked to `shop_categories`;
+  - adds nullable `shop_products.subcategory_id` with `ON DELETE SET NULL`, nullable `publication_date DATE`, and `sales_count INT UNSIGNED NOT NULL DEFAULT 0`.
+- Shop product APIs now include collection subcategories:
+  - `GET /api/shop/categories/:id/subcategories` is public.
+  - `POST /api/shop/categories/:id/subcategories`, `PATCH /api/shop/subcategories/:id`, and `DELETE /api/shop/subcategories/:id` require admin.
+  - Product create/update/list/detail payloads include `subcategory_id`, `subcategory_name`, `publication_date`, `sales_count`, and ordered `images`.
+  - `PATCH /api/shop/products/:id/images/order` accepts `{ image_ids: number[] }` and sets the primary image from the first ordered id.
+- Product date values are stored as date-only values. The storefront admin form edits publication date and sales count, manages product subcategories, and provides image preview, crop, reorder, and delete controls.
+- Product descriptions are required for leather goods and 3D models; descriptions are optional for the art collections.

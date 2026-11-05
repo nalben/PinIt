@@ -13,8 +13,12 @@ const { verifyToken } = require('./socket/socket');
 const { UPLOADS_DIR } = require('./utils/runtimePaths');
 
 const DEFAULT_PORT = 3001;
+const DEFAULT_FRONTEND_DIST = path.join(__dirname, '..', 'frontend', 'build', 'desktop');
 
-const createApp = ({ frontendDist = null } = {}) => {
+const createApp = ({
+  frontendDist = null,
+  shopFrontendDist = path.join(__dirname, 'static/shop'),
+} = {}) => {
   const app = express();
 
   app.use(cors({
@@ -28,6 +32,13 @@ const createApp = ({ frontendDist = null } = {}) => {
   app.use('/api', routes);
   app.use('/uploads', express.static(UPLOADS_DIR));
 
+  const resolvedShopFrontendDist = path.resolve(shopFrontendDist);
+  const shopIndexPath = path.join(resolvedShopFrontendDist, 'index.html');
+  if (!fs.existsSync(shopIndexPath)) {
+    throw new Error(`Shop frontend not found: ${shopIndexPath}`);
+  }
+  app.use(express.static(resolvedShopFrontendDist, { index: false }));
+
   if (frontendDist) {
     const resolvedFrontendDist = path.resolve(frontendDist);
     const indexPath = path.join(resolvedFrontendDist, 'index.html');
@@ -36,14 +47,25 @@ const createApp = ({ frontendDist = null } = {}) => {
       throw new Error(`Frontend build not found: ${indexPath}`);
     }
 
-    app.use(express.static(resolvedFrontendDist));
+    // Serve the old PinIt site under /oldsite
+    app.use('/oldsite', express.static(resolvedFrontendDist));
+    app.use(express.static(resolvedFrontendDist, { index: false }));
     app.use((req, res, next) => {
       if (req.method !== 'GET') return next();
       if (req.path === '/api' || req.path.startsWith('/api/')) return next();
       if (req.path === '/uploads' || req.path.startsWith('/uploads/')) return next();
-      return res.sendFile(indexPath);
+      if (req.path === '/oldsite' || req.path.startsWith('/oldsite/')) {
+        // For any path under /oldsite, serve the SPA index.html (client-side routing)
+        return res.sendFile(indexPath);
+      }
+      return next();
     });
   }
+
+  const storefrontIndexPath = frontendDist
+    ? path.join(path.resolve(frontendDist), 'index.html')
+    : shopIndexPath;
+  app.get(['/', '/leather', '/warhammer', '/comics', '/3d-printing'], (req, res) => res.sendFile(storefrontIndexPath));
 
   return app;
 };
@@ -92,9 +114,11 @@ const normalizePort = (value) => {
 const startServer = async ({
   port = process.env.PORT ?? DEFAULT_PORT,
   host = '0.0.0.0',
-  frontendDist = process.env.PINIT_FRONTEND_DIST ?? null,
+  frontendDist = process.env.PINIT_FRONTEND_DIST
+    ?? (fs.existsSync(path.join(DEFAULT_FRONTEND_DIST, 'index.html')) ? DEFAULT_FRONTEND_DIST : null),
+  shopFrontendDist = process.env.SHOP_FRONTEND_DIST ?? path.join(__dirname, 'static/shop'),
 } = {}) => {
-  const app = createApp({ frontendDist });
+  const app = createApp({ frontendDist, shopFrontendDist });
   const server = http.createServer(app);
   const io = createSocketServer(server);
 
@@ -119,6 +143,7 @@ const startServer = async ({
     host,
     port: actualPort,
     frontendDist: frontendDist ? path.resolve(frontendDist) : null,
+    shopFrontendDist: path.resolve(shopFrontendDist),
   };
 };
 

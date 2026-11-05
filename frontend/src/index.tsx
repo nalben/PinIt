@@ -10,6 +10,7 @@ import ProfileRedirect from "./components/__general/profileredirect/ProfileRedir
 import Spaces from "./pages/spaces/Spaces";
 import Board from "./pages/board/Board";
 import Converter from "./pages/converter/Converter";
+import Storefront from "./pages/storefront/Storefront";
 import { useBoardDetailsStore } from "@/store/boardDetailsStore";
 import { useBoardsUnifiedStore } from "@/store/boardsUnifiedStore";
 import { applyTheme, getStoredTheme } from "@/utils/theme";
@@ -129,13 +130,24 @@ const router = createBrowserRouter([
       }
     ]
   },
-]);
+], {
+  basename: '/oldsite',
+});
 
 
 const root = document.getElementById('root');
 if (!root) throw new Error('root not found');
 
 const container = createRoot(root);
-container.render(
-  <RouterProvider router={router} />
-);
+const pathname = window.location.pathname;
+const isOldSitePath = pathname === '/oldsite' || pathname.startsWith('/oldsite/');
+const isStorefrontPath = ['/', '/leather', '/warhammer', '/comics', '/3d-printing']
+  .includes(pathname.replace(/\/+$/, '') || '/');
+
+if (isStorefrontPath) {
+  container.render(<Storefront />);
+} else if (isOldSitePath) {
+  container.render(<RouterProvider router={router} />);
+} else {
+  window.location.replace('/');
+}

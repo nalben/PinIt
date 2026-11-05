@@ -17,5 +17,7 @@ router.use('/profile', profileRoutes);
 router.use('/friends', friendsRoutes);
 router.use('/admin', adminRoutes);
 router.use('/converter', converterRoutes);
+const shopRoutes = require('./shopRouter');
 
+router.use('/shop', shopRoutes);
 module.exports = router;
