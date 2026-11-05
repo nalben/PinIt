@@ -65,7 +65,7 @@ const createApp = ({
   const storefrontIndexPath = frontendDist
     ? path.join(path.resolve(frontendDist), 'index.html')
     : shopIndexPath;
-  app.get(['/', '/leather', '/warhammer', '/comics', '/3d-printing'], (req, res) => res.sendFile(storefrontIndexPath));
+  app.get(['/', /^\/(?:leather|warhammer|comics|3d-printing)(?:\/.*)?$/], (req, res) => res.sendFile(storefrontIndexPath));
 
   return app;
 };

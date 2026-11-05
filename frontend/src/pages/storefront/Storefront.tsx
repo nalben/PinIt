@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type TouchEvent as ReactTouchEvent,
+  type WheelEvent as ReactWheelEvent,
+} from 'react';
 import axiosInstance from '@/api/axiosInstance';
 import StorefrontAdmin from './StorefrontAdmin';
 import type {
@@ -77,11 +85,8 @@ const COPY: Record<Language, Record<string, string>> = {
     welcomeDescription: 'Handmade crafts, art and collectibles for enthusiasts and dreamers.',
     rooms: 'FOUR ROOMS · ONE WORKSHOP',
     explore: 'Explore the collection',
-    selectedWorks: 'SELECTED WORKS',
-    featuredProducts: 'Featured Products',
     openingCatalogue: 'Opening the catalogue…',
     catalogueUnavailable: 'The catalogue is temporarily unavailable.',
-    newWorksSoon: 'New works will be added to the collection soon.',
     sectionCollection: 'POTOROCHIN COLLECTION',
     categoryAll: 'All works',
     categoryEmpty: 'There are no published works in this room yet.',
@@ -180,11 +185,8 @@ const COPY: Record<Language, Record<string, string>> = {
     welcomeDescription: 'Авторские изделия, арты и коллекционные вещи для увлечённых и мечтателей.',
     rooms: 'ЧЕТЫРЕ КОЛЛЕКЦИИ · ОДНА МАСТЕРСКАЯ',
     explore: 'Исследуйте коллекции',
-    selectedWorks: 'ИЗБРАННЫЕ РАБОТЫ',
-    featuredProducts: 'Избранные товары',
     openingCatalogue: 'Загружаем каталог…',
     catalogueUnavailable: 'Каталог временно недоступен.',
-    newWorksSoon: 'Новые работы скоро появятся в каталоге.',
     sectionCollection: 'КОЛЛЕКЦИЯ POTOROCHIN',
     categoryAll: 'Все работы',
     categoryEmpty: 'В этой коллекции пока нет опубликованных работ.',
@@ -299,17 +301,76 @@ const SECTION_COPY: Record<Language, Record<string, string>> = {
   },
 };
 
-const getRouteSection = (pathname: string) => {
-  const normalizedPath = pathname.replace(/\/+$/, '') || '/';
-  return SHOP_SECTIONS.find(section => section.path === normalizedPath) || null;
+type StorefrontRoute = {
+  valid: boolean;
+  section: ShopSection | null;
+  subcategorySlug: string | null;
+  productId: number | null;
+};
+
+const parseStorefrontRoute = (pathname: string, search = ''): StorefrontRoute => {
+  const segments = pathname.split('/').filter(Boolean);
+  if (segments.length === 0) {
+    return { valid: true, section: null, subcategorySlug: null, productId: null };
+  }
+
+  const section = SHOP_SECTIONS.find(item => item.path.slice(1) === segments[0]);
+  if (!section || segments.length > 3) {
+    return { valid: false, section: null, subcategorySlug: null, productId: null };
+  }
+
+  let decodedSegments: string[];
+  try {
+    decodedSegments = segments.slice(1).map(segment => decodeURIComponent(segment));
+  } catch {
+    return { valid: false, section: null, subcategorySlug: null, productId: null };
+  }
+
+  if (decodedSegments.length === 0) {
+    const legacySubcategory = new URLSearchParams(search).get('subcategory');
+    return {
+      valid: !legacySubcategory || !legacySubcategory.includes('/'),
+      section,
+      subcategorySlug: legacySubcategory,
+      productId: null,
+    };
+  }
+
+  if (decodedSegments.length === 1 && /^\d+$/.test(decodedSegments[0])) {
+    const productId = Number(decodedSegments[0]);
+    return Number.isSafeInteger(productId) && productId > 0
+      ? { valid: true, section, subcategorySlug: null, productId }
+      : { valid: false, section: null, subcategorySlug: null, productId: null };
+  }
+
+  const [subcategorySlug, productIdSegment] = decodedSegments;
+  const productId = productIdSegment ? Number(productIdSegment) : null;
+  if (productIdSegment && (!/^\d+$/.test(productIdSegment) || !Number.isSafeInteger(productId) || productId <= 0)) {
+    return { valid: false, section: null, subcategorySlug: null, productId: null };
+  }
+  if (!subcategorySlug || subcategorySlug.includes('/')) {
+    return { valid: false, section: null, subcategorySlug: null, productId: null };
+  }
+
+  return { valid: true, section, subcategorySlug, productId };
 };
 
 const getLanguage = (): Language => {
   try {
-    return localStorage.getItem('pinit_shop_language') === 'ru' ? 'ru' : 'en';
+    return localStorage.getItem('pinit_shop_language') === 'en' ? 'en' : 'ru';
   } catch {
-    return 'en';
+    return 'ru';
   }
+};
+
+const getProductPath = (
+  section: ShopSection,
+  product: ShopProduct,
+  subcategories: ShopProductCategory[]
+) => {
+  const subcategory = subcategories.find(item => item.id === product.subcategory_id);
+  const subcategoryPath = subcategory ? `/${encodeURIComponent(subcategory.slug)}` : '';
+  return `${section.path}${subcategoryPath}/${product.id}`;
 };
 
 const formatPublicationDate = (
@@ -390,17 +451,26 @@ const ProductDetail = ({
   onDelete,
 }: ProductDetailProps) => {
   const [imageIndex, setImageIndex] = useState(0);
+  const [imageZoom, setImageZoom] = useState(1);
+  const touchDistanceRef = useRef<number | null>(null);
   const image = product.images[imageIndex];
   const productDate = formatProductDate(product.publication_date, language, text);
+
+  useEffect(() => {
+    setImageIndex(0);
+    setImageZoom(1);
+  }, [product.id]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
       if (event.key === 'ArrowRight' && product.images.length > 1) {
         setImageIndex(index => (index + 1) % product.images.length);
+        setImageZoom(1);
       }
       if (event.key === 'ArrowLeft' && product.images.length > 1) {
         setImageIndex(index => (index - 1 + product.images.length) % product.images.length);
+        setImageZoom(1);
       }
     };
     document.addEventListener('keydown', handleKeyDown);
@@ -411,6 +481,36 @@ const ProductDetail = ({
     };
   }, [onClose, product.images.length]);
 
+  const handleImageWheel = (event: ReactWheelEvent<HTMLDivElement>) => {
+    if (!image) return;
+    setImageZoom(value => Math.min(4, Math.max(1, value + (event.deltaY < 0 ? 0.2 : -0.2))));
+  };
+
+  const handleImageTouchStart = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (event.touches.length === 2) {
+      const [first, second] = Array.from(event.touches);
+      touchDistanceRef.current = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+    }
+  };
+
+  const handleImageTouchMove = (event: ReactTouchEvent<HTMLDivElement>) => {
+    if (event.touches.length !== 2 || touchDistanceRef.current === null) return;
+    const [first, second] = Array.from(event.touches);
+    const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+    const zoomRatio = distance / touchDistanceRef.current;
+    setImageZoom(value => Math.min(4, Math.max(1, value * zoomRatio)));
+    touchDistanceRef.current = distance;
+  };
+
+  const resetTouchDistance = () => {
+    touchDistanceRef.current = null;
+  };
+
+  const selectImage = (index: number) => {
+    setImageIndex(index);
+    setImageZoom(1);
+  };
+
   return (
     <div className={classes.modalBackdrop} onMouseDown={event => {
       if (event.target === event.currentTarget) onClose();
@@ -418,9 +518,20 @@ const ProductDetail = ({
       <section className={classes.productModal} role="dialog" aria-modal="true" aria-labelledby="product-title">
         <button className={classes.modalClose} type="button" onClick={onClose} aria-label={text('closeProduct')}>×</button>
         <div className={classes.modalGallery}>
-          <div className={`${classes.modalImage} ${classes[section.artClass]}`}>
+          <div
+            className={`${classes.modalImage} ${classes[section.artClass]}`}
+            onWheel={handleImageWheel}
+            onTouchStart={handleImageTouchStart}
+            onTouchMove={handleImageTouchMove}
+            onTouchEnd={resetTouchDistance}
+            onTouchCancel={resetTouchDistance}
+          >
             {image ? (
-              <img src={resolveImageUrl(image.image_path)} alt={product.title} />
+              <img
+                src={resolveImageUrl(image.image_path)}
+                alt={product.title}
+                style={{ transform: `scale(${imageZoom})` }}
+              />
             ) : (
               <div className={classes.artworkPlaceholder} aria-hidden="true">
                 <span>{sectionText(section.titleKey)}</span>
@@ -433,7 +544,7 @@ const ProductDetail = ({
                   type="button"
                   className={`${classes.galleryArrow} ${classes.galleryPrevious}`}
                   aria-label={text('previousImage')}
-                  onClick={() => setImageIndex(index => (index - 1 + product.images.length) % product.images.length)}
+                  onClick={() => selectImage((imageIndex - 1 + product.images.length) % product.images.length)}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
                 </button>
@@ -441,7 +552,7 @@ const ProductDetail = ({
                   type="button"
                   className={`${classes.galleryArrow} ${classes.galleryNext}`}
                   aria-label={text('nextImage')}
-                  onClick={() => setImageIndex(index => (index + 1) % product.images.length)}
+                  onClick={() => selectImage((imageIndex + 1) % product.images.length)}
                 >
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-7-7 7 7-7 7" /></svg>
                 </button>
@@ -457,7 +568,7 @@ const ProductDetail = ({
                   className={index === imageIndex ? classes.galleryThumbnailActive : classes.galleryThumbnail}
                   aria-label={`${text('selectImage')} ${index + 1}`}
                   aria-pressed={index === imageIndex}
-                  onClick={() => setImageIndex(index)}
+                  onClick={() => selectImage(index)}
                 >
                   <img src={resolveImageUrl(item.image_path)} alt="" />
                 </button>
@@ -500,7 +611,7 @@ const ProductDetail = ({
 };
 
 const Storefront = () => {
-  const initialRoute = getRouteSection(window.location.pathname);
+  const initialRoute = parseStorefrontRoute(window.location.pathname, window.location.search);
   const [language, setLanguage] = useState<Language>(getLanguage);
   const [account, setAccount] = useState<ShopAccount | null>(null);
   const [accountLoading, setAccountLoading] = useState(true);
@@ -510,13 +621,11 @@ const Storefront = () => {
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState(false);
-  const [activeSlug, setActiveSlug] = useState<string | null>(initialRoute?.slug || null);
-  const [activeSubcategorySlug, setActiveSubcategorySlug] = useState<string | null>(
-    new URLSearchParams(window.location.search).get('subcategory')
-  );
+  const [activeSlug, setActiveSlug] = useState<string | null>(initialRoute.section?.slug || null);
+  const [activeSubcategorySlug, setActiveSubcategorySlug] = useState<string | null>(initialRoute.subcategorySlug);
   const [adminOpen, setAdminOpen] = useState(false);
   const [adminProduct, setAdminProduct] = useState<ShopProduct | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<ShopProduct | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(initialRoute.productId);
   const [productActionError, setProductActionError] = useState('');
   const section = SHOP_SECTIONS.find(item => item.slug === activeSlug) || null;
   const text = useCallback((key: string) => COPY[language][key] || key, [language]);
@@ -585,16 +694,75 @@ const Storefront = () => {
 
   useEffect(() => {
     const handlePopState = () => {
-      setActiveSlug(getRouteSection(window.location.pathname)?.slug || null);
-      setActiveSubcategorySlug(new URLSearchParams(window.location.search).get('subcategory'));
+      const route = parseStorefrontRoute(window.location.pathname, window.location.search);
+      if (!route.valid) {
+        window.history.replaceState(null, '', '/');
+        setActiveSlug(null);
+        setActiveSubcategorySlug(null);
+        setSelectedProductId(null);
+        return;
+      }
+      setActiveSlug(route.section?.slug || null);
+      setActiveSubcategorySlug(route.subcategorySlug);
+      setSelectedProductId(route.productId);
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  useEffect(() => {
+    const route = parseStorefrontRoute(window.location.pathname, window.location.search);
+    if (!route.valid) {
+      window.history.replaceState(null, '', '/');
+      setActiveSlug(null);
+      setActiveSubcategorySlug(null);
+      setSelectedProductId(null);
+      return;
+    }
+    if (catalogLoading || catalogError) return;
+
+    const category = route.section
+      ? categories.find(item => item.slug === route.section?.slug)
+      : null;
+    const categorySubcategories = category ? subcategoriesByCategory[category.id] || [] : [];
+    const subcategory = route.subcategorySlug
+      ? categorySubcategories.find(item => item.slug === route.subcategorySlug)
+      : null;
+    const routeProduct = route.productId
+      ? products.find(item => item.id === route.productId)
+      : null;
+
+    if (
+      (route.subcategorySlug && !subcategory)
+      || (route.productId && (
+        !routeProduct
+        || !category
+        || routeProduct.category_id !== category.id
+        || (subcategory && routeProduct.subcategory_id !== subcategory.id)
+      ))
+    ) {
+      window.history.replaceState(null, '', '/');
+      setActiveSlug(null);
+      setActiveSubcategorySlug(null);
+      setSelectedProductId(null);
+      return;
+    }
+
+    const canonicalPath = routeProduct && route.section
+      ? getProductPath(route.section, routeProduct, categorySubcategories)
+      : `${route.section?.path || '/'}${subcategory ? `/${encodeURIComponent(subcategory.slug)}` : ''}`;
+    if (window.location.pathname !== canonicalPath || window.location.search) {
+      window.history.replaceState(window.history.state, '', canonicalPath);
+    }
+    setActiveSlug(route.section?.slug || null);
+    setActiveSubcategorySlug(subcategory?.slug || null);
+    setSelectedProductId(routeProduct?.id || null);
+  }, [catalogError, catalogLoading, categories, products, subcategoriesByCategory]);
+
   const activeCategory = section ? categories.find(category => category.slug === section.slug) || null : null;
   const activeSubcategories = activeCategory ? subcategoriesByCategory[activeCategory.id] || [] : [];
   const activeSubcategory = activeSubcategories.find(category => category.slug === activeSubcategorySlug) || null;
+  const selectedProduct = products.find(product => product.id === selectedProductId) || null;
   const visibleProducts = useMemo(() => {
     if (!activeCategory) return [];
     return products.filter(product => (
@@ -602,16 +770,11 @@ const Storefront = () => {
       && (!activeSubcategory || product.subcategory_id === activeSubcategory.id)
     ));
   }, [activeCategory, activeSubcategory, products]);
-  const featuredProducts = useMemo(() => SHOP_SECTIONS.flatMap(shopSection => {
-    const category = categories.find(item => item.slug === shopSection.slug);
-    const product = category && products.find(item => item.category_id === category.id);
-    return product ? [{ product, section: shopSection }] : [];
-  }), [categories, products]);
-
   const navigateHome = useCallback(() => {
     window.history.pushState(null, '', '/');
     setActiveSlug(null);
     setActiveSubcategorySlug(null);
+    setSelectedProductId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -621,25 +784,52 @@ const Storefront = () => {
     window.history.pushState(null, '', target.path);
     setActiveSlug(target.slug);
     setActiveSubcategorySlug(null);
+    setSelectedProductId(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const navigateSubcategory = (slug: string | null) => {
     if (!section) return;
-    const url = new URL(section.path, window.location.origin);
-    if (slug) url.searchParams.set('subcategory', slug);
-    window.history.pushState(null, '', `${url.pathname}${url.search}`);
+    const path = `${section.path}${slug ? `/${encodeURIComponent(slug)}` : ''}`;
+    window.history.pushState(null, '', path);
     setActiveSubcategorySlug(slug);
+    setSelectedProductId(null);
   };
 
-  const closeSelectedProduct = useCallback(() => setSelectedProduct(null), []);
+  const openProduct = useCallback((product: ShopProduct) => {
+    const productSection = SHOP_SECTIONS.find(item => (
+      item.slug === categories.find(category => category.id === product.category_id)?.slug
+    ));
+    if (!productSection) return;
+    const productSubcategories = subcategoriesByCategory[product.category_id] || [];
+    const path = getProductPath(productSection, product, productSubcategories);
+    window.history.pushState({ storefrontProductId: product.id }, '', path);
+    setActiveSlug(productSection.slug);
+    setActiveSubcategorySlug(productSubcategories.find(item => item.id === product.subcategory_id)?.slug || null);
+    setSelectedProductId(product.id);
+  }, [categories, subcategoriesByCategory]);
+
+  const closeSelectedProduct = useCallback(() => {
+    if (selectedProductId && window.history.state?.storefrontProductId === selectedProductId) {
+      window.history.back();
+      return;
+    }
+    const route = parseStorefrontRoute(window.location.pathname);
+    const category = route.section && categories.find(item => item.slug === route.section?.slug);
+    const subcategory = category && route.subcategorySlug
+      ? (subcategoriesByCategory[category.id] || []).find(item => item.slug === route.subcategorySlug)
+      : null;
+    const basePath = `${route.section?.path || '/'}${subcategory ? `/${encodeURIComponent(subcategory.slug)}` : ''}`;
+    window.history.replaceState(null, '', basePath);
+    setSelectedProductId(null);
+  }, [categories, selectedProductId, subcategoriesByCategory]);
 
   const handleDeleteSelectedProduct = async () => {
     if (!selectedProduct || !window.confirm(`${text('confirmDeleteProduct')} «${selectedProduct.title}»?`)) return;
     setProductActionError('');
     try {
       await axiosInstance.delete(`/api/shop/products/${selectedProduct.id}`);
-      setSelectedProduct(null);
+      closeSelectedProduct();
       await refreshCatalog();
     } catch (error) {
       setProductActionError(getRequestErrorMessage(error, text('deleteProductError')));
@@ -648,7 +838,8 @@ const Storefront = () => {
 
   const openAdmin = (product: ShopProduct | null = null) => {
     setAdminProduct(product);
-    setSelectedProduct(null);
+    if (selectedProduct) closeSelectedProduct();
+    else setSelectedProductId(null);
     setAdminOpen(true);
   };
 
@@ -759,30 +950,6 @@ const Storefront = () => {
               </div>
             </section>
 
-            <section className={classes.featuredSection} aria-labelledby="featured-title">
-              <div className={classes.sectionHeading}>
-                <span className={classes.eyebrow}>{text('selectedWorks')}</span>
-                <h2 id="featured-title">{text('featuredProducts')}</h2>
-              </div>
-              {catalogLoading && <p className={classes.catalogMessage}>{text('openingCatalogue')}</p>}
-              {!catalogLoading && catalogError && <p className={classes.catalogMessage} role="alert">{text('catalogueUnavailable')}</p>}
-              {!catalogLoading && !catalogError && featuredProducts.length === 0 && (
-                <p className={classes.catalogMessage}>{text('newWorksSoon')}</p>
-              )}
-              <div className={classes.productGrid}>
-                {featuredProducts.map(({ product, section: productSection }) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    section={productSection}
-                    language={language}
-                    text={text}
-                    sectionText={sectionText}
-                    onSelect={setSelectedProduct}
-                  />
-                ))}
-              </div>
-            </section>
           </>
         ) : (
           <>
@@ -830,7 +997,7 @@ const Storefront = () => {
                     language={language}
                     text={text}
                     sectionText={sectionText}
-                    onSelect={setSelectedProduct}
+                    onSelect={openProduct}
                   />
                 ))}
               </div>

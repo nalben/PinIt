@@ -43,7 +43,8 @@ const createApp = ({ frontendDist = DEFAULT_SHOP_DIST } = {}) => {
       if (req.method !== 'GET') return next();
       if (req.path === '/api' || req.path.startsWith('/api/')) return next();
       if (req.path === '/uploads' || req.path.startsWith('/uploads/')) return next();
-      if (!['/leather', '/warhammer', '/comics', '/3d-printing'].includes(req.path)) return next();
+      const storefrontPaths = ['/leather', '/warhammer', '/comics', '/3d-printing'];
+      if (!storefrontPaths.some(path => req.path === path || req.path.startsWith(`${path}/`))) return next();
       return res.sendFile(indexPath);
     });
   }

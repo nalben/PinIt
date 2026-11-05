@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
-
 .page {
   --paper: #f1e9df;
   --paper-light: #fffaf5;
@@ -17,10 +15,6 @@
     radial-gradient(ellipse at 88% 55%, rgba(201, 168, 139, 0.12), transparent 38rem),
     var(--paper);
   font-family: Georgia, 'Times New Roman', serif;
-}
-
-.page[lang='ru'] {
-  font-family: 'Playfair Display', Georgia, serif;
 }
 
 .paperTexture {
@@ -278,7 +272,6 @@
 }
 
 .collectionSection,
-.featuredSection,
 .categoryCatalog {
   padding: 2rem 0 4.5rem;
 }
@@ -471,11 +464,6 @@
 .categoryArrow {
   color: var(--gold);
   font-size: 1rem;
-}
-
-.featuredSection {
-  padding-top: 1.8rem;
-  border-top: 1px solid var(--line);
 }
 
 .productGrid {
@@ -834,12 +822,17 @@
   overflow: hidden;
   border-radius: 17px;
   background-color: #ded2c4;
+  touch-action: none;
+  overscroll-behavior: contain;
 
   > img {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transform-origin: center;
+    transition: transform 100ms ease-out;
+    will-change: transform;
   }
 
   > .artworkPlaceholder {
@@ -1697,7 +1690,6 @@
   }
 
   .collectionSection,
-  .featuredSection,
   .categoryCatalog {
     padding-bottom: 3.2rem;
   }

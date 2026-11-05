@@ -141,8 +141,11 @@ if (!root) throw new Error('root not found');
 const container = createRoot(root);
 const pathname = window.location.pathname;
 const isOldSitePath = pathname === '/oldsite' || pathname.startsWith('/oldsite/');
-const isStorefrontPath = ['/', '/leather', '/warhammer', '/comics', '/3d-printing']
-  .includes(pathname.replace(/\/+$/, '') || '/');
+const storefrontPaths = ['/', '/leather', '/warhammer', '/comics', '/3d-printing'];
+const normalizedStorefrontPath = pathname.replace(/\/+$/, '') || '/';
+const isStorefrontPath = storefrontPaths.some(path => (
+  normalizedStorefrontPath === path || (path !== '/' && normalizedStorefrontPath.startsWith(`${path}/`))
+));
 
 if (isStorefrontPath) {
   container.render(<Storefront />);
