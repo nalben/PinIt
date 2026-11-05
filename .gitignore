@@ -2,3 +2,4 @@ node_modules
 PinIt.code-workspace
 .continue
 desktop-dist
+/api/sql/2026-11-04.sql

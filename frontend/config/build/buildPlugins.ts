@@ -6,6 +6,7 @@ import { BuildOptions } from './types/types';
 import { BundleAnalyzerPlugin } from 'webpack-bundle-analyzer';
 import ForkTsCheckerWebpackPlugin from 'fork-ts-checker-webpack-plugin';
 import ReactrefreshWebpackPlugin from '@pmmmwh/react-refresh-webpack-plugin';
+import CopyPlugin from 'copy-webpack-plugin';
 import path from 'path';
 
 const ImageminWebpWebpackPlugin = require('imagemin-webp-webpack-plugin');
@@ -14,6 +15,12 @@ export function buildPlugins({ mode, paths, analyzer, platform, apiUrl }: BuildO
   const isProd = mode === 'production';
   const plugins: Configuration['plugins'] = [
     new HtmlWebpackPlugin({ template: paths.html, favicon: path.resolve(paths.public, 'Logo.svg') }),
+    new CopyPlugin({
+      patterns: ['instagram.svg', 'telegram.svg'].map(name => ({
+        from: path.resolve(paths.public, name),
+        to: name,
+      })),
+    }),
     new webpack.DefinePlugin({
       __PLATFORM__: JSON.stringify(platform),
       __ENV__: JSON.stringify(mode),
