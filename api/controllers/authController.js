@@ -47,7 +47,7 @@ const authController = {
         return res.json({ message: "Код отправлен (локальный режим)" });
       }
 
-      const VPS_URL = "http://10.8.0.1:4000/";
+      const VPS_URL = "https://pin-it.ru/mail-api/send-email";
 
       const payload = { to: email, code, type: "registration" };
       const result = await axios.post(VPS_URL, payload);
@@ -180,7 +180,7 @@ const authController = {
         return res.json({ message: "Код отправлен (локальный режим)" });
       }
 
-      const VPS_URL = "http://10.8.0.1:4000/";
+      const VPS_URL = "https://pin-it.ru/mail-api/send-email";
       const payload = { to: email, code, type: "reset" };
       const result = await axios.post(VPS_URL, payload);
 
