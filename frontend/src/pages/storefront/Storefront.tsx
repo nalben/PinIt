@@ -100,6 +100,10 @@ const COPY: Record<Language, Record<string, string>> = {
     closeProduct: 'Close product details',
     previousImage: 'Previous image',
     nextImage: 'Next image',
+    added: 'Added',
+    order: 'Order',
+    productImage: 'Product image',
+    selectImage: 'Show image',
     image: 'Image',
     productsTab: 'Products',
     categoriesTab: 'Product categories',
@@ -160,7 +164,7 @@ const COPY: Record<Language, Record<string, string>> = {
     cropProductImage: 'Crop product image',
   },
   ru: {
-    documentTitle: 'Potorochin Shop — мастерская и искусство',
+    documentTitle: 'Potorochin Shop — мастерская и авторские арты',
     home: 'Главная',
     language: 'Язык',
     accountChecking: 'Проверяем аккаунт…',
@@ -173,7 +177,7 @@ const COPY: Record<Language, Record<string, string>> = {
     welcomeEyebrow: 'КАБИНЕТ АВТОРСКИХ РАБОТ',
     welcomeTitle: 'Добро пожаловать в',
     welcomeName: 'Potorochin Shop',
-    welcomeDescription: 'Авторские изделия, искусство и коллекционные вещи для увлечённых и мечтателей.',
+    welcomeDescription: 'Авторские изделия, арты и коллекционные вещи для увлечённых и мечтателей.',
     rooms: 'ЧЕТЫРЕ КОЛЛЕКЦИИ · ОДНА МАСТЕРСКАЯ',
     explore: 'Исследуйте коллекции',
     selectedWorks: 'ИЗБРАННЫЕ РАБОТЫ',
@@ -199,6 +203,10 @@ const COPY: Record<Language, Record<string, string>> = {
     closeProduct: 'Закрыть карточку товара',
     previousImage: 'Предыдущее изображение',
     nextImage: 'Следующее изображение',
+    added: 'Добавлено',
+    order: 'Заказать',
+    productImage: 'Фото товара',
+    selectImage: 'Показать изображение',
     image: 'Изображение',
     productsTab: 'Товары',
     categoriesTab: 'Категории товаров',
@@ -279,12 +287,12 @@ const SECTION_COPY: Record<Language, Record<string, string>> = {
     leather: 'Кожаные изделия',
     leatherSubtitle: 'Созданы вручную и надолго.',
     leatherDescription: 'Авторские изделия из кожи, бережно обработанные вручную.',
-    warhammer: 'Искусство Warhammer',
+    warhammer: 'Арты Warhammer',
     warhammerSubtitle: 'Образы мрачных далёких миров.',
-    warhammerDescription: 'Авторские иллюстрации, портреты персонажей и сцены легенд.',
-    comics: 'Искусство комиксов',
+    warhammerDescription: 'Авторские арты, портреты персонажей и сцены из мрачных миров.',
+    comics: 'Комикс-арты',
     comicsSubtitle: 'Истории, нарисованные кадр за кадром.',
-    comicsDescription: 'Портреты персонажей, оригинальные работы и графика.',
+    comicsDescription: 'Арты персонажей, авторские иллюстрации и графика по комиксам.',
     printing: '3D-печать',
     printingSubtitle: 'Формы из другого времени.',
     printingDescription: 'Миниатюры, бюсты, скульптуры и архитектурные модели.',
@@ -321,6 +329,12 @@ const formatPublicationDate = (
     year: 'numeric',
   }).format(date);
 };
+
+const formatProductDate = (
+  value: string | null,
+  language: Language,
+  text: (key: string) => string
+) => formatPublicationDate(value, language, text) || null;
 
 type ProductCardProps = {
   product: ShopProduct;
@@ -377,6 +391,7 @@ const ProductDetail = ({
 }: ProductDetailProps) => {
   const [imageIndex, setImageIndex] = useState(0);
   const image = product.images[imageIndex];
+  const productDate = formatProductDate(product.publication_date, language, text);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -402,31 +417,78 @@ const ProductDetail = ({
     }}>
       <section className={classes.productModal} role="dialog" aria-modal="true" aria-labelledby="product-title">
         <button className={classes.modalClose} type="button" onClick={onClose} aria-label={text('closeProduct')}>×</button>
-        <div className={`${classes.modalImage} ${classes[section.artClass]}`}>
-          {image ? (
-            <img src={resolveImageUrl(image.image_path)} alt={product.title} />
-          ) : (
-            <div className={classes.artworkPlaceholder} aria-hidden="true">
-              <span>{sectionText(section.titleKey)}</span>
-            </div>
-          )}
+        <div className={classes.modalGallery}>
+          <div className={`${classes.modalImage} ${classes[section.artClass]}`}>
+            {image ? (
+              <img src={resolveImageUrl(image.image_path)} alt={product.title} />
+            ) : (
+              <div className={classes.artworkPlaceholder} aria-hidden="true">
+                <span>{sectionText(section.titleKey)}</span>
+              </div>
+            )}
+            {product.images.length > 1 && (
+              <>
+                <span className={classes.galleryCounter}>{imageIndex + 1} / {product.images.length}</span>
+                <button
+                  type="button"
+                  className={`${classes.galleryArrow} ${classes.galleryPrevious}`}
+                  aria-label={text('previousImage')}
+                  onClick={() => setImageIndex(index => (index - 1 + product.images.length) % product.images.length)}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+                </button>
+                <button
+                  type="button"
+                  className={`${classes.galleryArrow} ${classes.galleryNext}`}
+                  aria-label={text('nextImage')}
+                  onClick={() => setImageIndex(index => (index + 1) % product.images.length)}
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-7-7 7 7-7 7" /></svg>
+                </button>
+              </>
+            )}
+          </div>
           {product.images.length > 1 && (
-            <div className={classes.galleryControls}>
-              <button type="button" aria-label={text('previousImage')} onClick={() => setImageIndex(index => (index - 1 + product.images.length) % product.images.length)}>‹</button>
-              <span>{imageIndex + 1} / {product.images.length}</span>
-              <button type="button" aria-label={text('nextImage')} onClick={() => setImageIndex(index => (index + 1) % product.images.length)}>›</button>
+            <div className={classes.galleryThumbnails} aria-label={text('productImage')}>
+              {product.images.map((item, index) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  className={index === imageIndex ? classes.galleryThumbnailActive : classes.galleryThumbnail}
+                  aria-label={`${text('selectImage')} ${index + 1}`}
+                  aria-pressed={index === imageIndex}
+                  onClick={() => setImageIndex(index)}
+                >
+                  <img src={resolveImageUrl(item.image_path)} alt="" />
+                </button>
+              ))}
             </div>
           )}
         </div>
         <div className={classes.modalInfo}>
-          <p className={classes.eyebrow}>{product.subcategory_name || product.category_name || sectionText(section.titleKey)}</p>
           <h2 id="product-title">{product.title}</h2>
+          <span className={classes.productCategoryTag}>{product.subcategory_name || product.category_name || sectionText(section.titleKey)}</span>
           {product.description && <p className={classes.modalDescription}>{product.description}</p>}
           <p className={classes.modalPrice}>{formatPrice(product.price, language)}</p>
-          <p className={classes.modalDate}>{formatPublicationDate(product.publication_date, language, text)}</p>
+          <div className={classes.productMetadata}>
+            {productDate && (
+              <span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></svg>
+                {text('added')}: {productDate}
+              </span>
+            )}
+            <span>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20v-6M10 20V9M16 20V4M22 20V12" /></svg>
+              {text('sales')}: {product.sales_count}
+            </span>
+          </div>
+          {!isAdmin && (
+            <a className={classes.orderButton} href="https://t.me/PotAndrey" target="_blank" rel="noreferrer">
+              {text('order')}
+            </a>
+          )}
           {isAdmin && (
             <div className={classes.productAdminActions}>
-              <span>{text('sales')}: {product.sales_count}</span>
               <button type="button" className={classes.primaryButton} onClick={onEdit}>{text('edit')}</button>
               <button type="button" className={classes.deleteButton} onClick={onDelete}>{text('delete')}</button>
             </div>
@@ -595,7 +657,7 @@ const Storefront = () => {
     : null;
 
   return (
-    <main className={classes.page}>
+    <main className={classes.page} lang={language}>
       <div className={classes.paperTexture} aria-hidden="true" />
       <header className={classes.header}>
         <div className={classes.headerTop}>
@@ -727,7 +789,7 @@ const Storefront = () => {
             <section className={`${classes.categoryIntro} ${classes[section.artClass]}`}>
               <p className={classes.eyebrow}>{section.mark} · {text('sectionCollection')}</p>
               <h1>{sectionText(section.titleKey)}</h1>
-              <p>{activeCategory?.description || sectionText(section.descriptionKey)}</p>
+              <p>{sectionText(section.descriptionKey)}</p>
             </section>
             <section className={classes.categoryCatalog} aria-label={sectionText(section.titleKey)}>
               <div className={classes.subcategoryTabs} role="tablist" aria-label={text('productCategory')}>
@@ -782,8 +844,12 @@ const Storefront = () => {
           <span className={classes.footerHeading}>{text('contactUs')}</span>
           <span>{text('commissions')}</span>
           <span className={classes.socialLinks}>
-            <a href="https://www.instagram.com/artistpotorochin" target="_blank" rel="noreferrer" aria-label="Instagram">◎</a>
-            <a href="https://t.me/PotAndrey" target="_blank" rel="noreferrer" aria-label="Telegram">➤</a>
+            <a href="https://www.instagram.com/artistpotorochin" target="_blank" rel="noreferrer" aria-label="Instagram">
+              <img src="/instagram.svg" alt="" />
+            </a>
+            <a href="https://t.me/PotAndrey" target="_blank" rel="noreferrer" aria-label="Telegram">
+              <img src="/telegram.svg" alt="" />
+            </a>
           </span>
         </div>
         <a className={classes.footerBrand} href="/" onClick={event => {

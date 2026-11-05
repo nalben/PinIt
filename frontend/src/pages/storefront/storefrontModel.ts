@@ -136,9 +136,13 @@ export const isShopProduct = (value: unknown): value is ShopProduct => (
   && value.images.every(isShopProductImage)
 );
 
-export const formatPrice = (price: string | number, language: Language) => (
-  `${new Intl.NumberFormat(language === 'ru' ? 'ru-RU' : 'en-US', { maximumFractionDigits: 2 }).format(Number(price))} ₽`
-);
+export const formatPrice = (price: string | number, language: Language) => {
+  const formattedPrice = new Intl.NumberFormat(
+    language === 'ru' ? 'ru-RU' : 'en-US',
+    { maximumFractionDigits: 2 }
+  ).format(Number(price));
+  return language === 'ru' ? `${formattedPrice} ₽` : `₽ ${formattedPrice}`;
+};
 
 export const getRequestErrorMessage = (error: unknown, fallback: string) => {
   if (typeof error !== 'object' || error === null || !('response' in error)) return fallback;
